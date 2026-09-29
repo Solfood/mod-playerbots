@@ -53,10 +53,12 @@
 #include "Unit.h"
 #include "UpdateTime.h"
 #include "Vehicle.h"
+#include <array>
 #include <cmath>
 #include <mutex>
 #include <sstream>
 #include <string>
+#include <utility>
 
 namespace
 {
@@ -88,16 +90,90 @@ uint32 PlayerbotChatHandler::extractQuestId(std::string const str)
     return cId ? atol(cId) : 0;
 }
 
-void PacketHandlingHelper::AddHandler(uint16 opcode, std::string const handler) { handlers[opcode] = handler; }
+namespace
+{
+std::array<std::map<uint16, std::string>, 3> const& PacketHandlerRegistry()
+{
+    static auto const registry = []
+    {
+        std::array<std::map<uint16, std::string>, 3> result;
+    result[0][CMSG_GAMEOBJ_USE] = "use game object";
+    result[0][CMSG_AREATRIGGER] = "area trigger";
+    // result[0][CMSG_GAMEOBJ_USE] = "use game object";
+    // result[0][CMSG_LOOT_ROLL] = "loot roll";
+    result[0][CMSG_GOSSIP_HELLO] = "gossip hello";
+    result[0][CMSG_QUESTGIVER_HELLO] = "gossip hello";
+    result[0][CMSG_ACTIVATETAXI] = "activate taxi";
+    result[0][CMSG_ACTIVATETAXIEXPRESS] = "activate taxi";
+    result[0][CMSG_TAXICLEARALLNODES] = "taxi done";
+    result[0][CMSG_TAXICLEARNODE] = "taxi done";
+    result[0][CMSG_GROUP_UNINVITE] = "uninvite";
+    result[0][CMSG_GROUP_UNINVITE_GUID] = "uninvite guid";
+    result[0][CMSG_LFG_TELEPORT] = "lfg teleport";
+    result[0][CMSG_CAST_SPELL] = "see spell";
+    result[0][CMSG_REPOP_REQUEST] = "release spirit";
+    result[0][CMSG_RECLAIM_CORPSE] = "revive from corpse";
+
+    result[1][SMSG_PETITION_SHOW_SIGNATURES] = "petition offer";
+    result[1][SMSG_GROUP_INVITE] = "group invite";
+    result[1][SMSG_GUILD_INVITE] = "guild invite";
+    result[1][BUY_ERR_NOT_ENOUGHT_MONEY] = "not enough money";
+    result[1][BUY_ERR_REPUTATION_REQUIRE] = "not enough reputation";
+    result[1][SMSG_GROUP_SET_LEADER] = "group set leader";
+    result[1][SMSG_FORCE_RUN_SPEED_CHANGE] = "check mount state";
+    result[1][SMSG_RESURRECT_REQUEST] = "resurrect request";
+    result[1][SMSG_INVENTORY_CHANGE_FAILURE] = "cannot equip";
+    result[1][SMSG_TRADE_STATUS] = "trade status";
+    result[1][SMSG_TRADE_STATUS_EXTENDED] = "trade status extended";
+    result[1][SMSG_LOOT_RESPONSE] = "loot response";
+    result[1][SMSG_ITEM_PUSH_RESULT] = "item push result";
+    result[1][SMSG_LOOT_ROLL_WON] = "loot roll won";
+    result[1][SMSG_PARTY_COMMAND_RESULT] = "party command";
+    result[1][SMSG_LEVELUP_INFO] = "levelup";
+    result[1][SMSG_LOG_XPGAIN] = "xpgain";
+    result[1][SMSG_CAST_FAILED] = "cast failed";
+    result[1][SMSG_DUEL_REQUESTED] = "duel requested";
+    result[1][SMSG_INVENTORY_CHANGE_FAILURE] = "inventory change failure";
+    result[1][SMSG_BATTLEFIELD_STATUS] = "bg status";
+    result[1][SMSG_LFG_ROLE_CHECK_UPDATE] = "lfg role check";
+    result[1][SMSG_LFG_PROPOSAL_UPDATE] = "lfg proposal";
+    result[1][SMSG_TEXT_EMOTE] = "receive text emote";
+    result[1][SMSG_EMOTE] = "receive emote";
+    result[1][SMSG_LOOT_START_ROLL] = "master loot roll";
+    result[1][SMSG_ARENA_TEAM_INVITE] = "arena team invite";
+    result[1][SMSG_GROUP_DESTROYED] = "group destroyed";
+    result[1][SMSG_GROUP_LIST] = "group list";
+
+    result[2][SMSG_PARTY_COMMAND_RESULT] = "party command";
+    result[2][MSG_RAID_READY_CHECK] = "ready check";
+    result[2][MSG_RAID_READY_CHECK_FINISHED] = "ready check finished";
+    result[2][SMSG_QUESTGIVER_OFFER_REWARD] = "questgiver quest details";
+
+    // quest packet
+    result[0][CMSG_QUESTGIVER_COMPLETE_QUEST] = "complete quest";
+    result[0][CMSG_QUESTGIVER_ACCEPT_QUEST] = "accept quest";
+    result[0][CMSG_QUEST_CONFIRM_ACCEPT] = "confirm quest";
+    result[0][CMSG_PUSHQUESTTOPARTY] = "quest share";
+    result[1][SMSG_QUESTUPDATE_COMPLETE] = "quest update complete";
+    result[1][SMSG_QUESTUPDATE_ADD_KILL] = "quest update add kill";
+    // SMSG_QUESTUPDATE_ADD_ITEM no longer used
+    // result[1][SMSG_QUESTUPDATE_ADD_ITEM] = "quest update add item";
+    result[1][SMSG_QUEST_CONFIRM_ACCEPT] = "confirm quest";
+        return result;
+    }();
+    return registry;
+}
+}
 
 void PacketHandlingHelper::Handle(ExternalEventHelper& helper)
 {
     while (!queue.empty())
     {
-        WorldPacket packet = queue.top();
+        WorldPacket packet = std::move(queue.top());
         queue.pop(); // remove first so handling can't modify the queue while we're using it
 
-        helper.HandlePacket(handlers, packet);
+        if (handlers)
+            helper.HandlePacket(*handlers, packet);
     }
 }
 
@@ -108,7 +184,7 @@ void PacketHandlingHelper::AddPacket(WorldPacket const& packet)
     // assert(handlers);
     // assert(packet);
     // assert(packet.GetOpcode());
-    if (handlers.find(packet.GetOpcode()) != handlers.end())
+    if (handlers && handlers->find(packet.GetOpcode()) != handlers->end())
         queue.push(WorldPacket(packet));
 }
 
@@ -165,68 +241,10 @@ PlayerbotAI::PlayerbotAI(Player* bot)
     currentEngine = engines[BOT_STATE_NON_COMBAT];
     currentState = BOT_STATE_NON_COMBAT;
 
-    masterIncomingPacketHandlers.AddHandler(CMSG_GAMEOBJ_USE, "use game object");
-    masterIncomingPacketHandlers.AddHandler(CMSG_AREATRIGGER, "area trigger");
-    // masterIncomingPacketHandlers.AddHandler(CMSG_GAMEOBJ_USE, "use game object");
-    // masterIncomingPacketHandlers.AddHandler(CMSG_LOOT_ROLL, "loot roll");
-    masterIncomingPacketHandlers.AddHandler(CMSG_GOSSIP_HELLO, "gossip hello");
-    masterIncomingPacketHandlers.AddHandler(CMSG_QUESTGIVER_HELLO, "gossip hello");
-    masterIncomingPacketHandlers.AddHandler(CMSG_ACTIVATETAXI, "activate taxi");
-    masterIncomingPacketHandlers.AddHandler(CMSG_ACTIVATETAXIEXPRESS, "activate taxi");
-    masterIncomingPacketHandlers.AddHandler(CMSG_TAXICLEARALLNODES, "taxi done");
-    masterIncomingPacketHandlers.AddHandler(CMSG_TAXICLEARNODE, "taxi done");
-    masterIncomingPacketHandlers.AddHandler(CMSG_GROUP_UNINVITE, "uninvite");
-    masterIncomingPacketHandlers.AddHandler(CMSG_GROUP_UNINVITE_GUID, "uninvite guid");
-    masterIncomingPacketHandlers.AddHandler(CMSG_LFG_TELEPORT, "lfg teleport");
-    masterIncomingPacketHandlers.AddHandler(CMSG_CAST_SPELL, "see spell");
-    masterIncomingPacketHandlers.AddHandler(CMSG_REPOP_REQUEST, "release spirit");
-    masterIncomingPacketHandlers.AddHandler(CMSG_RECLAIM_CORPSE, "revive from corpse");
-
-    botOutgoingPacketHandlers.AddHandler(SMSG_PETITION_SHOW_SIGNATURES, "petition offer");
-    botOutgoingPacketHandlers.AddHandler(SMSG_GROUP_INVITE, "group invite");
-    botOutgoingPacketHandlers.AddHandler(SMSG_GUILD_INVITE, "guild invite");
-    botOutgoingPacketHandlers.AddHandler(BUY_ERR_NOT_ENOUGHT_MONEY, "not enough money");
-    botOutgoingPacketHandlers.AddHandler(BUY_ERR_REPUTATION_REQUIRE, "not enough reputation");
-    botOutgoingPacketHandlers.AddHandler(SMSG_GROUP_SET_LEADER, "group set leader");
-    botOutgoingPacketHandlers.AddHandler(SMSG_FORCE_RUN_SPEED_CHANGE, "check mount state");
-    botOutgoingPacketHandlers.AddHandler(SMSG_RESURRECT_REQUEST, "resurrect request");
-    botOutgoingPacketHandlers.AddHandler(SMSG_INVENTORY_CHANGE_FAILURE, "cannot equip");
-    botOutgoingPacketHandlers.AddHandler(SMSG_TRADE_STATUS, "trade status");
-    botOutgoingPacketHandlers.AddHandler(SMSG_TRADE_STATUS_EXTENDED, "trade status extended");
-    botOutgoingPacketHandlers.AddHandler(SMSG_LOOT_RESPONSE, "loot response");
-    botOutgoingPacketHandlers.AddHandler(SMSG_ITEM_PUSH_RESULT, "item push result");
-    botOutgoingPacketHandlers.AddHandler(SMSG_LOOT_ROLL_WON, "loot roll won");
-    botOutgoingPacketHandlers.AddHandler(SMSG_PARTY_COMMAND_RESULT, "party command");
-    botOutgoingPacketHandlers.AddHandler(SMSG_LEVELUP_INFO, "levelup");
-    botOutgoingPacketHandlers.AddHandler(SMSG_LOG_XPGAIN, "xpgain");
-    botOutgoingPacketHandlers.AddHandler(SMSG_CAST_FAILED, "cast failed");
-    botOutgoingPacketHandlers.AddHandler(SMSG_DUEL_REQUESTED, "duel requested");
-    botOutgoingPacketHandlers.AddHandler(SMSG_INVENTORY_CHANGE_FAILURE, "inventory change failure");
-    botOutgoingPacketHandlers.AddHandler(SMSG_BATTLEFIELD_STATUS, "bg status");
-    botOutgoingPacketHandlers.AddHandler(SMSG_LFG_ROLE_CHECK_UPDATE, "lfg role check");
-    botOutgoingPacketHandlers.AddHandler(SMSG_LFG_PROPOSAL_UPDATE, "lfg proposal");
-    botOutgoingPacketHandlers.AddHandler(SMSG_TEXT_EMOTE, "receive text emote");
-    botOutgoingPacketHandlers.AddHandler(SMSG_EMOTE, "receive emote");
-    botOutgoingPacketHandlers.AddHandler(SMSG_LOOT_START_ROLL, "master loot roll");
-    botOutgoingPacketHandlers.AddHandler(SMSG_ARENA_TEAM_INVITE, "arena team invite");
-    botOutgoingPacketHandlers.AddHandler(SMSG_GROUP_DESTROYED, "group destroyed");
-    botOutgoingPacketHandlers.AddHandler(SMSG_GROUP_LIST, "group list");
-
-    masterOutgoingPacketHandlers.AddHandler(SMSG_PARTY_COMMAND_RESULT, "party command");
-    masterOutgoingPacketHandlers.AddHandler(MSG_RAID_READY_CHECK, "ready check");
-    masterOutgoingPacketHandlers.AddHandler(MSG_RAID_READY_CHECK_FINISHED, "ready check finished");
-    masterOutgoingPacketHandlers.AddHandler(SMSG_QUESTGIVER_OFFER_REWARD, "questgiver quest details");
-
-    // quest packet
-    masterIncomingPacketHandlers.AddHandler(CMSG_QUESTGIVER_COMPLETE_QUEST, "complete quest");
-    masterIncomingPacketHandlers.AddHandler(CMSG_QUESTGIVER_ACCEPT_QUEST, "accept quest");
-    masterIncomingPacketHandlers.AddHandler(CMSG_QUEST_CONFIRM_ACCEPT, "confirm quest");
-    masterIncomingPacketHandlers.AddHandler(CMSG_PUSHQUESTTOPARTY, "quest share");
-    botOutgoingPacketHandlers.AddHandler(SMSG_QUESTUPDATE_COMPLETE, "quest update complete");
-    botOutgoingPacketHandlers.AddHandler(SMSG_QUESTUPDATE_ADD_KILL, "quest update add kill");
-    // SMSG_QUESTUPDATE_ADD_ITEM no longer used
-    // botOutgoingPacketHandlers.AddHandler(SMSG_QUESTUPDATE_ADD_ITEM, "quest update add item");
-    botOutgoingPacketHandlers.AddHandler(SMSG_QUEST_CONFIRM_ACCEPT, "confirm quest");
+    auto const& registry = PacketHandlerRegistry();
+    masterIncomingPacketHandlers.SetHandlers(registry[0]);
+    botOutgoingPacketHandlers.SetHandlers(registry[1]);
+    masterOutgoingPacketHandlers.SetHandlers(registry[2]);
 }
 
 PlayerbotAI::~PlayerbotAI()

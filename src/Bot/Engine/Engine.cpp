@@ -126,10 +126,10 @@ void Engine::Init()
         hasTargetExclusions |= strategy->HasTargetExclusions();
         strategy->InitMultipliers(multipliers);
         strategy->InitTriggers(triggers);
-        for (auto &iter : strategy->actionNodeFactories.creators)
+        strategy->actionNodeFactories.ForEachCreator([this](std::string_view name, auto const& creator)
         {
-            actionNodeFactories.creators[iter.first] = iter.second;
-        }
+            actionNodeFactories.creators[name] = &creator;
+        });
     }
 
     if (testMode)

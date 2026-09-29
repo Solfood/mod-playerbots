@@ -42,6 +42,7 @@
 #include "World.h"
 #include "WorldSessionMgr.h"
 #include <algorithm>
+#include <unordered_set>
 #include <boost/thread/thread.hpp>
 #include <cstdlib>
 #include <ctime>
@@ -716,25 +717,27 @@ uint32 RandomPlayerbotMgr::AddRandomBots()
         };
         std::vector<CharacterInfo> allCharacters;
 
-        for (uint32 accountId : accountsToUse)
+        // One bounded roster read instead of a synchronous round trip for every bot account on every batch.
+        // Filter the range back to the exact selected account set, including periodic online/offline rotation.
+        if (!accountsToUse.empty())
         {
-            CharacterDatabasePreparedStatement* stmt =
-                CharacterDatabase.GetPreparedStatement(CHAR_SEL_ACCOUNT_INFO_CHARS);
-            stmt->SetData(0, accountId);
-            PreparedQueryResult result = CharacterDatabase.Query(stmt);
-            if (!result)
-                continue;
-
-            do
+            auto const [minimum, maximum] = std::minmax_element(accountsToUse.begin(), accountsToUse.end());
+            std::unordered_set<uint32> selectedAccounts(accountsToUse.begin(), accountsToUse.end());
+            // A plain query: the core has no prepared statement for this range (Seth's patch added one to it).
+            QueryResult result = CharacterDatabase.Query(
+                "SELECT guid, class, race, account FROM characters WHERE account BETWEEN {} AND {}", *minimum, *maximum);
+            if (result)
             {
-                Field* fields = result->Fetch();
-                CharacterInfo info;
-                info.guid = fields[0].Get<uint32>();
-                info.rRace = fields[3].Get<uint8>();
-                info.rClass = fields[4].Get<uint8>();
-                info.accountId = accountId;
-                allCharacters.push_back(info);
-            } while (result->NextRow());
+                do
+                {
+                    Field* fields = result->Fetch();
+                    uint32 accountId = fields[3].Get<uint32>();
+                    if (!selectedAccounts.contains(accountId))
+                        continue;
+                    allCharacters.push_back({fields[0].Get<uint32>(), fields[1].Get<uint8>(),
+                        fields[2].Get<uint8>(), accountId});
+                } while (result->NextRow());
+            }
         }
 
         // Shuffle for class balance
@@ -2471,7 +2474,7 @@ void RandomPlayerbotMgr::SetValue(Player* bot, std::string const& type, uint32 v
     SetValue(bot->GetGUID().GetCounter(), type, value, data);
 }
 
-bool RandomPlayerbotMgr::HandlePlayerbotConsoleCommand(ChatHandler* /*handler*/, char const* args)
+bool RandomPlayerbotMgr::HandlePlayerbotConsoleCommand(ChatHandler* handler, char const* args)
 {
     if (!sPlayerbotAIConfig.enabled)
     {
@@ -2486,6 +2489,52 @@ bool RandomPlayerbotMgr::HandlePlayerbotConsoleCommand(ChatHandler* /*handler*/,
     }
 
     std::string const cmd = args;
+
+    if (cmd == "memory")
+    {
+        // Bounded, read-only sample; never evaluate calculated values or modify bot state.
+        handler->PSendSysMessage("Random bots online: {}", sRandomPlayerbotMgr.playerBots.size());
+        std::map<std::string, uint32> counts;
+        uint32 sampled = 0;
+        uint64 spells = 0;
+        uint64 values = 0;
+        for (auto const& [guid, bot] : sRandomPlayerbotMgr.playerBots)
+        {
+            PlayerbotAI* ai = GET_PLAYERBOT_AI(bot);
+            if (!ai)
+                continue;
+            spells += bot->GetSpellMap().size();
+            for (std::string const& name : ai->GetAiObjectContext()->GetValues())
+            {
+                ++counts[name.substr(0, name.find("::"))];
+                ++values;
+            }
+            if (++sampled == 100)
+                break;
+        }
+        handler->PSendSysMessage("Bot memory sample: {} bots, {} cached values, {} learned spells. "
+            "Inline sizes (exclude heap allocations): Player={} AI={} Session={}",
+            sampled, values, spells, sizeof(Player), sizeof(PlayerbotAI), sizeof(WorldSession));
+        uint64 grids = 0;
+        uint64 creatures = 0;
+        uint64 gameObjects = 0;
+        sMapMgr->DoForAllMaps([&](Map* map)
+        {
+            grids += map->GetLoadedGridsCount();
+            creatures += map->GetCreatureBySpawnIdStore().size();
+            gameObjects += map->GetGameObjectBySpawnIdStore().size();
+        });
+        handler->PSendSysMessage("Shared world: {} loaded grids, {} spawned creatures, {} spawned gameobjects",
+            grids, creatures, gameObjects);
+        std::vector<std::pair<std::string, uint32>> sorted(counts.begin(), counts.end());
+        std::sort(sorted.begin(), sorted.end(), [](auto const& left, auto const& right)
+        {
+            return left.second > right.second;
+        });
+        for (std::size_t index = 0; index < std::min<std::size_t>(20, sorted.size()); ++index)
+            handler->PSendSysMessage("Cache {}: {} instances", sorted[index].first, sorted[index].second);
+        return true;
+    }
 
     if (cmd == "reset")
     {

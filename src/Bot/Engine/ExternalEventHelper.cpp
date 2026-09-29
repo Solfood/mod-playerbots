@@ -42,11 +42,15 @@ bool ExternalEventHelper::ParseChatCommand(std::string const command, Player* ow
     return true;
 }
 
-void ExternalEventHelper::HandlePacket(std::map<uint16, std::string>& handlers, WorldPacket const& packet,
+void ExternalEventHelper::HandlePacket(std::map<uint16, std::string> const& handlers, WorldPacket const& packet,
                                        Player* owner)
 {
     uint16 opcode = packet.GetOpcode();
-    std::string const name = handlers[opcode];
+    auto const found = handlers.find(opcode);
+    if (found == handlers.end())
+        return;
+
+    std::string const& name = found->second;
     if (name.empty())
         return;
 

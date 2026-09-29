@@ -21,7 +21,9 @@ public:
         : relevance(relevance), name(name) {}  // name after relevance - whipowill
 
     std::string const getName() { return name; }
-    float getRelevance() { return relevance; }
+    std::string const& GetNameRef() const { return name; }
+    float getRelevance() const { return relevance; }
+    bool operator==(NextAction const&) const = default;
 
     static std::vector<NextAction> merge(std::vector<NextAction> const& what, std::vector<NextAction> const& with)
     {

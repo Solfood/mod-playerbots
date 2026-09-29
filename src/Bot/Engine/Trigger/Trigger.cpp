@@ -8,6 +8,31 @@
 #include "AiObjectContext.h"
 #include "Event.h"
 #include "PlayerbotAI.h"
+#include "SharedObjectPool.h"
+
+std::shared_ptr<TriggerNode::Definition const> TriggerNode::GetDefinition(std::string const& name,
+    std::vector<NextAction> handlers)
+{
+    struct Hash
+    {
+        std::size_t operator()(Definition const& definition) const
+        {
+            std::size_t hash = std::hash<std::string>{}(definition.name);
+            auto combine = [&hash](std::size_t value)
+            {
+                hash ^= value + 0x9e3779b9 + (hash << 6) + (hash >> 2);
+            };
+            for (NextAction const& handler : definition.handlers)
+            {
+                combine(std::hash<std::string>{}(handler.GetNameRef()));
+                combine(std::hash<float>{}(handler.getRelevance()));
+            }
+            return hash;
+        }
+    };
+    static SharedObjectPool<Definition, Hash> definitions;
+    return definitions.Intern({name, std::move(handlers)});
+}
 
 Trigger::Trigger(PlayerbotAI* botAI, std::string const name, int32 checkInterval)
     : AiNamedObject(botAI, name),

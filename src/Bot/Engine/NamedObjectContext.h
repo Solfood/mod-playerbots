@@ -11,6 +11,7 @@
 #include <functional>
 #include <list>
 #include <set>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -96,10 +97,14 @@ public:
 
     virtual T* create(std::string name, PlayerbotAI* botAI) override
     {
-        if (created.find(name) == created.end())
-            return created[name] = NamedObjectFactory<T>::create(name, botAI);
+        auto const found = created.find(name);
+        if (found != created.end())
+            return found->second;
 
-        return created[name];
+        T* object = NamedObjectFactory<T>::create(name, botAI);
+        if (object)
+            created.emplace(name, object);
+        return object;
     }
 
     void Clear()
@@ -203,13 +208,15 @@ public:
 
     T* GetContextObject(std::string const& name, PlayerbotAI* botAI)
     {
-        if (created.find(name) == created.end())
-        {
-            if (T* object = create(name, botAI))
-                return created[name] = object;
-        }
+        auto const found = created.find(name);
+        if (found != created.end())
+            return found->second;
 
-        return created[name];
+        // Unsupported qualified names must not accumulate a null entry per bot.
+        T* object = create(name, botAI);
+        if (object)
+            created.emplace(name, object);
+        return object;
     }
 
     std::set<std::string> GetSiblings(std::string const& name)
@@ -260,7 +267,8 @@ class NamedObjectFactoryList
 public:
     using ObjectCreator = std::function<T*(PlayerbotAI* ai)>;
     std::vector<NamedObjectFactory<T>*> factories;
-    std::unordered_map<std::string, ObjectCreator> creators;
+    // Engine indexes refer to factories owned by their strategies, which outlive the engines.
+    std::unordered_map<std::string_view, ObjectCreator const*> creators;
 
     virtual ~NamedObjectFactoryList()
     {
@@ -278,12 +286,27 @@ public:
             name = name.substr(0, found);
         }
 
-        if (creators.find(name) == creators.end())
+        ObjectCreator const* creator = nullptr;
+        auto const indexed = creators.find(name);
+        if (indexed != creators.end())
+            creator = indexed->second;
+        else
+        {
+            // Last factory wins, even if its creator returns nullptr.
+            for (auto layer = layers.rbegin(); layer != layers.rend(); ++layer)
+            {
+                auto const candidate = (*layer)->creators.find(name);
+                if (candidate != (*layer)->creators.end())
+                {
+                    creator = &candidate->second;
+                    break;
+                }
+            }
+        }
+        if (!creator)
             return nullptr;
 
-        ObjectCreator const& creator = creators[name];
-
-        T* object = creator(botAI);
+        T* object = (*creator)(botAI);
         Qualified* q = dynamic_cast<Qualified*>(object);
         if (q && found != std::string::npos)
             q->Qualify(qualifier);
@@ -294,8 +317,25 @@ public:
     void Add(NamedObjectFactory<T>* context)
     {
         factories.push_back(context);
-        for (auto const& iter : context->creators)
-            creators[iter.first] = iter.second;
+        layers.push_back(context);
+    }
+
+    template <class Factory>
+    void AddShared()
+    {
+        // Use only for stateless factories: the created action still belongs to its bot.
+        static Factory const context;
+        layers.push_back(&context);
+    }
+
+    template <class Visitor>
+    void ForEachCreator(Visitor&& visitor) const
+    {
+        for (auto const* layer : layers)
+            for (auto const& [name, creator] : layer->creators)
+                visitor(std::string_view(name), creator);
+        for (auto const& [name, creator] : creators)
+            visitor(name, *creator);
     }
 
     T* GetContextObject(std::string const& name, PlayerbotAI* botAI)
@@ -305,6 +345,9 @@ public:
 
         return nullptr;
     }
+
+private:
+    std::vector<NamedObjectFactory<T> const*> layers;
 };
 
 #endif

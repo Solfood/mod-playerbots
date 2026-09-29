@@ -24,6 +24,7 @@
 #include "Util.h"
 #include "WorldPacket.h"
 #include <stack>
+#include <vector>
 
 class AiObjectContext;
 class Creature;
@@ -349,13 +350,14 @@ enum WARRIOR_TABS
 class PacketHandlingHelper
 {
 public:
-    void AddHandler(uint16 opcode, std::string const handler);
+    // The opcode tables are the same for every bot: one shared registry, not a copy each (Seth's memory rework).
+    void SetHandlers(std::map<uint16, std::string> const& registry) { handlers = &registry; }
     void Handle(ExternalEventHelper& helper);
     void AddPacket(WorldPacket const& packet);
 
 private:
-    std::map<uint16, std::string> handlers;
-    std::stack<WorldPacket> queue;
+    std::map<uint16, std::string> const* handlers = nullptr;
+    std::stack<WorldPacket, std::vector<WorldPacket>> queue;
 };
 
 class ChatCommandHolder

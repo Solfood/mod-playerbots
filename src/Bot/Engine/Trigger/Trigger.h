@@ -8,6 +8,7 @@
 #define PLAYERBOTS_TRIGGER_H
 
 #include "Action.h"
+#include <memory>
 
 class PlayerbotAI;
 class Unit;
@@ -51,17 +52,16 @@ public:
         std::vector<NextAction> handlers = {}
     ) :
     trigger(nullptr),
-    handlers(std::move(handlers)),
-    name(name)
+    definition(GetDefinition(name, std::move(handlers)))
     {}
 
     Trigger* getTrigger() { return trigger; }
     void setTrigger(Trigger* trigger) { this->trigger = trigger; }
-    const std::string getName() { return name; }
+    const std::string getName() { return definition->name; }
 
     std::vector<NextAction> getHandlers()
     {
-        std::vector<NextAction> result = this->handlers;
+        std::vector<NextAction> result = definition->handlers;
 
         if (trigger != nullptr)
         {
@@ -74,16 +74,22 @@ public:
 
     float getFirstRelevance()
     {
-        if (this->handlers.size() > 0)
-            return this->handlers[0].getRelevance();
+        if (!definition->handlers.empty())
+            return definition->handlers[0].getRelevance();
 
         return -1;
     }
 
 private:
+    struct Definition
+    {
+        std::string name;
+        std::vector<NextAction> handlers;
+        bool operator==(Definition const&) const = default;
+    };
+    static std::shared_ptr<Definition const> GetDefinition(std::string const& name, std::vector<NextAction> handlers);
     Trigger* trigger;
-    std::vector<NextAction> handlers;
-    const std::string name;
+    std::shared_ptr<Definition const> definition;
 };
 
 #endif
