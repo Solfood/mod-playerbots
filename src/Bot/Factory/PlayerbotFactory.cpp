@@ -4665,16 +4665,18 @@ void PlayerbotFactory::InitGlyphs(bool increment)
     }
 
     std::list<uint32> glyphs;
-    ItemTemplateContainer const* itemTemplates = sObjectMgr->GetItemTemplateStore();
-    for (ItemTemplateContainer::const_iterator i = itemTemplates->begin(); i != itemTemplates->end(); ++i)
+    // Only the glyph items matter; walking the whole item store (560k entries on CoA) for them on
+    // every bot refresh was a visible share of the server time.
+    static std::vector<ItemTemplate const*> const glyphItems = []
     {
-        //uint32 itemId = i->first; //not used, line marked for removal.
-        ItemTemplate const* proto = &i->second;
-        if (!proto)
-            continue;
-
-        if (proto->Class != ITEM_CLASS_GLYPH)
-            continue;
+        std::vector<ItemTemplate const*> out;
+        for (auto const& [itemId, proto] : *sObjectMgr->GetItemTemplateStore())
+            if (proto.Class == ITEM_CLASS_GLYPH)
+                out.push_back(&proto);
+        return out;
+    }();
+    for (ItemTemplate const* proto : glyphItems)
+    {
 
         if ((proto->AllowableClass & bot->getClassMask()) == 0 || (proto->AllowableRace & bot->getRaceMask()) == 0)
             continue;
