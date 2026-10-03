@@ -7,6 +7,7 @@
 #include "ReleaseSpiritAction.h"
 #include "Corpse.h"
 #include "Event.h"
+#include "FixedPopulation.h"
 #include "GameGraveyard.h"
 #include "Log.h"
 #include "NearestNpcsValue.h"
@@ -47,7 +48,9 @@ bool ReleaseSpiritAction::Execute(Event event)
     botAI->TellMasterNoFacing(message);
 
     IncrementDeathCount();
-    bot->DurabilityRepairAll(false, 1.0f, false);
+    // Honest world: releasing the spirit repairs nothing.
+    if (!FixedPopulation::Blocks(FixedPopulationGuard::ReleaseRepair))
+        bot->DurabilityRepairAll(false, 1.0f, false);
     LogRelease("released");
 
     WorldPacket releasePacket(CMSG_REPOP_REQUEST);
@@ -88,7 +91,9 @@ void ReleaseSpiritAction::LogRelease(std::string const& releaseMsg) const
 bool AutoReleaseSpiritAction::Execute(Event /*event*/)
 {
     IncrementDeathCount();
-    bot->DurabilityRepairAll(false, 1.0f, false);
+    // Honest world: releasing the spirit repairs nothing.
+    if (!FixedPopulation::Blocks(FixedPopulationGuard::ReleaseRepair))
+        bot->DurabilityRepairAll(false, 1.0f, false);
     LogRelease("auto released");
 
     WorldPacket packet(CMSG_REPOP_REQUEST);

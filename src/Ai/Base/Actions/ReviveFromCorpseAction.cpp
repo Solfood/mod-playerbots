@@ -7,6 +7,7 @@
 #include "ReviveFromCorpseAction.h"
 #include "Corpse.h"
 #include "Event.h"
+#include "FixedPopulation.h"
 #include "FleeManager.h"
 #include "GameGraveyard.h"
 #include "MapMgr.h"
@@ -99,11 +100,11 @@ bool FindCorpseAction::Execute(Event /*event*/)
     {
         if (dCount >= 5)
         {
-            // LOG_INFO("playerbots", "Bot {} {}:{} <{}>: died too many times, was revived and teleported",
-            //     bot->GetGUID().ToString().c_str(), bot->GetTeamId() == TEAM_ALLIANCE ? "A" : "H", bot->GetLevel(),
-            //     bot->GetName().c_str());
+            // Honest world: no free revive; walk to the spirit healer (sickness and durability loss).
+            if (FixedPopulation::Blocks(FixedPopulationGuard::FreeRevive))
+                return botAI->DoSpecificAction("spirit healer", Event(), true);
+
             context->GetValue<uint32>("death count")->Set(0);
-            // sRandomPlayerbotMgr.RandomTeleportForLevel(bot);
             sRandomPlayerbotMgr.Revive(bot);
             return true;
         }
@@ -311,8 +312,12 @@ bool SpiritHealerAction::Execute(Event /*event*/)
     uint32 dCount = AI_VALUE(uint32, "death count");
     int64 deadTime = time(nullptr) - corpse->GetGhostTime();
 
-    GraveyardStruct const* ClosestGrave =
-        GetGrave(dCount > 10 || deadTime > 15 * MINUTE || AI_VALUE(uint8, "durability") < 10);
+    // Honest world: always the nearest graveyard. The start-zone graveyard is a free trip across the world.
+    bool const startZone = !sPlayerbotAIConfig.fixedPopulation &&
+                           (dCount > 10 || deadTime > 15 * MINUTE || AI_VALUE(uint8, "durability") < 10);
+    GraveyardStruct const* ClosestGrave = GetGrave(startZone);
+    if (!ClosestGrave)
+        return false;
 
     if (bot->GetDistance2d(ClosestGrave->x, ClosestGrave->y) < sPlayerbotAIConfig.sightDistance)
     {
@@ -324,24 +329,28 @@ bool SpiritHealerAction::Execute(Event /*event*/)
             {
                 LOG_DEBUG("playerbots", "Bot {} {}:{} <{}> revives at spirit healer", bot->GetGUID().ToString().c_str(),
                           bot->GetTeamId() == TEAM_ALLIANCE ? "A" : "H", bot->GetLevel(), bot->GetName());
-                PlayerbotChatHandler ch(bot);
-                bot->ResurrectPlayer(0.5f);
-                bot->SpawnCorpseBones();
+                if (sPlayerbotAIConfig.fixedPopulation)
+                {
+                    // The core's own spirit-healer resurrection: half health, resurrection sickness,
+                    // DurabilityLoss.OnSpiritResurrect, bones, graveyard nearest the corpse.
+                    bot->GetSession()->SendSpiritResurrect();
+                    context->GetValue<uint32>("death count")->Set(0);
+                    FixedPopulation::Count(EconomyCounter::SpiritHealerResurrections);
+                }
+                else
+                {
+                    PlayerbotChatHandler ch(bot);
+                    bot->ResurrectPlayer(0.5f);
+                    bot->SpawnCorpseBones();
+                    if (dCount > 20)
+                        context->GetValue<uint32>("death count")->Set(0);
+                }
                 context->GetValue<Unit*>("current target")->Set(nullptr);
                 bot->SetTarget();
                 botAI->TellMaster(PlayerbotTextMgr::instance().GetBotTextOrDefault("hello", "Hello", {}));
-
-                if (dCount > 20)
-                    context->GetValue<uint32>("death count")->Set(0);
-
                 return true;
             }
         }
-    }
-
-    if (!ClosestGrave)
-    {
-        return false;
     }
 
     bool moved = false;
