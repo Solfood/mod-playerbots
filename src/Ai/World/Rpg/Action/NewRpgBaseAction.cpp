@@ -8,6 +8,7 @@
 #include "BroadcastHelper.h"
 #include "ChatHelper.h"
 #include "Creature.h"
+#include "FixedPopulation.h"
 #include "GameObject.h"
 #include "GatherNodeMgr.h"
 #include "GossipDef.h"
@@ -35,6 +36,7 @@
 #include "SharedDefines.h"
 #include "StatsWeightCalculator.h"
 #include "Timer.h"
+#include "TownErrands.h"
 #include "TravelMgr.h"
 #include "G3D/Vector2.h"
 
@@ -767,6 +769,17 @@ ObjectGuid NewRpgBaseAction::ChooseNpcOrGameObjectToInteract(bool questgiverOnly
     if (questgiverOnly)
         return ObjectGuid();
 
+    // Honest world: a bot with errands (repair, sell, ammo, mail) picks the NPC or mailbox serving them.
+    if (sPlayerbotAIConfig.fixedPopulation && sRandomPlayerbotMgr.IsRandomBot(bot))
+    {
+        if (uint8 const errands = TownErrands::Needed(botAI, bot))
+        {
+            ObjectGuid const errandTarget = TownErrands::ChooseTarget(botAI, bot, errands, possibleTargets);
+            if (!errandTarget.IsEmpty())
+                return errandTarget;
+        }
+    }
+
     if (possibleTargets.empty())
         return ObjectGuid();
 
@@ -1085,6 +1098,39 @@ bool NewRpgBaseAction::SelectRandomFlightTaxiNode(uint32& flightMasterEntry, Wor
     path = availablePaths[urand(0, availablePaths.size() - 1)];
     LOG_DEBUG("playerbots", "[New RPG] Bot {} select random flight taxi node from:{} (node {}) to:{} ({} available)",
               bot->GetName(), flightMasterEntry, path[0], path[path.size() - 1], availablePaths.size());
+    return true;
+}
+
+bool NewRpgBaseAction::GoRunErrands()
+{
+    if (!sPlayerbotAIConfig.fixedPopulation || !sRandomPlayerbotMgr.IsRandomBot(bot))
+        return false;
+
+    NewRpgInfo& info = botAI->rpgInfo;
+    if (TownErrands::CooldownLeftMs(info.lastErrandMs))
+        return false;
+
+    uint8 const errands = TownErrands::Needed(botAI, bot);
+    if (!errands)
+        return false;
+
+    // A serving NPC or mailbox already in reach: wander among the NPCs here, else walk to a camp or inn.
+    GuidVector const nearby = AI_VALUE(GuidVector, "possible new rpg targets");
+    bool const servedHere = !TownErrands::ChooseTarget(botAI, bot, errands, nearby).IsEmpty();
+    WorldPosition camp;
+    if (!servedHere)
+    {
+        camp = SelectRandomCampPos(bot);
+        if (camp == WorldPosition())
+            return false;
+    }
+
+    info.lastErrandMs = getMSTime();
+    FixedPopulation::Count(EconomyCounter::ErrandsStarted);
+    if (servedHere)
+        info.ChangeToWanderNpc();
+    else
+        info.ChangeToGoCamp(camp);
     return true;
 }
 

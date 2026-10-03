@@ -61,6 +61,9 @@ protected:
     static WorldPosition SelectRandomCampPos(Player* bot);
     bool SelectRandomFlightTaxiNode(uint32& flightMasterEntry, WorldPosition& flightMasterPos, std::vector<uint32>& path);
     bool RandomChangeStatus(std::vector<NewRpgStatus> candidateStatus);
+    // Honest world: if the bot needs something from town and its errand cooldown has passed, start the
+    // trip (WANDER_NPC when a serving NPC or mailbox is already near, else GO_CAMP). True if started.
+    bool GoRunErrands();
     bool CheckRpgStatusAvailable(NewRpgStatus status);
 
 protected:

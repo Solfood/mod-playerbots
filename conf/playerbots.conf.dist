@@ -788,6 +788,17 @@ AiPlayerbot.DisableDeathKnightLogin = 0
 # Default: 0 (disabled)
 AiPlayerbot.FixedPopulation = 0
 
+# Honest world town errands (only with FixedPopulation = 1). When a bot finishes an activity and needs
+# something from town, it walks to the nearest camp or inn and visits the NPC that serves the need:
+# - a repairer when gear durability is below RepairBelowDurability percent and it can pay the bill;
+# - a vendor when bags are at least SellAboveBagUsage percent full;
+# - an ammo vendor when a hunter has no ammo; a mailbox when mail with money or items is waiting.
+# ErrandCooldownSeconds: at most one errand trip per bot in this many seconds.
+# Defaults: 40, 80, 600
+AiPlayerbot.FixedPopulation.RepairBelowDurability = 40
+AiPlayerbot.FixedPopulation.SellAboveBagUsage = 80
+AiPlayerbot.FixedPopulation.ErrandCooldownSeconds = 600
+
 # Enable simulated expansion limitation for talents and glyphs
 # If enabled, limits talent trees to 6 rows plus the middle talent of the 7th row for bots until level 61
 # and 8 rows plus the middle talent of the 9th row for bots from level 61 until level 71

@@ -360,6 +360,9 @@ public:
     uint32 randomBotHordeRatio;
     bool disableDeathKnightLogin;
     bool fixedPopulation;
+    uint32 fixedPopulationRepairBelow;
+    uint32 fixedPopulationSellAboveBags;
+    uint32 fixedPopulationErrandCooldown;
     bool limitTalentsExpansion;
     uint32 botActiveAlone;
     uint32 BotActiveAloneDurationSeconds;

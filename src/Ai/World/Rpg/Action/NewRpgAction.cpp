@@ -9,6 +9,8 @@
 #include "BroadcastHelper.h"
 #include "ChatHelper.h"
 #include "DBCStores.h"
+#include "EarnedTraining.h"
+#include "GameObject.h"
 #include "GossipDef.h"
 #include "IVMapMgr.h"
 #include "MotionMaster.h"
@@ -29,6 +31,7 @@
 #include "Random.h"
 #include "SharedDefines.h"
 #include "Timer.h"
+#include "TownErrands.h"
 #include "TravelMgr.h"
 #include "WaypointMovementGenerator.h"
 #include "G3D/Vector2.h"
@@ -252,6 +255,9 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
     switch (status)
     {
         case RPG_IDLE:
+            // Honest world: what the bot needs from town comes before a random new activity.
+            if (GoRunErrands())
+                return true;
             return RandomChangeStatus({RPG_GO_CAMP, RPG_GO_GRIND, RPG_WANDER_RANDOM, RPG_WANDER_NPC, RPG_DO_QUEST,
                                        RPG_TRAVEL_FLIGHT, RPG_REST, RPG_OUTDOOR_PVP, RPG_DO_GATHER});
 
@@ -460,6 +466,17 @@ bool NewRpgWanderNpcAction::Execute(Event /*event*/)
                     bot->SetSelection(data.npcOrGo);
                     botAI->DoSpecificAction("repair", Event("repair"));
                 }
+
+                // Honest world: any trainer visit catches up on spells skipped at level-up for lack of gold.
+                if (sPlayerbotAIConfig.fixedPopulation && (npcFlags & UNIT_NPC_FLAG_TRAINER) &&
+                    sRandomPlayerbotMgr.IsRandomBot(bot))
+                    EarnedTraining::LearnAffordable(bot, EarnedTraining::RepairReserve(bot));
+            }
+            else if (GameObject* go = object->ToGameObject())
+            {
+                // Honest world: empty the mailbox (money now; AH payments and guild transfers later).
+                if (sPlayerbotAIConfig.fixedPopulation && go->GetGoType() == GAMEOBJECT_TYPE_MAILBOX)
+                    TownErrands::CollectMail(bot, go->GetGUID());
             }
             return true;
         }

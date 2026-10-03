@@ -922,7 +922,10 @@ void PlayerbotAI::Reset(bool full)
             ->setTarget(TravelMgr::instance().nullTravelDestination, TravelMgr::instance().nullWorldPosition, true);
         aiObjectContext->GetValue<TravelTarget*>("travel target")->Get()->setStatus(TRAVEL_STATUS_EXPIRED);
         aiObjectContext->GetValue<TravelTarget*>("travel target")->Get()->setExpireIn(1000);
+        // Keep the honest-world errand cooldown across a reset (teleport, "reset"): no errand loop.
+        uint32 const lastErrandMs = rpgInfo.lastErrandMs;
         rpgInfo = NewRpgInfo();
+        rpgInfo.lastErrandMs = lastErrandMs;
     }
 
     aiObjectContext->GetValue<GuidSet&>("ignore rpg target")->Get().clear();

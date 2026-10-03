@@ -7,8 +7,10 @@
 #include "EconomyCommand.h"
 
 #include "Chat.h"
+#include "DatabaseEnv.h"
 #include "EarnedTraining.h"
 #include "FixedPopulation.h"
+#include "Mail.h"
 #include "ObjectAccessor.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
@@ -17,6 +19,7 @@
 #include "Playerbots.h"
 #include "RandomPlayerbotMgr.h"
 #include "SharedDefines.h"
+#include "TownErrands.h"
 #include <algorithm>
 #include <array>
 #include <cstdlib>
@@ -101,14 +104,14 @@ void Show(ChatHandler* handler, Player* bot)
 
     handler->PSendSysMessage(
         "ECON name={} guid={} level={} money={} durability={} bags={} dead={} ghost={} sick={} riding={} prof={} "
-        "deaths={} rpg={} spells={} randomize={} teleport={} revive={} mounts={}",
+        "deaths={} rpg={} spells={} randomize={} teleport={} revive={} mounts={} mail={}",
         bot->GetName(), botId, bot->GetLevel(), bot->GetMoney(), context->GetValue<uint8>("durability")->Get(),
         context->GetValue<uint8>("bag space")->Get(), bot->isDead() ? 1 : 0,
         bot->HasPlayerFlag(PLAYER_FLAGS_GHOST) ? 1 : 0, bot->HasAura(SPELL_RESURRECTION_SICKNESS) ? 1 : 0, riding,
         professions.tellp() > 0 ? professions.str() : std::string("-"), context->GetValue<uint32>("death count")->Get(),
         RpgStatusName(botAI), LiveSpellCount(bot), sRandomPlayerbotMgr.GetValue(botId, "randomize") ? 1 : 0,
         sRandomPlayerbotMgr.GetValue(botId, "teleport") ? 1 : 0, sRandomPlayerbotMgr.GetValue(botId, "revive") ? 1 : 0,
-        mounts);
+        mounts, TownErrands::CollectableMailCount(bot));
 }
 
 void Active(ChatHandler* handler)
@@ -138,8 +141,8 @@ bool EconomyCommand::Handle(ChatHandler* handler, char const* args)
     if (words.empty())
     {
         handler->PSendSysMessage(
-            "ECONERR usage: econ show|kill|wear|money|due|deaths|idle|forget <name> [value] | econ active | "
-            "econ stats");
+            "ECONERR usage: econ show|kill|wear|money|due|deaths|idle|forget|errands|mail <name> [value] | "
+            "econ active | econ stats");
         return false;
     }
     std::string const& sub = words[0];
@@ -200,6 +203,10 @@ bool EconomyCommand::Handle(ChatHandler* handler, char const* args)
     if (sub == "wear")
     {
         bot->DurabilityLossAll(std::min<uint32>(value, 100) / 100.0, false);
+        // Ruling F6: drop the cached values so the next errand check sees the new wear and bill.
+        AiObjectContext* context = botAI->GetAiObjectContext();
+        for (char const* name : {"durability", "repair cost", "max repair cost"})
+            context->GetUntypedValue(name)->Reset();
         handler->PSendSysMessage("ECONOK wore {} by {}%", bot->GetName(), value);
         return true;
     }
@@ -225,6 +232,7 @@ bool EconomyCommand::Handle(ChatHandler* handler, char const* args)
     if (sub == "idle")
     {
         botAI->rpgInfo.ChangeToIdle();
+        botAI->rpgInfo.lastErrandMs = 0;
         handler->PSendSysMessage("ECONOK {} rpg=IDLE", bot->GetName());
         return true;
     }
@@ -264,6 +272,28 @@ bool EconomyCommand::Handle(ChatHandler* handler, char const* args)
             return false;
         }
         handler->PSendSysMessage("ECONOK {} forget {} forgot={}", bot->GetName(), words[2], forgotten);
+        return true;
+    }
+
+    if (sub == "errands")
+    {
+        uint8 const errands = TownErrands::Needed(botAI, bot);
+        handler->PSendSysMessage("ECONERRANDS name={} mask={} repair={} sell={} ammo={} mail={} cooldown={}",
+                                 bot->GetName(), errands, (errands & TOWN_ERRAND_REPAIR) ? 1 : 0,
+                                 (errands & TOWN_ERRAND_SELL) ? 1 : 0, (errands & TOWN_ERRAND_AMMO) ? 1 : 0,
+                                 (errands & TOWN_ERRAND_MAIL) ? 1 : 0,
+                                 TownErrands::CooldownLeftMs(botAI->rpgInfo.lastErrandMs) / IN_MILLISECONDS);
+        return true;
+    }
+    if (sub == "mail")
+    {
+        // Test seam: a letter with money, as an auction payout or guild transfer will arrive later.
+        CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
+        MailDraft("Honest world test", "A test letter with money.")
+            .AddMoney(value)
+            .SendMailTo(trans, MailReceiver(bot), MailSender(MAIL_NORMAL, 0, MAIL_STATIONERY_GM));
+        CharacterDatabase.CommitTransaction(trans);
+        handler->PSendSysMessage("ECONOK {} mailed {}", bot->GetName(), value);
         return true;
     }
 
