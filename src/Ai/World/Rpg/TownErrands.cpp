@@ -16,6 +16,7 @@
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
 #include "Timer.h"
+#include "TravelMgr.h"
 #include "WorldPacket.h"
 #include "WorldSession.h"
 #include <ctime>
@@ -24,6 +25,10 @@
 namespace
 {
 constexpr uint32 AMMO_MONEY_FLOOR = 100;  // 1 silver buys a stack of arrows or bullets at any level
+// Same distances as NewRpgBaseAction::SelectRandomCampPos: closer than this the bot is already in town.
+constexpr float TOWN_MIN_DISTANCE = 50.0f;
+constexpr float TOWN_MAX_DISTANCE = 2500.0f;
+constexpr float TOWN_MAX_DISTANCE_LOW_LEVEL = 500.0f;  // levels 1-5
 
 bool IsCollectable(Mail const* mail, time_t now)
 {
@@ -151,4 +156,10 @@ uint32 TownErrands::CooldownLeftMs(uint32 lastErrandMs)
     uint32 const cooldownMs = sPlayerbotAIConfig.fixedPopulationErrandCooldown * IN_MILLISECONDS;
     uint32 const sinceMs = GetMSTimeDiffToNow(lastErrandMs);
     return sinceMs < cooldownMs ? cooldownMs - sinceMs : 0;
+}
+
+WorldPosition TownErrands::NearestTown(Player* bot)
+{
+    float const maxDistance = bot->GetLevel() <= 5 ? TOWN_MAX_DISTANCE_LOW_LEVEL : TOWN_MAX_DISTANCE;
+    return TravelMgr::instance().GetNearestTravelHub(bot, TOWN_MIN_DISTANCE, maxDistance);
 }

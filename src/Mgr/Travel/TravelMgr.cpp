@@ -4501,6 +4501,31 @@ const std::vector<WorldLocation> TravelMgr::GetTravelHubs(Player* bot)
     return locs;
 }
 
+WorldPosition TravelMgr::GetNearestTravelHub(Player* bot, float minDistance, float maxDistance) const
+{
+    std::map<uint8, std::vector<WorldLocation>> const& hubs =
+        bot->GetTeamId() == TEAM_ALLIANCE ? allianceHubsPerLevelCache : hordeHubsPerLevelCache;
+
+    WorldPosition nearest;
+    float nearestDistance = maxDistance;
+    for (auto const& [level, locs] : hubs)
+    {
+        for (WorldLocation const& loc : locs)
+        {
+            if (loc.GetMapId() != bot->GetMapId())
+                continue;
+
+            float const distance = bot->GetExactDist(loc);
+            if (distance < minDistance || distance > nearestDistance)
+                continue;
+
+            nearest = loc;
+            nearestDistance = distance;
+        }
+    }
+    return nearest;
+}
+
 std::vector<WorldLocation> TravelMgr::GetCityLocations(Player* bot)
 {
     uint32 level = bot->GetLevel();

@@ -878,6 +878,9 @@ public:
     std::vector<std::vector<uint32>> GetOptimalFlightDestinations(Player* bot);
     const std::vector<WorldLocation> GetTeleportLocations(Player* bot);
     const std::vector<WorldLocation> GetTravelHubs(Player* bot);
+    // The nearest travel hub (inn or camp) of the bot's faction on its map, of any level bracket, between
+    // minDistance and maxDistance yards away; an empty WorldPosition when there is none. Read-only.
+    WorldPosition GetNearestTravelHub(Player* bot, float minDistance, float maxDistance) const;
     std::vector<WorldLocation> GetCityLocations(Player* bot);
     std::vector<uint32> GetFlightNodesInZone(uint32 zoneId, TeamId team, uint32 excludeNode = 0) const;
     bool SelectAuctioneerByMap(Player* bot, NpcLocation& outAuctioneer);

@@ -20,6 +20,7 @@
 #include "RandomPlayerbotMgr.h"
 #include "SharedDefines.h"
 #include "TownErrands.h"
+#include "TravelMgr.h"
 #include <algorithm>
 #include <array>
 #include <cstdlib>
@@ -278,11 +279,13 @@ bool EconomyCommand::Handle(ChatHandler* handler, char const* args)
     if (sub == "errands")
     {
         uint8 const errands = TownErrands::Needed(botAI, bot);
-        handler->PSendSysMessage("ECONERRANDS name={} mask={} repair={} sell={} ammo={} mail={} cooldown={}",
-                                 bot->GetName(), errands, (errands & TOWN_ERRAND_REPAIR) ? 1 : 0,
-                                 (errands & TOWN_ERRAND_SELL) ? 1 : 0, (errands & TOWN_ERRAND_AMMO) ? 1 : 0,
-                                 (errands & TOWN_ERRAND_MAIL) ? 1 : 0,
-                                 TownErrands::CooldownLeftMs(botAI->rpgInfo.lastErrandMs) / IN_MILLISECONDS);
+        WorldPosition const town = TownErrands::NearestTown(bot);
+        handler->PSendSysMessage(
+            "ECONERRANDS name={} mask={} repair={} sell={} ammo={} mail={} cooldown={} town={}", bot->GetName(),
+            errands, (errands & TOWN_ERRAND_REPAIR) ? 1 : 0, (errands & TOWN_ERRAND_SELL) ? 1 : 0,
+            (errands & TOWN_ERRAND_AMMO) ? 1 : 0, (errands & TOWN_ERRAND_MAIL) ? 1 : 0,
+            TownErrands::CooldownLeftMs(botAI->rpgInfo.lastErrandMs) / IN_MILLISECONDS,
+            town == WorldPosition() ? 0 : static_cast<uint32>(bot->GetExactDist(town)));
         return true;
     }
     if (sub == "mail")

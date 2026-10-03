@@ -13,6 +13,7 @@
 class Creature;
 class Player;
 class PlayerbotAI;
+class WorldPosition;
 
 // What a bot in the honest world (AiPlayerbot.FixedPopulation) needs from town. A bit mask.
 enum TownErrand : uint8
@@ -39,6 +40,9 @@ public:
     // Milliseconds left of the errand cooldown (AiPlayerbot.FixedPopulation.ErrandCooldownSeconds) after
     // the trip started at `lastErrandMs` (getMSTime(); 0 = never, no cooldown).
     static uint32 CooldownLeftMs(uint32 lastErrandMs);
+    // Where an errand trip walks to: the nearest inn or camp of the bot's faction on its map, of any level
+    // bracket (a bot that outgrew its zone still finds the zone's town). Empty WorldPosition if none.
+    static WorldPosition NearestTown(Player* bot);
 };
 
 #endif

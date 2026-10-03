@@ -1114,15 +1114,15 @@ bool NewRpgBaseAction::GoRunErrands()
     if (!errands)
         return false;
 
-    // A serving NPC or mailbox already in reach: wander among the NPCs here, else walk to a camp or inn.
+    // A serving NPC or mailbox already in reach: wander among the NPCs here, else walk to the nearest town.
     GuidVector const nearby = AI_VALUE(GuidVector, "possible new rpg targets");
     bool const servedHere = !TownErrands::ChooseTarget(botAI, bot, errands, nearby).IsEmpty();
     WorldPosition camp;
     if (!servedHere)
     {
-        camp = SelectRandomCampPos(bot);
+        camp = TownErrands::NearestTown(bot);
         if (camp == WorldPosition())
-            return false;
+            return false;  // no town within reach: keep playing, try again at the next idle
     }
 
     info.lastErrandMs = getMSTime();
