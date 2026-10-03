@@ -6,6 +6,8 @@
 
 #include "AutoMaintenanceOnLevelupAction.h"
 #include "BroadcastHelper.h"
+#include "EarnedTraining.h"
+#include "FixedPopulation.h"
 #include "PlayerbotAIConfig.h"
 #include "PlayerbotFactory.h"
 #include "RandomPlayerbotMgr.h"
@@ -78,6 +80,17 @@ void AutoMaintenanceOnLevelupAction::LearnSpells(std::ostringstream* out)
 void AutoMaintenanceOnLevelupAction::LearnTrainerSpells(std::ostringstream* /*out*/)
 {
     PlayerbotFactory factory(bot, bot->GetLevel());
+    if (sPlayerbotAIConfig.fixedPopulation)
+    {
+        // Honest world: weapon and armour skills and class-quest stand-ins stay automatic; every trainer
+        // spell, riding, the mount and gathering tools are bought with the bot's own gold.
+        factory.InitSkills(false);
+        factory.InitClassSpells();
+        EarnedTraining::LearnAffordable(bot, EarnedTraining::RepairReserve(bot));
+        factory.InitPet();
+        return;
+    }
+
     factory.InitSkills();
     factory.InitClassSpells();
     factory.InitAvailableSpells();
@@ -165,13 +178,17 @@ void AutoMaintenanceOnLevelupAction::AutoUpgradeEquip()
 
     PlayerbotFactory factory(bot, bot->GetLevel());
 
-    factory.CleanupConsumables();
+    // Honest world: no free ammo, reagents, food, consumables or potions, and nothing bought is destroyed.
+    if (!FixedPopulation::Blocks(FixedPopulationGuard::LevelUpSupplies))
+    {
+        factory.CleanupConsumables();
 
-    factory.InitAmmo();
-    factory.InitReagents();
-    factory.InitFood();
-    factory.InitConsumables();
-    factory.InitPotions();
+        factory.InitAmmo();
+        factory.InitReagents();
+        factory.InitFood();
+        factory.InitConsumables();
+        factory.InitPotions();
+    }
 
     if (sPlayerbotAIConfig.autoUpgradeEquip)
         factory.InitEquipment(true);

@@ -8,6 +8,7 @@
 #include "AiFactory.h"
 #include "BisListMgr.h"
 #include "BudgetValues.h"
+#include "EarnedTraining.h"
 #include "Event.h"
 #include "PlayerbotFactory.h"
 #include "PlayerbotTextMgr.h"
@@ -160,10 +161,7 @@ void TrainerAction::Learn(SpellInfo const* spellInfo, uint32 cost, std::ostrings
         bot->ModifyMoney(-static_cast<int32>(cost));
     }
 
-    if (spellInfo->HasEffect(SPELL_EFFECT_LEARN_SPELL))
-        bot->CastSpell(bot, spellInfo->Id, true);
-    else
-        bot->learnSpell(spellInfo->Id, false);
+    EarnedTraining::TeachTrainerSpell(bot, spellInfo->Id);
 
     out << " - learned";
 }

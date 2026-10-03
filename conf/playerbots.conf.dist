@@ -779,7 +779,8 @@ AiPlayerbot.DisableDeathKnightLogin = 0
 # everything. When enabled:
 # - no bot is ever randomized, refreshed, re-levelled or randomly teleported (first login included);
 # - nothing is handed out: no gold, gear, bags, supplies, repairs, mounts, riding or professions;
-#   trainer spells, riding, mounts and gathering tools are paid for with the bot's own gold;
+#   trainer spells, riding, mounts and gathering tools are paid for with the bot's own gold (at
+#   level-up, keeping the bot's full repair bill in reserve; what it can't afford is skipped);
 # - death works the normal way: corpse run or spirit healer (resurrection sickness, durability loss);
 # - death knights log in only after they were "raised" (AiPlayerbot.Raisings.*).
 # Turn this on only together with the vendor, trainer and mail loops this fork ships with it, or bots

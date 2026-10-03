@@ -3310,20 +3310,23 @@ void PlayerbotFactory::UpdateTradeSkills()
     }
 }
 
-void PlayerbotFactory::InitSkills()
+void PlayerbotFactory::InitSkills(bool withRidingAndTradeSkills)
 {
     //uint32 maxValue = level * 5; //not used, line marked for removal.
     bot->UpdateSkillsForLevel();
 
-    bot->SetSkill(SKILL_RIDING, 0, 0, 0);
-    if (bot->GetLevel() >= sPlayerbotAIConfig.useGroundMountAtMinLevel)
-        bot->learnSpell(33388);
-    if (bot->GetLevel() >= sPlayerbotAIConfig.useFastGroundMountAtMinLevel)
-        bot->learnSpell(33391);
-    if (bot->GetLevel() >= sPlayerbotAIConfig.useFlyMountAtMinLevel)
-        bot->learnSpell(34090);
-    if (bot->GetLevel() >= sPlayerbotAIConfig.useFastFlyMountAtMinLevel)
-        bot->learnSpell(34091);
+    if (withRidingAndTradeSkills)
+    {
+        bot->SetSkill(SKILL_RIDING, 0, 0, 0);
+        if (bot->GetLevel() >= sPlayerbotAIConfig.useGroundMountAtMinLevel)
+            bot->learnSpell(ridingSpells[0]);
+        if (bot->GetLevel() >= sPlayerbotAIConfig.useFastGroundMountAtMinLevel)
+            bot->learnSpell(ridingSpells[1]);
+        if (bot->GetLevel() >= sPlayerbotAIConfig.useFlyMountAtMinLevel)
+            bot->learnSpell(ridingSpells[2]);
+        if (bot->GetLevel() >= sPlayerbotAIConfig.useFastFlyMountAtMinLevel)
+            bot->learnSpell(ridingSpells[3]);
+    }
 
     uint32 skillLevel = bot->GetLevel() < 40 ? 0 : 1;
     uint32 dualWieldLevel = bot->GetLevel() < 20 ? 0 : 1;
@@ -3442,8 +3445,11 @@ void PlayerbotFactory::InitSkills()
             break;
     }
 
-    InitTradeSkills();
-    InitInventorySkill();
+    if (withRidingAndTradeSkills)
+    {
+        InitTradeSkills();
+        InitInventorySkill();
+    }
 
     // switch (bot->getClass())
     // {
@@ -3979,17 +3985,8 @@ void PlayerbotFactory::AutoGear(Player* bot, uint32 itemQuality, uint32 ilvl, bo
     bot->DurabilityRepairAll(false, 1.0f, false);
 }
 
-void PlayerbotFactory::InitMounts()
+std::array<std::vector<uint32>, 4> PlayerbotFactory::GetMountSpells(Player* bot)
 {
-    uint32 firstmount = sPlayerbotAIConfig.useGroundMountAtMinLevel;
-    uint32 secondmount = sPlayerbotAIConfig.useFastGroundMountAtMinLevel;
-    uint32 thirdmount = sPlayerbotAIConfig.useFlyMountAtMinLevel;
-    uint32 fourthmount = sPlayerbotAIConfig.useFastFlyMountAtMinLevel;
-
-    if (bot->GetLevel() < firstmount)
-        return;
-
-    std::map<uint8, std::map<uint32, std::vector<uint32>>> mounts;
     std::vector<uint32> slow, fast, fslow, ffast;
 
     switch (bot->getRace())
@@ -4061,15 +4058,24 @@ void PlayerbotFactory::InitMounts()
             break;
     }
 
-    mounts[bot->getRace()][0] = slow;
-    mounts[bot->getRace()][1] = fast;
-    mounts[bot->getRace()][2] = fslow;
-    mounts[bot->getRace()][3] = ffast;
+    return {slow, fast, fslow, ffast};
+}
 
+void PlayerbotFactory::InitMounts()
+{
+    uint32 firstmount = sPlayerbotAIConfig.useGroundMountAtMinLevel;
+    uint32 secondmount = sPlayerbotAIConfig.useFastGroundMountAtMinLevel;
+    uint32 thirdmount = sPlayerbotAIConfig.useFlyMountAtMinLevel;
+    uint32 fourthmount = sPlayerbotAIConfig.useFastFlyMountAtMinLevel;
+
+    if (bot->GetLevel() < firstmount)
+        return;
+
+    std::array<std::vector<uint32>, 4> const mounts = GetMountSpells(bot);
     for (uint32 type = 0; type < 4; type++)
     {
         bool hasMount = false;
-        for (uint32& spell : mounts[bot->getRace()][type])
+        for (uint32 spell : mounts[type])
         {
             if (bot->HasSpell(spell))
             {
@@ -4077,7 +4083,7 @@ void PlayerbotFactory::InitMounts()
                 break;
             }
         }
-        if (hasMount)
+        if (hasMount || mounts[type].empty())
             continue;
 
         if (bot->GetLevel() < secondmount && type == 1)
@@ -4089,8 +4095,8 @@ void PlayerbotFactory::InitMounts()
         if (bot->GetLevel() < fourthmount && type == 3)
             continue;
 
-        uint32 index = urand(0, mounts[bot->getRace()][type].size() - 1);
-        uint32 spell = mounts[bot->getRace()][type][index];
+        uint32 index = urand(0, mounts[type].size() - 1);
+        uint32 spell = mounts[type][index];
         if (spell)
         {
             bot->learnSpell(spell);

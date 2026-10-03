@@ -10,8 +10,10 @@
 #include "InventoryAction.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
+#include <array>
 #include <string>
 #include <utility>
+#include <vector>
 
 class Item;
 
@@ -65,9 +67,13 @@ public:
     void Randomize(bool incremental);
     static std::list<uint32> classQuestIds;
     void ClearEverything();
-    void InitSkills();
+    // Honest world passes false: weapon/armour skills only; riding and trade skills are bought.
+    void InitSkills(bool withRidingAndTradeSkills = true);
 
-    static uint32 tradeSkills[];
+    // The one profession list of the fork (primary and secondary trade skills).
+    static uint32 tradeSkills[14];
+    // The one riding list of the fork: apprentice, journeyman, expert, artisan (mount tiers 0-3).
+    static constexpr std::array<uint32, 4> ridingSpells = {33388, 33391, 34090, 34091};
     static float CalculateEnchantScore(uint32 enchant_id, Player* bot);
     uint32 InitTalentsTree(bool incremental = false, bool use_template = true, bool reset = false);
     static void InitTalentsBySpecNo(Player* bot, int specNo, bool reset);
@@ -92,6 +98,8 @@ public:
     void InitGlyphs(bool increment = false);
     void InitFood();
     void InitMounts();
+    // Mount spells by tier: 0 slow, 1 fast, 2 flying, 3 fast flying (InitMounts' table).
+    static std::array<std::vector<uint32>, 4> GetMountSpells(Player* bot);
     void InitBags(bool destroyOld = true);
     void ApplyEnchantAndGemsNew(bool destroyOld = true);
     void InitInstanceQuests();

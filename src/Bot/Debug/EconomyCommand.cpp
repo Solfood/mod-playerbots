@@ -7,11 +7,13 @@
 #include "EconomyCommand.h"
 
 #include "Chat.h"
+#include "EarnedTraining.h"
 #include "FixedPopulation.h"
 #include "ObjectAccessor.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "PlayerbotAIConfig.h"
+#include "PlayerbotFactory.h"
 #include "Playerbots.h"
 #include "RandomPlayerbotMgr.h"
 #include "SharedDefines.h"
@@ -25,11 +27,6 @@
 namespace
 {
 constexpr uint32 SPELL_RESURRECTION_SICKNESS = 15007;
-constexpr std::array<uint32, 4> RIDING_SPELLS = {33388, 33391, 34090, 34091};
-constexpr std::array<uint16, 14> PROFESSION_SKILLS = {
-    SKILL_ALCHEMY,       SKILL_BLACKSMITHING, SKILL_ENCHANTING, SKILL_ENGINEERING, SKILL_HERBALISM,
-    SKILL_INSCRIPTION,   SKILL_JEWELCRAFTING, SKILL_LEATHERWORKING, SKILL_MINING,  SKILL_SKINNING,
-    SKILL_TAILORING,     SKILL_COOKING,       SKILL_FIRST_AID,  SKILL_FISHING};
 
 std::vector<std::string> SplitArgs(char const* args)
 {
@@ -80,8 +77,9 @@ void Show(ChatHandler* handler, Player* bot)
     AiObjectContext* context = botAI->GetAiObjectContext();
     uint32 const botId = bot->GetGUID().GetCounter();
 
+    // Shared lists (ruling F12): PlayerbotFactory::tradeSkills and ::ridingSpells.
     std::ostringstream professions;
-    for (uint16 skill : PROFESSION_SKILLS)
+    for (uint32 skill : PlayerbotFactory::tradeSkills)
     {
         if (!bot->HasSkill(skill))
             continue;
@@ -91,19 +89,26 @@ void Show(ChatHandler* handler, Player* bot)
     }
 
     uint32 riding = 0;
-    for (uint32 spell : RIDING_SPELLS)
+    for (uint32 spell : PlayerbotFactory::ridingSpells)
         if (bot->HasSpell(spell))
             ++riding;
 
+    uint32 mounts = 0;
+    for (std::vector<uint32> const& tier : PlayerbotFactory::GetMountSpells(bot))
+        for (uint32 spell : tier)
+            if (bot->HasSpell(spell))
+                ++mounts;
+
     handler->PSendSysMessage(
         "ECON name={} guid={} level={} money={} durability={} bags={} dead={} ghost={} sick={} riding={} prof={} "
-        "deaths={} rpg={} spells={} randomize={} teleport={} revive={}",
+        "deaths={} rpg={} spells={} randomize={} teleport={} revive={} mounts={}",
         bot->GetName(), botId, bot->GetLevel(), bot->GetMoney(), context->GetValue<uint8>("durability")->Get(),
         context->GetValue<uint8>("bag space")->Get(), bot->isDead() ? 1 : 0,
         bot->HasPlayerFlag(PLAYER_FLAGS_GHOST) ? 1 : 0, bot->HasAura(SPELL_RESURRECTION_SICKNESS) ? 1 : 0, riding,
         professions.tellp() > 0 ? professions.str() : std::string("-"), context->GetValue<uint32>("death count")->Get(),
         RpgStatusName(botAI), LiveSpellCount(bot), sRandomPlayerbotMgr.GetValue(botId, "randomize") ? 1 : 0,
-        sRandomPlayerbotMgr.GetValue(botId, "teleport") ? 1 : 0, sRandomPlayerbotMgr.GetValue(botId, "revive") ? 1 : 0);
+        sRandomPlayerbotMgr.GetValue(botId, "teleport") ? 1 : 0, sRandomPlayerbotMgr.GetValue(botId, "revive") ? 1 : 0,
+        mounts);
 }
 
 void Active(ChatHandler* handler)
@@ -133,7 +138,8 @@ bool EconomyCommand::Handle(ChatHandler* handler, char const* args)
     if (words.empty())
     {
         handler->PSendSysMessage(
-            "ECONERR usage: econ show|kill|wear|money|due|deaths|idle <name> [value] | econ active | econ stats");
+            "ECONERR usage: econ show|kill|wear|money|due|deaths|idle|forget <name> [value] | econ active | "
+            "econ stats");
         return false;
     }
     std::string const& sub = words[0];
@@ -220,6 +226,44 @@ bool EconomyCommand::Handle(ChatHandler* handler, char const* args)
     {
         botAI->rpgInfo.ChangeToIdle();
         handler->PSendSysMessage("ECONOK {} rpg=IDLE", bot->GetName());
+        return true;
+    }
+
+    if (sub == "forget" && words.size() > 2)
+    {
+        // Test seam: make a bot "untrained" so a check can watch it buy things back.
+        uint32 forgotten = 0;
+        if (words[2] == "riding")
+        {
+            for (uint32 spell : PlayerbotFactory::ridingSpells)
+            {
+                if (bot->HasSpell(spell))
+                {
+                    bot->removeSpell(spell, SPEC_MASK_ALL, false);
+                    ++forgotten;
+                }
+            }
+            for (std::vector<uint32> const& tier : PlayerbotFactory::GetMountSpells(bot))
+            {
+                for (uint32 spell : tier)
+                {
+                    if (bot->HasSpell(spell))
+                    {
+                        bot->removeSpell(spell, SPEC_MASK_ALL, false);
+                        ++forgotten;
+                    }
+                }
+            }
+            bot->SetSkill(SKILL_RIDING, 0, 0, 0);
+        }
+        else if (words[2] == "class")
+            forgotten = EarnedTraining::ForgetClassTraining(bot);
+        else
+        {
+            handler->PSendSysMessage("ECONERR forget takes riding or class, not {}", words[2]);
+            return false;
+        }
+        handler->PSendSysMessage("ECONOK {} forget {} forgot={}", bot->GetName(), words[2], forgotten);
         return true;
     }
 
