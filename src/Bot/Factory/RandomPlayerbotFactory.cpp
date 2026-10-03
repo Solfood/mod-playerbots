@@ -440,7 +440,9 @@ uint32 RandomPlayerbotFactory::CalculateTotalAccountCount()
 uint32 RandomPlayerbotFactory::CalculateAvailableCharsPerAccount()
 {
     // Death Knight availability according to their login eligibility, and if WotLK is enabled at all.
-    bool noDK = sPlayerbotAIConfig.disableDeathKnightLogin || sWorld->getIntConfig(CONFIG_EXPANSION) != EXPANSION_WRATH_OF_THE_LICH_KING;
+    // Honest world: death knights only log in once raised, so plan accounts as if they never do.
+    bool noDK = sPlayerbotAIConfig.disableDeathKnightLogin || sPlayerbotAIConfig.fixedPopulation ||
+                sWorld->getIntConfig(CONFIG_EXPANSION) != EXPANSION_WRATH_OF_THE_LICH_KING;
 
     uint32 availableChars = noDK ? 9 : 10;
 

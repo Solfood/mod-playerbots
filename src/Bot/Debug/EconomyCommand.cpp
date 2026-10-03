@@ -7,9 +7,11 @@
 #include "EconomyCommand.h"
 
 #include "Chat.h"
+#include "FixedPopulation.h"
 #include "ObjectAccessor.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
+#include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
 #include "RandomPlayerbotMgr.h"
 #include "SharedDefines.h"
@@ -131,7 +133,7 @@ bool EconomyCommand::Handle(ChatHandler* handler, char const* args)
     if (words.empty())
     {
         handler->PSendSysMessage(
-            "ECONERR usage: econ show|kill|wear|money|due|deaths|idle <name> [value] | econ active");
+            "ECONERR usage: econ show|kill|wear|money|due|deaths|idle <name> [value] | econ active | econ stats");
         return false;
     }
     std::string const& sub = words[0];
@@ -139,6 +141,24 @@ bool EconomyCommand::Handle(ChatHandler* handler, char const* args)
     if (sub == "active")
     {
         Active(handler);
+        return true;
+    }
+
+    if (sub == "stats")
+    {
+        std::ostringstream out;
+        out << "ECONSTAT fixed_population=" << (sPlayerbotAIConfig.fixedPopulation ? 1 : 0);
+        for (std::size_t i = 0; i < static_cast<std::size_t>(FixedPopulationGuard::Count); ++i)
+        {
+            auto const guard = static_cast<FixedPopulationGuard>(i);
+            out << " blocked_" << FixedPopulation::Name(guard) << '=' << FixedPopulation::Get(guard);
+        }
+        for (std::size_t i = 0; i < static_cast<std::size_t>(EconomyCounter::Count); ++i)
+        {
+            auto const counter = static_cast<EconomyCounter>(i);
+            out << ' ' << FixedPopulation::Name(counter) << '=' << FixedPopulation::Get(counter);
+        }
+        handler->PSendSysMessage("{}", out.str());
         return true;
     }
 

@@ -16,6 +16,7 @@
 #include "DBCStructure.h"
 #include "DatabaseEnv.h"
 #include "Define.h"
+#include "FixedPopulation.h"
 #include "FleeManager.h"
 #include "GridNotifiers.h"
 #include "GridNotifiersImpl.h"
@@ -763,7 +764,9 @@ uint32 RandomPlayerbotMgr::AddRandomBots()
                 GetEventValue(charInfo.guid, "logout") ||
                 GetPlayerBot(charInfo.guid) ||
                 currentBots.contains(charInfo.guid) ||
-                (sPlayerbotAIConfig.disableDeathKnightLogin && charInfo.rClass == CLASS_DEATH_KNIGHT))
+                (sPlayerbotAIConfig.disableDeathKnightLogin && charInfo.rClass == CLASS_DEATH_KNIGHT) ||
+                (sPlayerbotAIConfig.fixedPopulation && charInfo.rClass == CLASS_DEATH_KNIGHT &&
+                 !GetEventValue(charInfo.guid, "raised")))
             {
                 return false;
             }
@@ -1356,6 +1359,13 @@ void RandomPlayerbotMgr::ScheduleChangeStrategy(uint32 bot, uint32 time)
     SetEventValue(bot, "change_strategy", 1, time);
 }
 
+bool RandomPlayerbotMgr::IsUnraisedDeathKnight(uint32 bot)
+{
+    CharacterCacheEntry const* entry =
+        sCharacterCache->GetCharacterCacheByGuid(ObjectGuid::Create<HighGuid::Player>(bot));
+    return entry && entry->Class == CLASS_DEATH_KNIGHT && !GetEventValue(bot, "raised");
+}
+
 bool RandomPlayerbotMgr::ProcessBot(uint32 bot)
 {
     ObjectGuid botGUID = ObjectGuid::Create<HighGuid::Player>(bot);
@@ -1386,6 +1396,14 @@ bool RandomPlayerbotMgr::ProcessBot(uint32 bot)
     uint32 randomTime;
     if (!player)
     {
+        // Honest world: death knights exist only through raisings (spec §3b).
+        if (IsUnraisedDeathKnight(bot) && FixedPopulation::Blocks(FixedPopulationGuard::DkLogin))
+        {
+            SetEventValue(bot, "add", 0, 0);
+            currentBots.erase(bot);
+            return false;
+        }
+
         AddPlayerBot(botGUID, 0);
         randomTime = urand(1, 2);
 
@@ -1395,16 +1413,20 @@ bool RandomPlayerbotMgr::ProcessBot(uint32 bot)
         SetEventValue(bot, "update", 1, randomTime);
 
         // do not randomize or teleport immediately after server start (prevent lagging)
-        if (!GetEventValue(bot, "randomize"))
+        // Honest world: never randomize or teleport at all; the bot starts where it was created.
+        if (!FixedPopulation::Blocks(FixedPopulationGuard::FirstLoginSchedule))
         {
-            randomTime = urand(3, std::max(4, static_cast<int>(randomBotUpdateInterval * 0.4)));
-            ScheduleRandomize(bot, randomTime);
-        }
-        if (!GetEventValue(bot, "teleport"))
-        {
-            randomTime = urand(std::max(7, static_cast<int>(randomBotUpdateInterval * 0.7)),
-                               std::max(14, static_cast<int>(randomBotUpdateInterval * 1.4)));
-            ScheduleTeleport(bot, randomTime);
+            if (!GetEventValue(bot, "randomize"))
+            {
+                randomTime = urand(3, std::max(4, static_cast<int>(randomBotUpdateInterval * 0.4)));
+                ScheduleRandomize(bot, randomTime);
+            }
+            if (!GetEventValue(bot, "teleport"))
+            {
+                randomTime = urand(std::max(7, static_cast<int>(randomBotUpdateInterval * 0.7)),
+                                   std::max(14, static_cast<int>(randomBotUpdateInterval * 1.4)));
+                ScheduleTeleport(bot, randomTime);
+            }
         }
 
         return true;
@@ -1482,6 +1504,10 @@ bool RandomPlayerbotMgr::ProcessBot(Player* bot)
     // if death revive
     if (bot->isDead())
     {
+        // Honest world: no revive timer. DeadStrategy releases, then corpse-runs or uses the spirit healer.
+        if (FixedPopulation::Blocks(FixedPopulationGuard::DeadTimer))
+            return false;
+
         if (!GetEventValue(botId, "dead"))
         {
             uint32 randomTime =
@@ -1524,7 +1550,8 @@ bool RandomPlayerbotMgr::ProcessBot(Player* bot)
         idleBot = true;
     }
 
-    if (idleBot)
+    // Honest world: idle bots are never re-rolled or teleported.
+    if (idleBot && !FixedPopulation::Blocks(FixedPopulationGuard::PeriodicReroll))
     {
         // randomize
         uint32 randomize = GetEventValue(botId, "randomize");
@@ -1586,6 +1613,9 @@ bool RandomPlayerbotMgr::ProcessBot(Player* bot)
 
 void RandomPlayerbotMgr::Revive(Player* player)
 {
+    if (FixedPopulation::Blocks(FixedPopulationGuard::Revive))
+        return;
+
     uint32 bot = player->GetGUID().GetCounter();
 
     // LOG_INFO("playerbots", "Bot {} revived", player->GetName().c_str());
@@ -1598,6 +1628,9 @@ void RandomPlayerbotMgr::Revive(Player* player)
 
 void RandomPlayerbotMgr::RandomTeleport(Player* bot, std::vector<WorldLocation>& locs, bool hearth)
 {
+    if (FixedPopulation::Blocks(FixedPopulationGuard::Teleport))
+        return;
+
     // ignore when alrdy teleported or not in the world yet.
     if (bot->IsBeingTeleported() || !bot->IsInWorld())
         return;
@@ -1806,6 +1839,9 @@ void RandomPlayerbotMgr::InitArenaTeams()
 
 void RandomPlayerbotMgr::RandomTeleportForLevel(Player* bot)
 {
+    if (FixedPopulation::Blocks(FixedPopulationGuard::Teleport))
+        return;
+
     if (bot->InBattleground())
         return;
 
@@ -1902,6 +1938,9 @@ std::vector<WorldLocation> RandomPlayerbotMgr::GetPlayerZoneTeleportLocations(st
 
 void RandomPlayerbotMgr::RandomTeleportGrindForLevel(Player* bot)
 {
+    if (FixedPopulation::Blocks(FixedPopulationGuard::Teleport))
+        return;
+
     if (bot->InBattleground())
         return;
 
@@ -1914,6 +1953,9 @@ void RandomPlayerbotMgr::RandomTeleportGrindForLevel(Player* bot)
 
 void RandomPlayerbotMgr::RandomTeleport(Player* bot)
 {
+    if (FixedPopulation::Blocks(FixedPopulationGuard::Teleport))
+        return;
+
     if (bot->InBattleground())
         return;
 
@@ -1953,6 +1995,9 @@ void RandomPlayerbotMgr::RandomTeleport(Player* bot)
 
 void RandomPlayerbotMgr::Randomize(Player* bot)
 {
+    if (FixedPopulation::Blocks(FixedPopulationGuard::Randomize))
+        return;
+
     if (bot->InBattleground())
         return;
 
@@ -1975,6 +2020,9 @@ void RandomPlayerbotMgr::Randomize(Player* bot)
 
 void RandomPlayerbotMgr::IncreaseLevel(Player* bot)
 {
+    if (FixedPopulation::Blocks(FixedPopulationGuard::Randomize))
+        return;
+
     uint32 maxLevel = sPlayerbotAIConfig.randomBotMaxLevel;
     if (maxLevel > sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL))
         maxLevel = sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL);
@@ -1998,6 +2046,9 @@ void RandomPlayerbotMgr::IncreaseLevel(Player* bot)
 
 void RandomPlayerbotMgr::RandomizeFirst(Player* bot)
 {
+    if (FixedPopulation::Blocks(FixedPopulationGuard::Randomize))
+        return;
+
     PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
     if (!botAI)
         return;
@@ -2093,6 +2144,9 @@ void RandomPlayerbotMgr::RandomizeFirst(Player* bot)
 
 void RandomPlayerbotMgr::RandomizeMin(Player* bot)
 {
+    if (FixedPopulation::Blocks(FixedPopulationGuard::Randomize))
+        return;
+
     PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
     if (!botAI)
         return;
@@ -2167,6 +2221,10 @@ uint32 RandomPlayerbotMgr::GetZoneLevel(uint16 mapId, float teleX, float teleY, 
 
 void RandomPlayerbotMgr::Refresh(Player* bot)
 {
+    // Honest world: no free resurrection, repair, gold or supplies (also reached from LFG accept).
+    if (FixedPopulation::Blocks(FixedPopulationGuard::Refresh))
+        return;
+
     PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
     if (!botAI)
         return;

@@ -775,6 +775,18 @@ AiPlayerbot.RandomBotHordeRatio = 50
 # Disable logging in of death knight bots
 AiPlayerbot.DisableDeathKnightLogin = 0
 
+# Honest world ("fixed population"): the bots created at launch are the whole population and earn
+# everything. When enabled:
+# - no bot is ever randomized, refreshed, re-levelled or randomly teleported (first login included);
+# - nothing is handed out: no gold, gear, bags, supplies, repairs, mounts, riding or professions;
+#   trainer spells, riding, mounts and gathering tools are paid for with the bot's own gold;
+# - death works the normal way: corpse run or spirit healer (resurrection sickness, durability loss);
+# - death knights log in only after they were "raised" (AiPlayerbot.Raisings.*).
+# Turn this on only together with the vendor, trainer and mail loops this fork ships with it, or bots
+# end up with broken gear and old spells.
+# Default: 0 (disabled)
+AiPlayerbot.FixedPopulation = 0
+
 # Enable simulated expansion limitation for talents and glyphs
 # If enabled, limits talent trees to 6 rows plus the middle talent of the 7th row for bots until level 61
 # and 8 rows plus the middle talent of the 9th row for bots from level 61 until level 71

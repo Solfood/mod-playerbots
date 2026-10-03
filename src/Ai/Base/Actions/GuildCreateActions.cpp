@@ -8,6 +8,7 @@
 #include "ArenaTeam.h"
 #include "BudgetValues.h"
 #include "Event.h"
+#include "FixedPopulation.h"
 #include "GuildMgr.h"
 #include "Playerbots.h"
 #include "RandomPlayerbotFactory.h"
@@ -239,7 +240,8 @@ bool PetitionTurnInAction::Execute(Event /*event*/)
             // (EMBLEM_PRICE = 10 * GOLD in core)
             static constexpr uint32 REQUIRED = 10 * GOLD;
             uint32 have = bot->GetMoney();               // actual money earned by bot in copper
-            if (have < REQUIRED)
+            // Honest world: no gift. The emblem below is set without charging either way.
+            if (have < REQUIRED && !FixedPopulation::Blocks(FixedPopulationGuard::GoldTopUp))
             {
                 bot->ModifyMoney(int32(REQUIRED - have)); // add only the missing amount to bot to reach 10g
             }
