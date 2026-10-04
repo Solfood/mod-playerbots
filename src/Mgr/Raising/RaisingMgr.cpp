@@ -40,6 +40,7 @@ constexpr uint32 UPDATE_INTERVAL_MS = 5 * IN_MILLISECONDS;
 constexpr uint32 SAVE_SETTLE_MS = 15 * IN_MILLISECONDS;  // let the logout save reach the database
 constexpr uint32 LOGOUT_TIMEOUT_MS = 10 * MINUTE * IN_MILLISECONDS;
 constexpr uint32 UNLINK_TIMEOUT_MS = 2 * MINUTE * IN_MILLISECONDS;
+constexpr uint32 CREATED_TIMEOUT_MS = 10 * MINUTE * IN_MILLISECONDS;  // a one-character save takes seconds
 constexpr uint32 LOGIN_TIMEOUT_MS = 30 * MINUTE * IN_MILLISECONDS;
 constexpr uint32 RESTORE_TIMEOUT_MS = 5 * MINUTE * IN_MILLISECONDS;
 constexpr uint32 MAIL_KEEP_DAYS = 365;
@@ -87,12 +88,18 @@ bool ShouldCarry(Item* item, bool materialsOnly)
     return !materialsOnly || proto->Class == ITEM_CLASS_TRADE_GOODS;
 }
 
-// World thread only (synchronous read).
-bool CharacterRowExists(ObjectGuid::LowType guid)
-{
-    return static_cast<bool>(CharacterDatabase.Query("SELECT 1 FROM characters WHERE guid = {}", guid));
-}
 }  // namespace
+
+// World thread only (synchronous read). The row must be THIS raising's death knight: a guid alone can belong to a
+// character created after a restart.
+bool RaisingMgr::DeathKnightRowExists(Raising const& raising)
+{
+    std::string name = raising.name;
+    CharacterDatabase.EscapeString(name);
+    return static_cast<bool>(CharacterDatabase.Query(
+        "SELECT 1 FROM characters WHERE guid = {} AND account = {} AND name = '{}' AND class = {}", raising.newGuid,
+        raising.account, name, static_cast<uint32>(CLASS_DEATH_KNIGHT)));
+}
 
 bool RaisingMgr::UnlinkAllowed(uint8 level, std::string& reason)
 {
@@ -115,7 +122,7 @@ bool RaisingMgr::UnlinkAllowed(uint8 level, std::string& reason)
     return true;
 }
 
-bool RaisingMgr::Begin(Player* original, std::string& reason, bool failCreate)
+bool RaisingMgr::Begin(Player* original, std::string& reason, bool failCreate, bool failSave)
 {
     EnsureLoaded();
     if (!sPlayerbotAIConfig.fixedPopulation)
@@ -179,11 +186,13 @@ bool RaisingMgr::Begin(Player* original, std::string& reason, bool failCreate)
     raising.guildId = original->GetGuildId();
     raising.carry = CollectCarry(original);
     raising.failCreate = failCreate;
+    raising.failSave = failSave;
     raising.stageStartMs = getMSTime();
 
     std::string name = raising.name;
     CharacterDatabase.EscapeString(name);  // same MySQL escaping; the playerbots pool has no EscapeString
-    PlayerbotsDatabase.Execute(
+    // Synchronous (world thread, once per raising): the row must exist, and its id be known, before anything moves.
+    PlayerbotsDatabase.DirectExecute(
         "INSERT INTO playerbots_raisings (old_guid, new_guid, account, name, race, gender, look, team, old_class, "
         "old_level, guild_id, carry, state, raised_at) VALUES ({}, {}, {}, '{}', {}, {}, '{}:{}:{}:{}:{}', {}, {}, {}, "
         "{}, '{}', 'logout', UNIX_TIMESTAMP())",
@@ -191,12 +200,22 @@ bool RaisingMgr::Begin(Player* original, std::string& reason, bool failCreate)
         raising.face, raising.hairStyle, raising.hairColor, raising.facialHair,
         static_cast<uint32>(original->GetTeamId()), raising.oldClass, raising.oldLevel, raising.guildId,
         raising.carry);
+    QueryResult idResult = PlayerbotsDatabase.Query(
+        "SELECT MAX(id) FROM playerbots_raisings WHERE old_guid = {} AND new_guid = {} AND state = 'logout'",
+        raising.oldGuid, raising.newGuid);
+    raising.id = idResult ? idResult->Fetch()[0].Get<uint32>() : 0;
+    if (!raising.id)
+    {
+        reason = "could not write the playerbots_raisings row";
+        return false;
+    }
 
     uint32 const mails = MailBelongings(original, raising.newGuid);
 
     LOG_INFO("playerbots", "Raising {} (guid {}, level {}): {} letters of belongings sent to death knight guid {}{}",
              raising.name, raising.oldGuid, raising.oldLevel, mails, raising.newGuid,
-             failCreate ? " (test: creation will be forced to fail)" : "");
+             failCreate ? " (test: creation will be forced to fail)" :
+                          (failSave ? " (test: the death knight's save will be forced to go missing)" : ""));
 
     sRandomPlayerbotMgr.RemoveFromPopulation(oldGuid);
     _active.push_back(std::move(raising));
@@ -233,6 +252,8 @@ void RaisingMgr::OnBotLogin(Player* bot)
     {
         if (raising.newGuid != guid || (raising.stage != Stage::WaitLogin && raising.stage != Stage::WaitCreated))
             continue;
+        if (bot->GetName() != raising.name || bot->getClass() != CLASS_DEATH_KNIGHT)
+            continue;  // not this raising's death knight (a reused guid)
 
         ApplyCarry(bot, raising.carry);
         bot->SaveToDB(false, false);
@@ -249,9 +270,20 @@ void RaisingMgr::EnsureLoaded()
         return;
     _loaded = true;
 
+    // Never hand out a guid any raising row has used, finished or not: a finished row's death knight may have been
+    // removed, and its guid reused by a new character would make the hall-of-legends row point at a stranger.
+    auto& generator = sObjectMgr->GetGenerator<HighGuid::Player>();
+    if (QueryResult maxResult = PlayerbotsDatabase.Query("SELECT MAX(new_guid) FROM playerbots_raisings"))
+    {
+        uint32 const maxNewGuid = maxResult->Fetch()[0].Get<uint32>();
+        if (maxNewGuid && generator.GetNextAfterMaxUsed() <= maxNewGuid)
+            generator.Set(maxNewGuid + 1);
+    }
+
+    // Only unfinished rows are resumed; done/failed/test rows are history and are never matched again.
     QueryResult result = PlayerbotsDatabase.Query(
-        "SELECT old_guid, new_guid, account, name, race, gender, look, old_class, old_level, guild_id, carry, state "
-        "FROM playerbots_raisings WHERE state IN ('logout', 'unlink', 'created', 'rollback')");
+        "SELECT id, old_guid, new_guid, account, name, race, gender, look, old_class, old_level, guild_id, carry, "
+        "state FROM playerbots_raisings WHERE state IN ('logout', 'unlink', 'created', 'rollback') ORDER BY id");
     if (!result)
         return;
 
@@ -259,13 +291,14 @@ void RaisingMgr::EnsureLoaded()
     {
         Field* fields = result->Fetch();
         Raising raising;
-        raising.oldGuid = fields[0].Get<uint32>();
-        raising.newGuid = fields[1].Get<uint32>();
-        raising.account = fields[2].Get<uint32>();
-        raising.name = fields[3].Get<std::string>();
-        raising.race = fields[4].Get<uint8>();
-        raising.gender = fields[5].Get<uint8>();
-        std::vector<std::string> const look = Split(fields[6].Get<std::string>(), ':');
+        raising.id = fields[0].Get<uint32>();
+        raising.oldGuid = fields[1].Get<uint32>();
+        raising.newGuid = fields[2].Get<uint32>();
+        raising.account = fields[3].Get<uint32>();
+        raising.name = fields[4].Get<std::string>();
+        raising.race = fields[5].Get<uint8>();
+        raising.gender = fields[6].Get<uint8>();
+        std::vector<std::string> const look = Split(fields[7].Get<std::string>(), ':');
         if (look.size() == 5)
         {
             raising.skin = static_cast<uint8>(ToNumber(look[0]));
@@ -274,11 +307,11 @@ void RaisingMgr::EnsureLoaded()
             raising.hairColor = static_cast<uint8>(ToNumber(look[3]));
             raising.facialHair = static_cast<uint8>(ToNumber(look[4]));
         }
-        raising.oldClass = fields[7].Get<uint8>();
-        raising.oldLevel = fields[8].Get<uint8>();
-        raising.guildId = fields[9].Get<uint32>();
-        raising.carry = fields[10].Get<std::string>();
-        std::string const state = fields[11].Get<std::string>();
+        raising.oldClass = fields[8].Get<uint8>();
+        raising.oldLevel = fields[9].Get<uint8>();
+        raising.guildId = fields[10].Get<uint32>();
+        raising.carry = fields[11].Get<std::string>();
+        std::string const state = fields[12].Get<std::string>();
         raising.stageStartMs = getMSTime();
 
         if (state == "logout")
@@ -293,12 +326,6 @@ void RaisingMgr::EnsureLoaded()
             raising.stage = Stage::WaitCreated;
         else
             raising.stage = Stage::WaitRestore;
-
-        // The death knight's guid was taken from the generator but may not be in `characters` yet: never hand
-        // it out again after a restart.
-        auto& generator = sObjectMgr->GetGenerator<HighGuid::Player>();
-        if (generator.GetNextAfterMaxUsed() <= raising.newGuid)
-            generator.Set(raising.newGuid + 1);
 
         _active.push_back(std::move(raising));
     } while (result->NextRow());
@@ -356,14 +383,20 @@ void RaisingMgr::Advance(Raising& raising)
             }
 
             // After a restart the death knight may already exist (created, but the "created" state was lost).
-            if (!CharacterRowExists(raising.newGuid))
+            if (!DeathKnightRowExists(raising))
             {
                 if (raising.failCreate)
                 {
                     Rollback(raising, "test: forced creation failure");
                     return;
                 }
-                if (!CreateDeathKnight(raising))
+                if (CharacterDatabase.Query("SELECT 1 FROM characters WHERE guid = {}", raising.newGuid))
+                {
+                    Rollback(raising, "the death knight's guid belongs to another character");
+                    return;
+                }
+                // failSave (test seam): behave as if the save was lost, the row never appears.
+                if (!raising.failSave && !CreateDeathKnight(raising))
                 {
                     Rollback(raising, "death knight creation failed");
                     return;
@@ -376,24 +409,32 @@ void RaisingMgr::Advance(Raising& raising)
             return;
         }
         case Stage::WaitCreated:
+        {
+            // The save is asynchronous: the login must not look for a row that isn't written yet.
+            if (!DeathKnightRowExists(raising))
+            {
+                // No death knight to fall back on: restore the original (it is still retired, its belongings are
+                // in letters addressed to a guid nobody holds).
+                if (ageMs > CREATED_TIMEOUT_MS)
+                    Rollback(raising, "the death knight's row never reached the database");
+                return;
+            }
+            sRandomPlayerbotMgr.MarkRaised(raising.newGuid);
+            sRandomPlayerbotMgr.AddToPopulation(raising.newGuid);
+            raising.stage = Stage::WaitLogin;
+            raising.stageStartMs = getMSTime();
+            return;
+        }
         case Stage::WaitLogin:
         {
+            // The death knight exists and is in the population, but never logged in (ruling F16): stop waiting,
+            // keep it; it logs in whenever the population manager manages to.
             if (ageMs > LOGIN_TIMEOUT_MS)
             {
                 LOG_ERROR("playerbots", "Raising {}: the death knight (guid {}) never logged in", raising.name,
                           raising.newGuid);
                 SetState(raising, "failed_login");
                 raising.stage = Stage::Failed;
-                return;
-            }
-            if (raising.stage == Stage::WaitCreated)
-            {
-                // The save is asynchronous: the login must not look for a row that isn't written yet.
-                if (!CharacterRowExists(raising.newGuid))
-                    return;
-                sRandomPlayerbotMgr.MarkRaised(raising.newGuid);
-                sRandomPlayerbotMgr.AddToPopulation(raising.newGuid);
-                raising.stage = Stage::WaitLogin;
                 return;
             }
             // Normally finished in OnBotLogin; this catches a login that happened before the raising was loaded.
@@ -474,14 +515,22 @@ void RaisingMgr::Rollback(Raising& raising, char const* why)
               raising.oldGuid);
     SetState(raising, "rollback");
 
+    // A death knight cache entry from a creation whose row never arrived would hold the name.
+    ObjectGuid const newGuid = ObjectGuid::Create<HighGuid::Player>(raising.newGuid);
+    if (CharacterCacheEntry const* entry = sCharacterCache->GetCharacterCacheByGuid(newGuid))
+        if (entry->Name == raising.name)
+            sCharacterCache->DeleteCharacterCacheEntry(newGuid, raising.name);
+
     // All asynchronous, in this order on the character database's queue: after the retirement (if it is still
     // queued), and before WaitRestore sees the restored row. A no-op for parts that never happened.
-    // The belongings went out by mail to a character that will never exist: point them back.
-    CharacterDatabase.Execute("UPDATE mail SET receiver = {} WHERE receiver = {}", raising.oldGuid, raising.newGuid);
-    CharacterDatabase.Execute("UPDATE mail_items SET receiver = {} WHERE receiver = {}", raising.oldGuid,
-                              raising.newGuid);
-    CharacterDatabase.Execute("UPDATE item_instance SET owner_guid = {} WHERE owner_guid = {}", raising.oldGuid,
-                              raising.newGuid);
+    // The belongings went out by mail to a character that will never exist: point them back. Only the letters
+    // this original sent to that guid (sender = original), never anyone else's mail.
+    CharacterDatabase.Execute(
+        "UPDATE mail m JOIN mail_items mi ON mi.mail_id = m.id JOIN item_instance ii ON ii.guid = mi.item_guid "
+        "SET mi.receiver = {}, ii.owner_guid = {} WHERE m.receiver = {} AND m.sender = {}",
+        raising.oldGuid, raising.oldGuid, raising.newGuid, raising.oldGuid);
+    CharacterDatabase.Execute("UPDATE mail SET receiver = {} WHERE receiver = {} AND sender = {}", raising.oldGuid,
+                              raising.newGuid, raising.oldGuid);
     // CHAR_UDP_RESTORE_DELETE_INFO (only touches a retired row).
     CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_UDP_RESTORE_DELETE_INFO);
     stmt->SetData(0, raising.name);
@@ -516,8 +565,8 @@ void RaisingMgr::FinishRollback(Raising& raising)
 
 void RaisingMgr::SetState(Raising const& raising, char const* state)
 {
-    PlayerbotsDatabase.Execute("UPDATE playerbots_raisings SET state = '{}' WHERE new_guid = {}", state,
-                               raising.newGuid);
+    // By row id: a guid can come back on another raising or character, the id never does.
+    PlayerbotsDatabase.Execute("UPDATE playerbots_raisings SET state = '{}' WHERE id = {}", state, raising.id);
 }
 
 std::string RaisingMgr::CollectCarry(Player* original)

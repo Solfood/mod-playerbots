@@ -151,7 +151,8 @@ bool EconomyCommand::Handle(ChatHandler* handler, char const* args)
     {
         handler->PSendSysMessage(
             "ECONERR usage: econ show|kill|wear|money|due|deaths|idle|forget|errands|mail|fillbags|raise <name> "
-            "[value] | econ active | econ stats | econ picktable <classId> <rolls>");
+            "[value] | econ raise <name> [failcreate|failsave] | econ active | econ stats | "
+            "econ picktable <classId> <rolls>");
         return false;
     }
     std::string const& sub = words[0];
@@ -406,16 +407,19 @@ bool EconomyCommand::Handle(ChatHandler* handler, char const* args)
 
     if (sub == "raise")
     {
-        // Raises this bot into a death knight now (Task 11 adds the automatic waves). `failcreate` is a test seam:
-        // the original is retired, then creation is forced to fail and the original must come back.
+        // Raises this bot into a death knight now (Task 11 adds the automatic waves). Test seams: the original is
+        // retired, then `failcreate` forces creation to fail, `failsave` makes the death knight's row never appear;
+        // either way the original must come back.
         bool const failCreate = words.size() > 2 && words[2] == "failcreate";
+        bool const failSave = words.size() > 2 && words[2] == "failsave";
         std::string reason;
-        if (!sRaisingMgr.Begin(bot, reason, failCreate))
+        if (!sRaisingMgr.Begin(bot, reason, failCreate, failSave))
         {
             handler->PSendSysMessage("ECONERR raise {}: {}", bot->GetName(), reason);
             return false;
         }
-        handler->PSendSysMessage("ECONOK raising {}{}", bot->GetName(), failCreate ? " (forced failure)" : "");
+        handler->PSendSysMessage("ECONOK raising {}{}", bot->GetName(),
+                                 failCreate ? " (forced failure)" : (failSave ? " (forced lost save)" : ""));
         return true;
     }
 

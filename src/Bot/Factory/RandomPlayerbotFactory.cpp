@@ -12,6 +12,7 @@
 #include "ObjectAccessor.h"
 #include "Player.h"
 #include "DatabaseEnv.h"
+#include "FixedPopulation.h"
 #include "Log.h"
 #include "PlayerbotAI.h"
 #include "PlayerbotAIConfig.h"
@@ -685,6 +686,15 @@ void RandomPlayerbotFactory::CreateRandomBots()
         uint32 count = AccountMgr::GetCharactersCount(accountId);
         if (count >= 10)
         {
+            continue;
+        }
+
+        // Honest world: the population is created once. An account that already has characters but fewer than 10
+        // (a raising retired one, or a test character was removed) is not topped up at the next boot; only new,
+        // empty accounts (a later wave) get characters.
+        if (count > 0 && FixedPopulation::Blocks(FixedPopulationGuard::AccountTopUp))
+        {
+            LOG_INFO("playerbots", "Fixed population: not topping up account {} ({} characters)", accountId, count);
             continue;
         }
 

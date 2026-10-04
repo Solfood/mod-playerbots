@@ -26,9 +26,9 @@ public:
         return instance;
     }
 
-    // Start raising `original` now. False, with a reason, if it can't be raised. `failCreate` is a test
-    // seam that forces the rollback path.
-    bool Begin(Player* original, std::string& reason, bool failCreate = false);
+    // Start raising `original` now. False, with a reason, if it can't be raised. Test seams that force the
+    // rollback path: `failCreate` (creation fails), `failSave` (the death knight's row never reaches the database).
+    bool Begin(Player* original, std::string& reason, bool failCreate = false, bool failSave = false);
     void Update(uint32 diff);
     void OnBotLogin(Player* bot);
     // Reads unfinished raisings from the table once (world thread; a restart resumes them).
@@ -51,6 +51,7 @@ private:
 
     struct Raising
     {
+        uint32 id = 0;  // playerbots_raisings.id: every row update is keyed by it (guids can be reused)
         ObjectGuid::LowType oldGuid = 0;
         ObjectGuid::LowType newGuid = 0;
         uint32 account = 0;
@@ -69,6 +70,7 @@ private:
         Stage stage = Stage::WaitLogout;
         uint32 stageStartMs = 0;
         bool failCreate = false;
+        bool failSave = false;
     };
 
     void Advance(Raising& raising);
@@ -77,6 +79,7 @@ private:
     void FinishRollback(Raising& raising);
     void SetState(Raising const& raising, char const* state);
     static bool UnlinkAllowed(uint8 level, std::string& reason);
+    static bool DeathKnightRowExists(Raising const& raising);
     static std::string CollectCarry(Player* original);
     static void ApplyCarry(Player* deathKnight, std::string const& carry);
     static uint32 MailBelongings(Player* original, ObjectGuid::LowType newGuid);

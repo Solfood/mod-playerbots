@@ -28,6 +28,7 @@ enum class FixedPopulationGuard : uint8
     FreeRevive,          // instant revive after 5 deaths in a row
     DkLogin,             // a death knight that was never raised
     BootRoster,          // clearing every bot's "add" record at boot (a fresh pick of who logs in)
+    AccountTopUp,        // creating characters at boot on a bot account that already has some (below 10)
     Count
 };
 
