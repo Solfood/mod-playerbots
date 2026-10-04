@@ -43,6 +43,8 @@ public:
     uint32 Calculate() override;
     // What repairing the lost durability of one item costs (before reputation discount); 0 if nothing is lost.
     static uint32 ItemCost(Item const* item);
+    // The same for `points` lost durability points of the item.
+    static uint32 PointsCost(Item const* item, uint32 points);
 };
 
 class TrainCostValue : public Uint32CalculatedValue

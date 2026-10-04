@@ -57,10 +57,12 @@ uint32 RepairCostValue::ItemCost(Item const* item)
         return 0;
 
     uint32 curDurability = item->GetUInt32Value(ITEM_FIELD_DURABILITY);
+    return PointsCost(item, maxDurability - curDurability);
+}
 
-    uint32 LostDurability = maxDurability - curDurability;
-
-    if (LostDurability == 0)
+uint32 RepairCostValue::PointsCost(Item const* item, uint32 points)
+{
+    if (points == 0)
         return 0;
 
     ItemTemplate const* ditemProto = item->GetTemplate();
@@ -76,7 +78,7 @@ uint32 RepairCostValue::ItemCost(Item const* item)
 
     uint32 dmultiplier =
         dcost->multiplier[ItemSubClassToDurabilityMultiplierId(ditemProto->Class, ditemProto->SubClass)];
-    return uint32(LostDurability * dmultiplier * double(dQualitymodEntry->quality_mod));
+    return uint32(points * dmultiplier * double(dQualitymodEntry->quality_mod));
 }
 
 uint32 RepairCostValue::Calculate()
