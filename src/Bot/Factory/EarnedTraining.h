@@ -34,6 +34,9 @@ public:
 
     static Result LearnAffordable(Player* bot, uint32 reserve);
     static uint32 RepairReserve(Player* bot);
+    // Read-only, for `.playerbots econ census`: class trainer spells the bot could buy right now (level,
+    // previous rank and trainer rules met) but doesn't know; `cost` gets their summed price in copper.
+    static uint32 PendingClassSpells(Player* bot, uint32& cost);
     // Test seam for `.playerbots econ forget <name> class`: unlearn every spell the bot's class trainers teach.
     static uint32 ForgetClassTraining(Player* bot);
     // The teaching half of the core's Trainer::TeachSpell (no NPC, no payment): "teach" spells are cast so

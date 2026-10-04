@@ -10,6 +10,7 @@
 #include "CharacterCache.h"
 #include "Chat.h"
 #include "DatabaseEnv.h"
+#include "DBCStores.h"
 #include "EarnedTraining.h"
 #include "FixedPopulation.h"
 #include "ItemUsageValue.h"
@@ -32,6 +33,8 @@
 #include <algorithm>
 #include <array>
 #include <cstdlib>
+#include <ctime>
+#include <fstream>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -144,6 +147,62 @@ void Active(ChatHandler* handler)
     handler->PSendSysMessage("ECONACTIVE online={} active={} share={} scale={}", online, active,
                              online ? active * 100 / online : 0, scale);
 }
+
+// One line per online random bot appended to `econ_census.tsv` in the worldserver's working directory, plus a
+// one-line summary on the console. Read-only. The Task 9 soak samples it every few minutes: per-bot evidence
+// for stuck-dead bots, worn-out gear, flight paths, gathering, training bought vs skipped, world PvP and
+// bots that stand still (seed data for the stuck-bot toolkit).
+void Census(ChatHandler* handler)
+{
+    std::ofstream out("econ_census.tsv", std::ios::app);
+    long long const now = static_cast<long long>(std::time(nullptr));
+    uint32 const taxiNodes = sTaxiNodesStore.GetNumRows();
+    uint32 bots = 0, dead = 0, ghosts = 0, worn = 0, flying = 0, gathering = 0, pendRich = 0, pendPoor = 0;
+    for (auto const& [guid, bot] : sRandomPlayerbotMgr.GetAllBots())
+    {
+        PlayerbotAI* botAI = bot ? GET_PLAYERBOT_AI(bot) : nullptr;
+        if (!botAI || !bot->IsInWorld())
+            continue;
+        AiObjectContext* context = botAI->GetAiObjectContext();
+        uint32 known = 0;
+        for (uint32 node = 1; node < taxiNodes; ++node)
+            if (bot->m_taxi.IsTaximaskNodeKnown(node))
+                ++known;
+        uint32 pendCost = 0;
+        uint32 const pending = EarnedTraining::PendingClassSpells(bot, pendCost);
+        uint32 const reserve = EarnedTraining::RepairReserve(bot);
+        uint8 const durability = context->GetValue<uint8>("durability")->Get();
+        std::string rpg = RpgStatusName(botAI);
+        std::replace(rpg.begin(), rpg.end(), ' ', '_');
+
+        ++bots;
+        dead += bot->isDead() ? 1 : 0;
+        ghosts += bot->HasPlayerFlag(PLAYER_FLAGS_GHOST) ? 1 : 0;
+        worn += durability < 10 ? 1 : 0;
+        flying += bot->IsInFlight() ? 1 : 0;
+        gathering += rpg == "DO_GATHER" ? 1 : 0;
+        if (pending && static_cast<uint64>(bot->GetMoney()) >= static_cast<uint64>(pendCost) + reserve)
+            ++pendRich;  // could pay for everything pending and still keep its repair money: should have trained
+        else if (pending)
+            ++pendPoor;  // honestly skipped: can't afford it yet
+
+        // time guid name level money durability dead ghost map zone x y rpg in_flight known_taxi_nodes
+        // mining herbalism skinning pending_class_spells pending_cost repair_reserve honorable_kills in_combat
+        out << now << '\t' << bot->GetGUID().GetCounter() << '\t' << bot->GetName() << '\t'
+            << uint32(bot->GetLevel()) << '\t' << bot->GetMoney() << '\t' << uint32(durability) << '\t'
+            << (bot->isDead() ? 1 : 0) << '\t' << (bot->HasPlayerFlag(PLAYER_FLAGS_GHOST) ? 1 : 0) << '\t'
+            << bot->GetMapId() << '\t' << bot->GetZoneId() << '\t' << int32(bot->GetPositionX()) << '\t'
+            << int32(bot->GetPositionY()) << '\t' << rpg << '\t' << (bot->IsInFlight() ? 1 : 0) << '\t' << known
+            << '\t' << bot->GetPureSkillValue(SKILL_MINING) << '\t' << bot->GetPureSkillValue(SKILL_HERBALISM)
+            << '\t' << bot->GetPureSkillValue(SKILL_SKINNING) << '\t' << pending << '\t' << pendCost << '\t'
+            << reserve << '\t' << bot->GetUInt32Value(PLAYER_FIELD_LIFETIME_HONORABLE_KILLS) << '\t'
+            << (bot->IsInCombat() ? 1 : 0) << '\n';
+    }
+    handler->PSendSysMessage(
+        "ECONCENSUS bots={} dead={} ghosts={} durability_lt10={} in_flight={} gathering={} "
+        "pending_affordable={} pending_poor={} file=econ_census.tsv",
+        bots, dead, ghosts, worn, flying, gathering, pendRich, pendPoor);
+}
 }  // namespace
 
 bool EconomyCommand::Handle(ChatHandler* handler, char const* args)
@@ -153,7 +212,7 @@ bool EconomyCommand::Handle(ChatHandler* handler, char const* args)
     {
         handler->PSendSysMessage(
             "ECONERR usage: econ show|kill|wear|money|due|deaths|idle|forget|errands|mail|fillbags|raise <name> "
-            "[value] | econ raise <name> [failcreate|failsave] | econ active | econ stats | "
+            "[value] | econ raise <name> [failcreate|failsave] | econ active | econ stats | econ census | "
             "econ picktable <classId> <rolls> | econ raisings | econ dkchain <name> [check] | "
             "econ dklogin|dklogout <name>");
         return false;
@@ -163,6 +222,12 @@ bool EconomyCommand::Handle(ChatHandler* handler, char const* args)
     if (sub == "active")
     {
         Active(handler);
+        return true;
+    }
+
+    if (sub == "census")
+    {
+        Census(handler);
         return true;
     }
 

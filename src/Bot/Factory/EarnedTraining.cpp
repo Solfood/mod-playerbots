@@ -268,6 +268,39 @@ void BuyGatheringTools(Player* bot, uint32 reserve, EarnedTraining::Result& resu
 }
 }  // namespace
 
+uint32 EarnedTraining::PendingClassSpells(Player* bot, uint32& cost)
+{
+    cost = 0;
+    if (!bot || !bot->IsInWorld())
+        return 0;
+
+    std::call_once(offerCacheOnce, BuildOfferCache);
+    auto const classIt = offerCache.classOffers.find(bot->getClass());
+    if (classIt == offerCache.classOffers.end())
+        return 0;
+
+    // The same tests as LearnFrom, without paying: one pass, so only ranks whose previous rank is known count.
+    uint32 pending = 0;
+    uint8 const level = bot->GetLevel();
+    for (OfferEntry const& entry : classIt->second)
+    {
+        if (entry.offers.front().spell->ReqLevel > level)
+            break;
+        if (bot->HasSpell(entry.learnedSpell))
+            continue;
+        for (TrainerOffer const& offer : entry.offers)
+        {
+            if (!offer.trainer->IsTrainerValidForPlayer(bot) || !offer.trainer->CanTeachSpell(bot, offer.spell) ||
+                !PlayerbotFactory::IsTrainerSpellAllowedForBot(bot, offer.trainer, offer.spell))
+                continue;
+            ++pending;
+            cost += offer.spell->MoneyCost;
+            break;
+        }
+    }
+    return pending;
+}
+
 EarnedTraining::Result EarnedTraining::LearnAffordable(Player* bot, uint32 reserve)
 {
     Result result;
