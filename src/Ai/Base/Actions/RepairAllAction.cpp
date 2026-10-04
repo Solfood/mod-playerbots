@@ -30,10 +30,10 @@ bool RepairAllAction::Execute(Event /*event*/)
             bot->SetMoney(10000000);
         }
 
-        // Repair weapons first.
-        uint32 totalCost = bot->DurabilityRepair(EQUIPMENT_SLOT_MAINHAND, true, discountMod, false);
-        totalCost += bot->DurabilityRepair(EQUIPMENT_SLOT_RANGED, true, discountMod, false);
-        totalCost += bot->DurabilityRepair(EQUIPMENT_SLOT_OFFHAND, true, discountMod, false);
+        // Repair weapons first (DurabilityRepair takes a (bag << 8) | slot position, not a bare slot).
+        uint32 totalCost = 0;
+        for (uint8 slot : {EQUIPMENT_SLOT_MAINHAND, EQUIPMENT_SLOT_RANGED, EQUIPMENT_SLOT_OFFHAND})
+            totalCost += bot->DurabilityRepair((INVENTORY_SLOT_BAG_0 << 8) | slot, true, discountMod, false);
 
         totalCost += bot->DurabilityRepairAll(true, discountMod, false);
 
