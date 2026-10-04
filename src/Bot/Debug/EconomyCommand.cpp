@@ -116,7 +116,7 @@ void Show(ChatHandler* handler, Player* bot)
 
     handler->PSendSysMessage(
         "ECON name={} guid={} level={} money={} durability={} bags={} dead={} ghost={} sick={} riding={} prof={} "
-        "deaths={} rpg={} spells={} randomize={} teleport={} revive={} mounts={} mail={} tools={}",
+        "deaths={} rpg={} spells={} randomize={} teleport={} revive={} mounts={} mail={} tools={} map={} zone={}",
         bot->GetName(), botId, bot->GetLevel(), bot->GetMoney(), context->GetValue<uint8>("durability")->Get(),
         context->GetValue<uint8>("bag space")->Get(), bot->isDead() ? 1 : 0,
         bot->HasPlayerFlag(PLAYER_FLAGS_GHOST) ? 1 : 0, bot->HasAura(SPELL_RESURRECTION_SICKNESS) ? 1 : 0, riding,
@@ -125,7 +125,8 @@ void Show(ChatHandler* handler, Player* bot)
         sRandomPlayerbotMgr.GetValue(botId, "teleport") ? 1 : 0, sRandomPlayerbotMgr.GetValue(botId, "revive") ? 1 : 0,
         mounts, TownErrands::CollectableMailCount(bot),
         bot->GetItemCount(EarnedTraining::ITEM_MINING_PICK, true) +
-            bot->GetItemCount(EarnedTraining::ITEM_SKINNING_KNIFE, true));
+            bot->GetItemCount(EarnedTraining::ITEM_SKINNING_KNIFE, true),
+        bot->GetMapId(), bot->GetZoneId());
 }
 
 void Active(ChatHandler* handler)
@@ -214,7 +215,7 @@ bool EconomyCommand::Handle(ChatHandler* handler, char const* args)
             "ECONERR usage: econ show|kill|wear|money|due|deaths|idle|forget|errands|mail|fillbags|raise <name> "
             "[value] | econ raise <name> [failcreate|failsave] | econ active | econ stats | econ census | "
             "econ picktable <classId> <rolls> | econ raisings | econ dkchain <name> [check] | "
-            "econ dklogin|dklogout <name>");
+            "econ dklogin|dklogout <name> | econ ghostat <name> <map> <x> <y> <z>");
         return false;
     }
     std::string const& sub = words[0];
@@ -386,6 +387,29 @@ bool EconomyCommand::Handle(ChatHandler* handler, char const* args)
     {
         botAI->GetAiObjectContext()->GetValue<uint32>("death count")->Set(value);
         handler->PSendSysMessage("ECONOK {} deaths={}", bot->GetName(), value);
+        return true;
+    }
+    if (sub == "ghostat" && words.size() > 5)
+    {
+        // Test seam: put a released ghost at (x, y, z) on its own map (its corpse stays where it is).
+        if (!bot->HasPlayerFlag(PLAYER_FLAGS_GHOST))
+        {
+            handler->PSendSysMessage("ECONERR {} is not a ghost", bot->GetName());
+            return false;
+        }
+        if (value != bot->GetMapId())
+        {
+            handler->PSendSysMessage("ECONERR {} is on map {}, not {}", bot->GetName(), bot->GetMapId(), value);
+            return false;
+        }
+        float const x = std::strtof(words[3].c_str(), nullptr);
+        float const y = std::strtof(words[4].c_str(), nullptr);
+        float const z = std::strtof(words[5].c_str(), nullptr);
+        bot->GetMotionMaster()->Clear();
+        bot->StopMoving();
+        bot->TeleportTo(bot->GetMapId(), x, y, z, bot->GetOrientation());
+        handler->PSendSysMessage("ECONOK {} ghost at map={} x={} y={} z={}", bot->GetName(), bot->GetMapId(), x, y,
+                                 z);
         return true;
     }
     if (sub == "idle")
