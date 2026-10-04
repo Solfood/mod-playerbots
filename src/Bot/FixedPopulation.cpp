@@ -15,7 +15,8 @@ namespace
 {
 constexpr std::array<char const*, static_cast<std::size_t>(FixedPopulationGuard::Count)> GUARD_NAMES = {
     "first_login_schedule", "periodic_reroll", "dead_timer",       "randomize",  "refresh",     "revive",
-    "teleport",             "release_repair",  "levelup_supplies", "gold_topup", "free_revive", "dk_login"};
+    "teleport",             "release_repair",  "levelup_supplies", "gold_topup", "free_revive", "dk_login",
+    "boot_roster"};
 
 constexpr std::array<char const*, static_cast<std::size_t>(EconomyCounter::Count)> COUNTER_NAMES = {
     "training_spells",    "training_skipped", "training_copper", "mounts_bought", "tools_bought",

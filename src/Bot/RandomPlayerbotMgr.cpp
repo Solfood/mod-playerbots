@@ -1816,6 +1816,13 @@ void RandomPlayerbotMgr::Init()
     if (sPlayerbotAIConfig.randomBotJoinBG)
         sRandomPlayerbotMgr.LoadBattleMastersCache();
 
+    // Honest world: keep the "add" records, so the same bots log in again after a restart (spec §3b).
+    if (FixedPopulation::Blocks(FixedPopulationGuard::BootRoster))
+    {
+        LOG_INFO("playerbots", "Fixed population: keeping the online roster from the last boot");
+        return;
+    }
+
     PlayerbotsDatabasePreparedStatement* stmt = PlayerbotsDatabase.GetPreparedStatement(PLAYERBOTS_DEL_RANDOM_BOTS_BY_EVENT);
     stmt->SetData(0, std::string("add"));
     PlayerbotsDatabase.DirectExecute(stmt);

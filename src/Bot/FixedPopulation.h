@@ -27,6 +27,7 @@ enum class FixedPopulationGuard : uint8
     GoldTopUp,           // gold handed to a new guild leader for the emblem
     FreeRevive,          // instant revive after 5 deaths in a row
     DkLogin,             // a death knight that was never raised
+    BootRoster,          // clearing every bot's "add" record at boot (a fresh pick of who logs in)
     Count
 };
 
