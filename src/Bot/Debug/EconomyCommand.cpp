@@ -21,6 +21,7 @@
 #include "PlayerbotFactory.h"
 #include "Playerbots.h"
 #include "ProfessionPicker.h"
+#include "RaisingMgr.h"
 #include "RandomPlayerbotMgr.h"
 #include "SharedDefines.h"
 #include "TownErrands.h"
@@ -149,8 +150,8 @@ bool EconomyCommand::Handle(ChatHandler* handler, char const* args)
     if (words.empty())
     {
         handler->PSendSysMessage(
-            "ECONERR usage: econ show|kill|wear|money|due|deaths|idle|forget|errands|mail|fillbags <name> [value] | "
-            "econ active | econ stats | econ picktable <classId> <rolls>");
+            "ECONERR usage: econ show|kill|wear|money|due|deaths|idle|forget|errands|mail|fillbags|raise <name> "
+            "[value] | econ active | econ stats | econ picktable <classId> <rolls>");
         return false;
     }
     std::string const& sub = words[0];
@@ -400,6 +401,21 @@ bool EconomyCommand::Handle(ChatHandler* handler, char const* args)
             .SendMailTo(trans, MailReceiver(bot), MailSender(MAIL_NORMAL, 0, MAIL_STATIONERY_GM));
         CharacterDatabase.CommitTransaction(trans);
         handler->PSendSysMessage("ECONOK {} mailed {}", bot->GetName(), value);
+        return true;
+    }
+
+    if (sub == "raise")
+    {
+        // Raises this bot into a death knight now (Task 11 adds the automatic waves). `failcreate` is a test seam:
+        // the original is retired, then creation is forced to fail and the original must come back.
+        bool const failCreate = words.size() > 2 && words[2] == "failcreate";
+        std::string reason;
+        if (!sRaisingMgr.Begin(bot, reason, failCreate))
+        {
+            handler->PSendSysMessage("ECONERR raise {}: {}", bot->GetName(), reason);
+            return false;
+        }
+        handler->PSendSysMessage("ECONOK raising {}{}", bot->GetName(), failCreate ? " (forced failure)" : "");
         return true;
     }
 

@@ -145,6 +145,12 @@ public:
     void SetValue(Player* bot, std::string const& type, uint32 value, std::string const& data = "");
     bool IsSpecPvp(uint32 bot, uint8 cls);
     void Remove(Player* bot);
+    // Honest world: put a character into the permanent population (it logs in on the manager's next
+    // turn) or take one out (the manager logs it out on its next turn).
+    void AddToPopulation(uint32 bot);
+    void RemoveFromPopulation(uint32 bot);
+    // Honest world: a raised death knight may log in (the Death Knight login gate lets it through). Never expires.
+    void MarkRaised(uint32 bot);
     ObjectGuid GetBattleMasterGUID(Player* bot, BattlegroundTypeId bgTypeId);
     CreatureData const* GetCreatureDataByEntry(uint32 entry);
     void LoadBattleMastersCache();

@@ -34,6 +34,7 @@
 #include "Playerbots.h"
 #include "Position.h"
 #include "RaceMgr.h"
+#include "RaisingMgr.h"
 #include "Random.h"
 #include "RandomPlayerbotFactory.h"
 #include "ServerFacade.h"
@@ -335,6 +336,16 @@ void RandomPlayerbotMgr::UpdateAIInternal(uint32 /*elapsed*/, bool /*minimal*/)
         PERF_MON_TOTAL,
         onlineBotCount < maxAllowedBotCount ? "RandomPlayerbotMgr::Login" : "RandomPlayerbotMgr::UpdateAIInternal");
 
+    // Honest world: while a raising has taken a bot out and not yet put its death knight (or the restored
+    // original) in, the population is one short on purpose. Topping it up would log in a spare character
+    // and leave the population one over its size for good.
+    bool raisingActive = false;
+    if (sPlayerbotAIConfig.fixedPopulation)
+    {
+        sRaisingMgr.EnsureLoaded();
+        raisingActive = sRaisingMgr.HasActive();
+    }
+
     bool realPlayerIsLogged = false;
     if (sPlayerbotAIConfig.disabledWithoutRealPlayer)
     {
@@ -363,14 +374,14 @@ void RandomPlayerbotMgr::UpdateAIInternal(uint32 /*elapsed*/, bool /*minimal*/)
             }
         }
 
-        if (availableBotCount < maxAllowedBotCount &&
+        if (availableBotCount < maxAllowedBotCount && !raisingActive &&
             (sPlayerbotAIConfig.disabledWithoutRealPlayer == false ||
              (realPlayerIsLogged && DelayLoginBotsTimer != 0 && time(nullptr) >= DelayLoginBotsTimer)))
         {
             AddRandomBots();
         }
     }
-    else if (availableBotCount < maxAllowedBotCount)
+    else if (availableBotCount < maxAllowedBotCount && !raisingActive)
     {
         AddRandomBots();
     }
@@ -1365,6 +1376,22 @@ bool RandomPlayerbotMgr::IsUnraisedDeathKnight(uint32 bot)
         sCharacterCache->GetCharacterCacheByGuid(ObjectGuid::Create<HighGuid::Player>(bot));
     return entry && entry->Class == CLASS_DEATH_KNIGHT && !GetEventValue(bot, "raised");
 }
+
+void RandomPlayerbotMgr::AddToPopulation(uint32 bot)
+{
+    // The same "add" record the population uses; with FixedPopulation the boot roster keeps it across restarts.
+    SetEventValue(bot, "add", 1, sPlayerbotAIConfig.permanentlyInWorldTime);
+    SetEventValue(bot, "logout", 0, 0);
+    currentBots.insert(bot);
+}
+
+void RandomPlayerbotMgr::RemoveFromPopulation(uint32 bot)
+{
+    // ProcessBot(uint32) sees no "add" record, logs the bot out and forgets it.
+    SetEventValue(bot, "add", 0, 0);
+}
+
+void RandomPlayerbotMgr::MarkRaised(uint32 bot) { SetEventValue(bot, "raised", 1, 0); }
 
 bool RandomPlayerbotMgr::ProcessBot(uint32 bot)
 {
@@ -2783,6 +2810,9 @@ void RandomPlayerbotMgr::OnBotLoginInternal(Player* const bot)
     {
         bot->RemovePlayerFlag(PLAYER_FLAGS_NO_XP_GAIN);
     }
+
+    // Honest world: a freshly raised death knight gets its carried-over professions.
+    sRaisingMgr.OnBotLogin(bot);
 }
 
 void RandomPlayerbotMgr::OnPlayerLogin(Player* player)
