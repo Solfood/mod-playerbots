@@ -182,7 +182,7 @@ bool RaisingMgr::Begin(Player* original, std::string& reason, bool failCreate)
     raising.stageStartMs = getMSTime();
 
     std::string name = raising.name;
-    PlayerbotsDatabase.EscapeString(name);
+    CharacterDatabase.EscapeString(name);  // same MySQL escaping; the playerbots pool has no EscapeString
     PlayerbotsDatabase.Execute(
         "INSERT INTO playerbots_raisings (old_guid, new_guid, account, name, race, gender, look, team, old_class, "
         "old_level, guild_id, carry, state, raised_at) VALUES ({}, {}, {}, '{}', {}, {}, '{}:{}:{}:{}:{}', {}, {}, {}, "
@@ -282,7 +282,11 @@ void RaisingMgr::EnsureLoaded()
         raising.stageStartMs = getMSTime();
 
         if (state == "logout")
+        {
             raising.stage = Stage::WaitLogout;
+            // In case the "add" removal did not reach the database before the restart.
+            sRandomPlayerbotMgr.RemoveFromPopulation(raising.oldGuid);
+        }
         else if (state == "unlink")
             raising.stage = Stage::WaitUnlink;
         else if (state == "created")
