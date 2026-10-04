@@ -363,6 +363,8 @@ public:
     uint32 fixedPopulationRepairBelow;
     uint32 fixedPopulationSellAboveBags;
     uint32 fixedPopulationErrandCooldown;
+    uint32 professionPickMinLevel;
+    uint32 professionPickMaxLevel;
     bool limitTalentsExpansion;
     uint32 botActiveAlone;
     uint32 BotActiveAloneDurationSeconds;

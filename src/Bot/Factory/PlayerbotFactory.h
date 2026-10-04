@@ -74,6 +74,18 @@ public:
     static uint32 tradeSkills[14];
     // The one riding list of the fork: apprentice, journeyman, expert, artisan (mount tiers 0-3).
     static constexpr std::array<uint32, 4> ridingSpells = {33388, 33391, 34090, 34091};
+    // Profession pair tables and rolls, shared with the honest-world ProfessionPicker.
+    struct WeightedProfessionPair
+    {
+        uint16 firstSkill;
+        uint16 secondSkill;
+        uint32 weight;
+    };
+    static bool IsPrimaryTradeSkill(uint16 skillId);
+    static bool IsGatheringTradeSkill(uint16 skillId);
+    static std::pair<uint16, uint16> ChooseProfessionPair(std::vector<WeightedProfessionPair> const& professionPairs);
+    static uint16 ChooseComplementaryProfession(
+        std::vector<WeightedProfessionPair> const& professionPairs, uint16 existingSkill);
     static float CalculateEnchantScore(uint32 enchant_id, Player* bot);
     uint32 InitTalentsTree(bool incremental = false, bool use_template = true, bool reset = false);
     static void InitTalentsBySpecNo(Player* bot, int specNo, bool reset);
@@ -161,29 +173,17 @@ private:
         Class = 2
     };
 
-    struct WeightedProfessionPair
-    {
-        uint16 firstSkill;
-        uint16 secondSkill;
-        uint32 weight;
-    };
-
     void Prepare();
     // void InitSecondEquipmentSet();
     // void InitEquipmentNew(bool incremental);
     bool CanEquipItem(ItemTemplate const* proto);
     bool CanEquipUnseenItem(uint8 slot, uint16& dest, uint32 item);
-    static bool IsPrimaryTradeSkill(uint16 skillId);
     static bool IsSecondaryTradeSkill(uint16 skillId);
     static uint16 GetTrainerSpellTradeSkill(Trainer::Spell const* trainerSpell);
-    static bool IsGatheringTradeSkill(uint16 skillId);
     static bool IsCraftingTradeSkill(uint16 skillId);
     static uint32 GetProfessionStarterSpell(uint16 skillId);
     static std::vector<WeightedProfessionPair> GetClassProfessionPairs(Player* bot);
     static std::vector<WeightedProfessionPair> GetRandomProfessionPairs();
-    static std::pair<uint16, uint16> ChooseProfessionPair(std::vector<WeightedProfessionPair> const& professionPairs);
-    static uint16 ChooseComplementaryProfession(
-        std::vector<WeightedProfessionPair> const& professionPairs, uint16 existingSkill);
     static uint16 ChooseSingleProfession(std::vector<WeightedProfessionPair> const& professionPairs);
     static uint32 GetStoredOrRandomValue(Player* bot, std::string const& key, uint32 minValue, uint32 maxValue);
     static bool HasAnySpell(Player* bot, std::vector<uint32> const& spells);

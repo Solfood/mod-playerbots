@@ -799,6 +799,14 @@ AiPlayerbot.FixedPopulation.RepairBelowDurability = 40
 AiPlayerbot.FixedPopulation.SellAboveBagUsage = 80
 AiPlayerbot.FixedPopulation.ErrandCooldownSeconds = 600
 
+# Honest world professions (only with FixedPopulation = 1). Each bot picks two primary professions from a
+# gathering-heavy, class-weighted table at one level between ProfessionMinLevel and ProfessionMaxLevel
+# (spread by bot), then learns them at its own cost. A pick preset in the bot's firstSkill/secondSkill
+# values (e.g. by a guild manager) is kept; if only one is preset, the bot picks a partner for it.
+# Defaults: 5, 10
+AiPlayerbot.FixedPopulation.ProfessionMinLevel = 5
+AiPlayerbot.FixedPopulation.ProfessionMaxLevel = 10
+
 # Enable simulated expansion limitation for talents and glyphs
 # If enabled, limits talent trees to 6 rows plus the middle talent of the 7th row for bots until level 61
 # and 8 rows plus the middle talent of the 9th row for bots from level 61 until level 71

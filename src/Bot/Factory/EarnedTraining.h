@@ -19,6 +19,10 @@ class Player;
 class EarnedTraining
 {
 public:
+    // The gathering tools it buys (also counted by `.playerbots econ show`).
+    static constexpr uint32 ITEM_MINING_PICK = 2901;
+    static constexpr uint32 ITEM_SKINNING_KNIFE = 7005;
+
     struct Result
     {
         uint32 learned = 0;  // trainer spells bought

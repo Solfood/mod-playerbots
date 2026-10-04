@@ -26,6 +26,7 @@
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "PlayerbotTextMgr.h"
+#include "ProfessionPicker.h"
 #include "Playerbots.h"
 #include "QuestDef.h"
 #include "Random.h"
@@ -468,10 +469,14 @@ bool NewRpgWanderNpcAction::Execute(Event /*event*/)
                     botAI->DoSpecificAction("repair", Event("repair"));
                 }
 
-                // Honest world: any trainer visit catches up on spells skipped at level-up for lack of gold.
+                // Honest world: any trainer visit catches up on spells skipped at level-up for lack of gold,
+                // and on a profession pick that is due.
                 if (sPlayerbotAIConfig.fixedPopulation && (npcFlags & UNIT_NPC_FLAG_TRAINER) &&
                     sRandomPlayerbotMgr.IsRandomBot(bot))
+                {
+                    ProfessionPicker::PickIfDue(bot);
                     EarnedTraining::LearnAffordable(bot, EarnedTraining::RepairReserve(bot));
+                }
             }
             else if (GameObject* go = object->ToGameObject())
             {

@@ -10,6 +10,7 @@
 #include "FixedPopulation.h"
 #include "PlayerbotAIConfig.h"
 #include "PlayerbotFactory.h"
+#include "ProfessionPicker.h"
 #include "RandomPlayerbotMgr.h"
 #include "SharedDefines.h"
 #include "SpellMgr.h"
@@ -83,9 +84,11 @@ void AutoMaintenanceOnLevelupAction::LearnTrainerSpells(std::ostringstream* /*ou
     if (sPlayerbotAIConfig.fixedPopulation)
     {
         // Honest world: weapon and armour skills and class-quest stand-ins stay automatic; every trainer
-        // spell, riding, the mount and gathering tools are bought with the bot's own gold.
+        // spell, riding, the mount and gathering tools are bought with the bot's own gold. Two primary
+        // professions are picked once, between ProfessionMinLevel and ProfessionMaxLevel.
         factory.InitSkills(false);
         factory.InitClassSpells();
+        ProfessionPicker::PickIfDue(bot);
         EarnedTraining::LearnAffordable(bot, EarnedTraining::RepairReserve(bot));
         factory.InitPet();
         return;

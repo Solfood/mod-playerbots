@@ -684,6 +684,10 @@ bool PlayerbotAIConfig::Initialize()
     fixedPopulationSellAboveBags = sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.SellAboveBagUsage", 80);
     fixedPopulationErrandCooldown =
         sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.ErrandCooldownSeconds", 600);
+    professionPickMinLevel = sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.ProfessionMinLevel", 5);
+    professionPickMaxLevel = sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.ProfessionMaxLevel", 10);
+    if (professionPickMaxLevel < professionPickMinLevel)
+        professionPickMaxLevel = professionPickMinLevel;
     limitTalentsExpansion = sConfigMgr->GetOption<bool>("AiPlayerbot.LimitTalentsExpansion", 0);
     botActiveAlone = sConfigMgr->GetOption<int32>("AiPlayerbot.BotActiveAlone", 10);
     BotActiveAloneDurationSeconds = sConfigMgr->GetOption<int32>("AiPlayerbot.BotActiveAloneDurationSeconds", 30);

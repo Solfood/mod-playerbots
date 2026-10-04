@@ -29,8 +29,6 @@
 namespace
 {
 constexpr uint8 MAX_TRAINING_PASSES = 4;
-constexpr uint32 ITEM_MINING_PICK = 2901;
-constexpr uint32 ITEM_SKINNING_KNIFE = 7005;
 
 struct TrainerOffer
 {
@@ -241,7 +239,7 @@ void BuyMounts(Player* bot, uint32 reserve, EarnedTraining::Result& result)
 void BuyGatheringTools(Player* bot, uint32 reserve, EarnedTraining::Result& result)
 {
     static constexpr std::array<std::pair<uint16, uint32>, 2> TOOLS = {
-        {{SKILL_MINING, ITEM_MINING_PICK}, {SKILL_SKINNING, ITEM_SKINNING_KNIFE}}};
+        {{SKILL_MINING, EarnedTraining::ITEM_MINING_PICK}, {SKILL_SKINNING, EarnedTraining::ITEM_SKINNING_KNIFE}}};
 
     for (auto const& [skill, itemId] : TOOLS)
     {
