@@ -50,6 +50,35 @@ uint32 MaxGearRepairCostValue::Calculate()
     return totalCost;
 }
 
+uint32 RepairCostValue::ItemCost(Item const* item)
+{
+    uint32 maxDurability = item->GetUInt32Value(ITEM_FIELD_MAXDURABILITY);
+    if (!maxDurability)
+        return 0;
+
+    uint32 curDurability = item->GetUInt32Value(ITEM_FIELD_DURABILITY);
+
+    uint32 LostDurability = maxDurability - curDurability;
+
+    if (LostDurability == 0)
+        return 0;
+
+    ItemTemplate const* ditemProto = item->GetTemplate();
+
+    DurabilityCostsEntry const* dcost = sDurabilityCostsStore.LookupEntry(ditemProto->ItemLevel);
+    if (!dcost)
+        return 0;
+
+    uint32 dQualitymodEntryId = (ditemProto->Quality + 1) * 2;
+    DurabilityQualityEntry const* dQualitymodEntry = sDurabilityQualityStore.LookupEntry(dQualitymodEntryId);
+    if (!dQualitymodEntry)
+        return 0;
+
+    uint32 dmultiplier =
+        dcost->multiplier[ItemSubClassToDurabilityMultiplierId(ditemProto->Class, ditemProto->SubClass)];
+    return uint32(LostDurability * dmultiplier * double(dQualitymodEntry->quality_mod));
+}
+
 uint32 RepairCostValue::Calculate()
 {
     uint32 totalCost = 0;
@@ -57,38 +86,8 @@ uint32 RepairCostValue::Calculate()
     for (int i = EQUIPMENT_SLOT_START; i < INVENTORY_SLOT_ITEM_END; ++i)
     {
         uint16 pos = ((INVENTORY_SLOT_BAG_0 << 8) | i);
-        Item* item = bot->GetItemByPos(pos);
-
-        if (!item)
-            continue;
-
-        uint32 maxDurability = item->GetUInt32Value(ITEM_FIELD_MAXDURABILITY);
-        if (!maxDurability)
-            continue;
-
-        uint32 curDurability = item->GetUInt32Value(ITEM_FIELD_DURABILITY);
-
-        uint32 LostDurability = maxDurability - curDurability;
-
-        if (LostDurability == 0)
-            continue;
-
-        ItemTemplate const* ditemProto = item->GetTemplate();
-
-        DurabilityCostsEntry const* dcost = sDurabilityCostsStore.LookupEntry(ditemProto->ItemLevel);
-        if (!dcost)
-            continue;
-
-        uint32 dQualitymodEntryId = (ditemProto->Quality + 1) * 2;
-        DurabilityQualityEntry const* dQualitymodEntry = sDurabilityQualityStore.LookupEntry(dQualitymodEntryId);
-        if (!dQualitymodEntry)
-            continue;
-
-        uint32 dmultiplier =
-            dcost->multiplier[ItemSubClassToDurabilityMultiplierId(ditemProto->Class, ditemProto->SubClass)];
-        uint32 costs = uint32(LostDurability * dmultiplier * double(dQualitymodEntry->quality_mod));
-
-        totalCost += costs;
+        if (Item* item = bot->GetItemByPos(pos))
+            totalCost += ItemCost(item);
     }
 
     return totalCost;

@@ -6,8 +6,10 @@
 
 #include "TownErrands.h"
 
+#include "BudgetValues.h"
 #include "Creature.h"
 #include "FixedPopulation.h"
+#include "ItemUsageValue.h"
 #include "Mail.h"
 #include "MailAction.h"
 #include "ObjectAccessor.h"
@@ -15,6 +17,7 @@
 #include "PlayerbotAI.h"
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
+#include "RandomPlayerbotMgr.h"
 #include "Timer.h"
 #include "TravelMgr.h"
 #include "WorldPacket.h"
@@ -42,10 +45,10 @@ uint8 TownErrands::Needed(PlayerbotAI* botAI, Player* bot)
     AiObjectContext* context = botAI->GetAiObjectContext();
     uint8 errands = TOWN_ERRAND_NONE;
 
-    // Only when it can pay: a broke bot keeps playing to earn instead of walking to town in vain.
-    uint32 const repairCost = context->GetValue<uint32>("repair cost")->Get();
-    if (repairCost && bot->GetMoney() >= repairCost &&
-        context->GetValue<uint8>("durability")->Get() < sPlayerbotAIConfig.fixedPopulationRepairBelow)
+    // Only when it can pay for something useful: a broke bot keeps playing (safely) to earn instead of walking
+    // to town in vain.
+    if (context->GetValue<uint8>("durability")->Get() < sPlayerbotAIConfig.fixedPopulationRepairBelow &&
+        CanAffordRepair(botAI, bot))
         errands |= TOWN_ERRAND_REPAIR;
 
     // Full bags alone are not enough: only when there is something a vendor buys (else no trip at all).
@@ -167,8 +170,67 @@ uint32 TownErrands::CooldownLeftMs(uint32 lastErrandMs)
     return sinceMs < cooldownMs ? cooldownMs - sinceMs : 0;
 }
 
-WorldPosition TownErrands::NearestTown(Player* bot)
+WorldPosition TownErrands::NearestTown(Player* bot, bool ownLevelOnly)
 {
     float const maxDistance = bot->GetLevel() <= 5 ? TOWN_MAX_DISTANCE_LOW_LEVEL : TOWN_MAX_DISTANCE;
+    WorldPosition const town =
+        TravelMgr::instance().GetNearestTravelHub(bot, TOWN_MIN_DISTANCE, maxDistance, bot->GetLevel());
+    if (town != WorldPosition() || ownLevelOnly)
+        return town;
     return TravelMgr::instance().GetNearestTravelHub(bot, TOWN_MIN_DISTANCE, maxDistance);
+}
+
+bool TownErrands::CanAffordRepair(PlayerbotAI* botAI, Player* bot)
+{
+    uint32 const repairCost = botAI->GetAiObjectContext()->GetValue<uint32>("repair cost")->Get();
+    if (!repairCost)
+        return false;
+
+    uint32 const money = bot->GetMoney();
+    if (money >= repairCost)
+        return true;
+
+    uint32 const weaponCost = WeaponRepairCost(bot);
+    uint32 const needed = weaponCost ? weaponCost : repairCost;
+    return money >= needed || uint64(money) + JunkValue(botAI, bot) >= needed;
+}
+
+uint32 TownErrands::WeaponRepairCost(Player* bot)
+{
+    uint32 cost = 0;
+    for (uint8 slot : {EQUIPMENT_SLOT_MAINHAND, EQUIPMENT_SLOT_OFFHAND, EQUIPMENT_SLOT_RANGED})
+        if (Item* item = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slot))
+            cost += RepairCostValue::ItemCost(item);
+    return cost;
+}
+
+uint32 TownErrands::JunkValue(PlayerbotAI* botAI, Player* bot)
+{
+    AiObjectContext* context = botAI->GetAiObjectContext();
+    uint32 value = 0;
+    for (Item* item : botAI->GetInventoryItems())
+    {
+        ItemUsage const usage = context->GetValue<ItemUsage>("item usage", item->GetEntry())->Get();
+        if (usage == ITEM_USAGE_VENDOR || usage == ITEM_USAGE_AH)
+            value += item->GetTemplate()->SellPrice * item->GetCount();
+    }
+    return value;
+}
+
+bool TownErrands::PlaySafe(PlayerbotAI* botAI, Player* bot)
+{
+    return sPlayerbotAIConfig.fixedPopulation && sRandomPlayerbotMgr.IsRandomBot(bot) &&
+           botAI->GetAiObjectContext()->GetValue<uint8>("durability")->Get() <
+               sPlayerbotAIConfig.fixedPopulationSafeBelow;
+}
+
+bool TownErrands::ZoneAboveBot(Player* bot, uint32 zoneId)
+{
+    return sPlayerbotAIConfig.fixedPopulation && sRandomPlayerbotMgr.IsRandomBot(bot) &&
+           TravelMgr::instance().IsZoneAboveLevel(zoneId, bot->GetLevel());
+}
+
+bool TownErrands::MayGatherIn(PlayerbotAI* botAI, Player* bot, uint32 zoneId)
+{
+    return !ZoneAboveBot(bot, zoneId) && !PlaySafe(botAI, bot);
 }

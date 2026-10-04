@@ -61,6 +61,11 @@ public:
     bool Execute(Event event) override;
 
 protected:
+    // Honest world, every few seconds whatever the status: give up a town trip that takes too long, leave for
+    // town before the gear breaks, and stop risky play on worn-out gear. True if it changed the status.
+    bool CheckWornGearAndTownTrip(NewRpgStatus status);
+
+    const uint32 wearCheckInterval = 5 * IN_MILLISECONDS;
     // static NewRpgStatusTransitionProb transitionMat;
     const int32 statusWanderNpcDuration = 5 * MINUTE  * IN_MILLISECONDS ;
     const int32 statusWanderRandomDuration = 5 * MINUTE  * IN_MILLISECONDS ;

@@ -363,6 +363,8 @@ public:
     uint32 fixedPopulationRepairBelow;
     uint32 fixedPopulationSellAboveBags;
     uint32 fixedPopulationErrandCooldown;
+    uint32 fixedPopulationSafeBelow;
+    uint32 fixedPopulationTownTripTimeout;
     uint32 professionPickMinLevel;
     uint32 professionPickMaxLevel;
     float spiritHealerGraveRadius;

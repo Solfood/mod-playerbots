@@ -44,6 +44,7 @@ enum class EconomyCounter : uint8
     ErrandsStarted,
     MailsCollected,
     SpiritHealerResurrections,
+    TownTripsAbandoned,
     Count
 };
 

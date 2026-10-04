@@ -22,6 +22,7 @@
 #include "Random.h"
 #include "SharedDefines.h"
 #include "Timer.h"
+#include "TownErrands.h"
 
 namespace
 {
@@ -145,7 +146,7 @@ bool GatherNodeMgr::HasUsableNodes(Player* bot)
         return false;
 
     PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
-    if (!botAI)
+    if (!botAI || !TownErrands::MayGatherIn(botAI, bot, bot->GetZoneId()))
         return false;
 
     for (GatherNodeSpawn const& node : *nodes)
@@ -162,7 +163,7 @@ GatherNodeSpawn const* GatherNodeMgr::GetNextNode(Player* bot, std::unordered_se
         return nullptr;
 
     PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
-    if (!botAI)
+    if (!botAI || !TownErrands::MayGatherIn(botAI, bot, bot->GetZoneId()))
         return nullptr;
 
     Map* map = bot->GetMap();
@@ -221,7 +222,7 @@ GatherNodeSpawn const* GatherNodeMgr::GetNearestLiveNode(Player* bot,
         return nullptr;
 
     PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
-    if (!botAI)
+    if (!botAI || TownErrands::PlaySafe(botAI, bot))
         return nullptr;
 
     Map* map = bot->GetMap();
@@ -233,6 +234,10 @@ GatherNodeSpawn const* GatherNodeMgr::GetNearestLiveNode(Player* bot,
     // cheap distance check.
     for (auto const& [zoneId, nodes] : mapItr->second)
     {
+        // Honest world: never follow nodes into a zone above the bot's level.
+        if (TownErrands::ZoneAboveBot(bot, zoneId))
+            continue;
+
         for (GatherNodeSpawn const& node : nodes)
         {
             float distSq = botPos.sqDistance(node.pos);

@@ -10,6 +10,7 @@
 #include "NamedObjectContext.h"
 #include "Value.h"
 
+class Item;
 class PlayerbotAI;
 
 enum class NeedMoneyFor : uint32
@@ -40,6 +41,8 @@ public:
     RepairCostValue(PlayerbotAI* botAI) : Uint32CalculatedValue(botAI, "repair cost", 60) {}
 
     uint32 Calculate() override;
+    // What repairing the lost durability of one item costs (before reputation discount); 0 if nothing is lost.
+    static uint32 ItemCost(Item const* item);
 };
 
 class TrainCostValue : public Uint32CalculatedValue

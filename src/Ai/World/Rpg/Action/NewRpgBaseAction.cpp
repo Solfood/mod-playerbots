@@ -1104,7 +1104,7 @@ bool NewRpgBaseAction::SelectRandomFlightTaxiNode(uint32& flightMasterEntry, Wor
     return true;
 }
 
-bool NewRpgBaseAction::GoRunErrands()
+bool NewRpgBaseAction::GoRunErrands(bool repairOnly)
 {
     if (!sPlayerbotAIConfig.fixedPopulation || !sRandomPlayerbotMgr.IsRandomBot(bot))
         return false;
@@ -1114,7 +1114,7 @@ bool NewRpgBaseAction::GoRunErrands()
         return false;
 
     uint8 const errands = TownErrands::Needed(botAI, bot);
-    if (!errands)
+    if (!errands || (repairOnly && !(errands & TOWN_ERRAND_REPAIR)))
         return false;
 
     // A serving NPC or mailbox already in reach: wander among the NPCs here, else walk to the nearest town.
@@ -1125,7 +1125,7 @@ bool NewRpgBaseAction::GoRunErrands()
     {
         camp = TownErrands::NearestTown(bot);
         if (camp == WorldPosition())
-            return false;  // no town within reach: keep playing, try again at the next idle
+            return false;  // no town within reach: keep playing, try again later
     }
 
     info.lastErrandMs = getMSTime();
@@ -1135,6 +1135,14 @@ bool NewRpgBaseAction::GoRunErrands()
     else
         info.ChangeToGoCamp(camp);
     return true;
+}
+
+bool NewRpgBaseAction::IsQuestTooHardForWornGear(uint32 questId)
+{
+    if (!TownErrands::PlaySafe(botAI, bot))
+        return false;
+    Quest const* quest = sObjectMgr->GetQuestTemplate(questId);
+    return quest && static_cast<int32>(quest->GetQuestLevel()) > static_cast<int32>(bot->GetLevel());
 }
 
 bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> candidateStatus)
@@ -1212,6 +1220,8 @@ bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> candidateSta
                 uint32 questId = bot->GetQuestSlotQuestId(slot);
                 if (botAI->lowPriorityQuest.find(questId) != botAI->lowPriorityQuest.end())
                     continue;
+                if (IsQuestTooHardForWornGear(questId))
+                    continue;
 
                 std::vector<POIInfo> poiInfo;
                 if (GetQuestPOIPosAndObjectiveIdx(questId, poiInfo, true))
@@ -1288,6 +1298,9 @@ bool NewRpgBaseAction::CheckRpgStatusAvailable(NewRpgStatus status)
         }
         case RPG_GO_GRIND:
         {
+            // Honest world, worn gear: no trips to grind spots (they hold mobs up to a few levels above).
+            if (TownErrands::PlaySafe(botAI, bot))
+                return false;
             WorldPosition pos = SelectRandomGrindPos(bot);
             return pos != WorldPosition();
         }
@@ -1309,6 +1322,8 @@ bool NewRpgBaseAction::CheckRpgStatusAvailable(NewRpgStatus status)
                 uint32 questId = bot->GetQuestSlotQuestId(slot);
                 if (botAI->lowPriorityQuest.find(questId) != botAI->lowPriorityQuest.end())
                     continue;
+                if (IsQuestTooHardForWornGear(questId))
+                    continue;
 
                 std::vector<POIInfo> poiInfo;
                 if (GetQuestPOIPosAndObjectiveIdx(questId, poiInfo, true))
@@ -1328,6 +1343,7 @@ bool NewRpgBaseAction::CheckRpgStatusAvailable(NewRpgStatus status)
             if (AI_VALUE(uint8, "bag space") > 80)
                 return false;
 
+            // Honest world: HasUsableNodes says no in a zone above the bot's level and on worn-out gear.
             return sGatherNodeMgr.HasUsableNodes(bot);
         }
         case RPG_TRAVEL_FLIGHT:

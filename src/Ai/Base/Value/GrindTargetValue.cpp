@@ -10,6 +10,7 @@
 #include "ReputationMgr.h"
 #include "ServerFacade.h"
 #include "SharedDefines.h"
+#include "TownErrands.h"
 
 Unit* GrindTargetValue::Calculate()
 {
@@ -54,6 +55,8 @@ Unit* GrindTargetValue::FindTargetForGrinding(uint32 assistCount)
     float distance = 0;
     Unit* result = nullptr;
     std::unordered_map<uint32, bool> needForQuestMap;
+    // Honest world, worn-out gear: only mobs at or below the bot's level until it can repair.
+    bool const playSafe = TownErrands::PlaySafe(botAI, bot);
 
     for (ObjectGuid const guid : targets)
     {
@@ -93,6 +96,9 @@ Unit* GrindTargetValue::FindTargetForGrinding(uint32 assistCount)
         }
 
         if (!bot->InBattleground() && (int)unit->GetLevel() - (int)bot->GetLevel() > 4 && !unit->GetGUID().IsPlayer())
+            continue;
+
+        if (playSafe && unit->GetLevel() > bot->GetLevel() && !unit->GetGUID().IsPlayer())
             continue;
 
         if (Creature* creature = unit->ToCreature())

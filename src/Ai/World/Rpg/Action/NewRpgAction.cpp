@@ -10,6 +10,7 @@
 #include "ChatHelper.h"
 #include "DBCStores.h"
 #include "EarnedTraining.h"
+#include "FixedPopulation.h"
 #include "GameObject.h"
 #include "GossipDef.h"
 #include "IVMapMgr.h"
@@ -249,10 +250,65 @@ bool StartRpgDoQuestAction::Execute(Event event)
     return false;
 }
 
+bool NewRpgStatusUpdateAction::CheckWornGearAndTownTrip(NewRpgStatus status)
+{
+    if (!sPlayerbotAIConfig.fixedPopulation || !sRandomPlayerbotMgr.IsRandomBot(bot))
+        return false;
+
+    NewRpgInfo& info = botAI->rpgInfo;
+    if (info.lastWearCheckMs && GetMSTimeDiffToNow(info.lastWearCheckMs) < wearCheckInterval)
+        return false;
+    info.lastWearCheckMs = getMSTime();
+
+    // A town trip that never arrives (bad path, dying on the way) is given up; the errand cooldown starts.
+    if (status == RPG_GO_CAMP)
+    {
+        if (!info.HasStatusPersisted(sPlayerbotAIConfig.fixedPopulationTownTripTimeout * IN_MILLISECONDS))
+            return false;
+        LOG_DEBUG("playerbots", "[New RPG] Bot {} gives up a town trip after {} s", bot->GetName(),
+                  GetMSTimeDiffToNow(info.startT) / IN_MILLISECONDS);
+        info.lastErrandMs = getMSTime();
+        FixedPopulation::Count(EconomyCounter::TownTripsAbandoned);
+        info.ChangeToIdle();
+        return true;
+    }
+    if (status == RPG_WANDER_NPC || status == RPG_TRAVEL_FLIGHT)
+        return false;
+
+    // Leave for town in time, not only when the activity ends (one bad fight costs 10% and a spirit healer 25%).
+    if (AI_VALUE(uint8, "durability") < sPlayerbotAIConfig.fixedPopulationRepairBelow && GoRunErrands(true))
+        return true;
+
+    if (!TownErrands::PlaySafe(botAI, bot))
+        return false;
+
+    // Worn out and can't repair yet: stop gathering and grind trips and quests above the bot's level...
+    auto const* quest = std::get_if<NewRpgInfo::DoQuest>(&info.data);
+    if (status == RPG_DO_GATHER || status == RPG_GO_GRIND || (quest && IsQuestTooHardForWornGear(quest->questId)))
+    {
+        info.ChangeToIdle();
+        return true;
+    }
+
+    // ...and walk out of a zone above its level to a town of its own level range.
+    if (TownErrands::ZoneAboveBot(bot, bot->GetZoneId()) && !TownErrands::CooldownLeftMs(info.lastErrandMs))
+    {
+        WorldPosition const town = TownErrands::NearestTown(bot, true);
+        if (town == WorldPosition())
+            return false;
+        info.lastErrandMs = getMSTime();
+        info.ChangeToGoCamp(town);
+        return true;
+    }
+    return false;
+}
+
 bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
 {
     NewRpgInfo& info = botAI->rpgInfo;
     NewRpgStatus status = info.GetStatus();
+    if (CheckWornGearAndTownTrip(status))
+        return true;
     switch (status)
     {
         case RPG_IDLE:

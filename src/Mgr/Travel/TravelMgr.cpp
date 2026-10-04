@@ -4501,15 +4501,17 @@ const std::vector<WorldLocation> TravelMgr::GetTravelHubs(Player* bot)
     return locs;
 }
 
-WorldPosition TravelMgr::GetNearestTravelHub(Player* bot, float minDistance, float maxDistance) const
+WorldPosition TravelMgr::GetNearestTravelHub(Player* bot, float minDistance, float maxDistance, uint8 level) const
 {
     std::map<uint8, std::vector<WorldLocation>> const& hubs =
         bot->GetTeamId() == TEAM_ALLIANCE ? allianceHubsPerLevelCache : hordeHubsPerLevelCache;
 
     WorldPosition nearest;
     float nearestDistance = maxDistance;
-    for (auto const& [level, locs] : hubs)
+    for (auto const& [bracketLevel, locs] : hubs)
     {
+        if (level && bracketLevel != level)
+            continue;
         for (WorldLocation const& loc : locs)
         {
             if (loc.GetMapId() != bot->GetMapId())
@@ -4524,6 +4526,14 @@ WorldPosition TravelMgr::GetNearestTravelHub(Player* bot, float minDistance, flo
         }
     }
     return nearest;
+}
+
+bool TravelMgr::IsZoneAboveLevel(uint32 zoneId, uint32 level) const
+{
+    // Starting zones are listed from level 5 but are made for levels 1-12.
+    constexpr uint32 START_ZONE_LOW = 5;
+    auto const itr = zone2LevelBracket.find(zoneId);
+    return itr != zone2LevelBracket.end() && itr->second.low > std::max(level, START_ZONE_LOW);
 }
 
 std::vector<WorldLocation> TravelMgr::GetCityLocations(Player* bot)

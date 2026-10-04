@@ -212,8 +212,8 @@ bool EconomyCommand::Handle(ChatHandler* handler, char const* args)
     if (words.empty())
     {
         handler->PSendSysMessage(
-            "ECONERR usage: econ show|kill|wear|money|due|deaths|idle|forget|errands|mail|fillbags|raise <name> "
-            "[value] | econ raise <name> [failcreate|failsave] | econ active | econ stats | econ census | "
+            "ECONERR usage: econ show|kill|wear|money|due|deaths|idle|wander|camp|forget|errands|mail|fillbags|raise "
+            "<name> [value] | econ raise <name> [failcreate|failsave] | econ active | econ stats | econ census | "
             "econ picktable <classId> <rolls> | econ raisings | econ dkchain <name> [check] | "
             "econ dklogin|dklogout <name> | econ ghostat <name> <map> <x> <y> <z>");
         return false;
@@ -487,12 +487,51 @@ bool EconomyCommand::Handle(ChatHandler* handler, char const* args)
     {
         uint8 const errands = TownErrands::Needed(botAI, bot);
         WorldPosition const town = TownErrands::NearestTown(bot);
+        WorldPosition const ownTown = TownErrands::NearestTown(bot, true);
+        Item const* weapon = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_MAINHAND);
+        uint32 const weaponMax = weapon ? weapon->GetUInt32Value(ITEM_FIELD_MAXDURABILITY) : 0;
+        // bill = repair cost of all worn items; weapon = main hand durability percent (100 without one);
+        // safe = plays safe on worn-out gear; gather = may gather in its zone; own_town = yards to the nearest
+        // town of its level range (0 = none).
         handler->PSendSysMessage(
-            "ECONERRANDS name={} mask={} repair={} sell={} ammo={} mail={} cooldown={} town={}", bot->GetName(),
-            errands, (errands & TOWN_ERRAND_REPAIR) ? 1 : 0, (errands & TOWN_ERRAND_SELL) ? 1 : 0,
+            "ECONERRANDS name={} mask={} repair={} sell={} ammo={} mail={} cooldown={} town={} own_town={} "
+            "bill={} weapon_cost={} junk={} afford={} weapon={} safe={} gather={} zone_above={}",
+            bot->GetName(), errands, (errands & TOWN_ERRAND_REPAIR) ? 1 : 0, (errands & TOWN_ERRAND_SELL) ? 1 : 0,
             (errands & TOWN_ERRAND_AMMO) ? 1 : 0, (errands & TOWN_ERRAND_MAIL) ? 1 : 0,
             TownErrands::CooldownLeftMs(botAI->rpgInfo.lastErrandMs) / IN_MILLISECONDS,
-            town == WorldPosition() ? 0 : static_cast<uint32>(bot->GetExactDist(town)));
+            town == WorldPosition() ? 0 : static_cast<uint32>(bot->GetExactDist(town)),
+            ownTown == WorldPosition() ? 0 : static_cast<uint32>(bot->GetExactDist(ownTown)),
+            botAI->GetAiObjectContext()->GetValue<uint32>("repair cost")->Get(), TownErrands::WeaponRepairCost(bot),
+            TownErrands::JunkValue(botAI, bot),
+            TownErrands::CanAffordRepair(botAI, bot) ? 1 : 0,
+            weaponMax ? weapon->GetUInt32Value(ITEM_FIELD_DURABILITY) * 100 / weaponMax : 100,
+            TownErrands::PlaySafe(botAI, bot) ? 1 : 0,
+            TownErrands::MayGatherIn(botAI, bot, bot->GetZoneId()) ? 1 : 0,
+            TownErrands::ZoneAboveBot(bot, bot->GetZoneId()) ? 1 : 0);
+        return true;
+    }
+    if (sub == "wander")
+    {
+        // Test seam: put the bot in the middle of an activity (WANDER_RANDOM, 5 min) with no errand cooldown.
+        botAI->rpgInfo.ChangeToWanderRandom();
+        botAI->rpgInfo.lastErrandMs = 0;
+        handler->PSendSysMessage("ECONOK {} rpg=WANDER_RANDOM", bot->GetName());
+        return true;
+    }
+    if (sub == "camp")
+    {
+        // Test seam: a town trip (GO_CAMP to the nearest town) that started <value> seconds ago, no cooldown.
+        WorldPosition const town = TownErrands::NearestTown(bot);
+        if (town == WorldPosition())
+        {
+            handler->PSendSysMessage("ECONERR {} has no town in reach", bot->GetName());
+            return false;
+        }
+        botAI->rpgInfo.ChangeToGoCamp(town);
+        botAI->rpgInfo.startT = getMSTime() - value * IN_MILLISECONDS;
+        botAI->rpgInfo.lastErrandMs = 0;
+        handler->PSendSysMessage("ECONOK {} rpg=GO_CAMP age={} town={}", bot->GetName(), value,
+                                 static_cast<uint32>(bot->GetExactDist(town)));
         return true;
     }
     if (sub == "fillbags")

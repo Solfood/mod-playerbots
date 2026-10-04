@@ -63,7 +63,10 @@ protected:
     bool RandomChangeStatus(std::vector<NewRpgStatus> candidateStatus);
     // Honest world: if the bot needs something from town and its errand cooldown has passed, start the
     // trip (WANDER_NPC when a serving NPC or mailbox is already near, else GO_CAMP). True if started.
-    bool GoRunErrands();
+    // `repairOnly`: only when a repair is among the needs (the mid-activity check).
+    bool GoRunErrands(bool repairOnly = false);
+    // Honest world, worn gear: no quest above the bot's level.
+    bool IsQuestTooHardForWornGear(uint32 questId);
     bool CheckRpgStatusAvailable(NewRpgStatus status);
 
 protected:
