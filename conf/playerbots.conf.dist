@@ -813,8 +813,8 @@ AiPlayerbot.FixedPopulation.ProfessionMaxLevel = 10
 # of sight, walks to it and resurrects through the normal spirit-healer handler (sickness, durability
 # loss). If it still cannot reach one after SpiritHealerMaxAttempts failed tries or SpiritHealerMaxSeconds
 # near that graveyard, it gives up on that graveyard and walks to the next nearest one of its zone.
-# Defaults: 40, 20, 300
-AiPlayerbot.FixedPopulation.SpiritHealerRadius = 40
+# Defaults: 60, 20, 300
+AiPlayerbot.FixedPopulation.SpiritHealerRadius = 60
 AiPlayerbot.FixedPopulation.SpiritHealerMaxAttempts = 20
 AiPlayerbot.FixedPopulation.SpiritHealerMaxSeconds = 300
 

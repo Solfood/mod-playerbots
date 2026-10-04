@@ -688,7 +688,7 @@ bool PlayerbotAIConfig::Initialize()
     professionPickMaxLevel = sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.ProfessionMaxLevel", 10);
     if (professionPickMaxLevel < professionPickMinLevel)
         professionPickMaxLevel = professionPickMinLevel;
-    spiritHealerGraveRadius = sConfigMgr->GetOption<float>("AiPlayerbot.FixedPopulation.SpiritHealerRadius", 40.0f);
+    spiritHealerGraveRadius = sConfigMgr->GetOption<float>("AiPlayerbot.FixedPopulation.SpiritHealerRadius", 60.0f);
     spiritHealerMaxAttempts = sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.SpiritHealerMaxAttempts", 20);
     spiritHealerMaxSeconds = sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.SpiritHealerMaxSeconds", 300);
     raisingsEnabled = sConfigMgr->GetOption<bool>("AiPlayerbot.Raisings.Enabled", false);

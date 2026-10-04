@@ -423,10 +423,12 @@ GraveyardStruct const* SpiritHealerAction::GetHonestGrave()
 Creature* SpiritHealerAction::FindSpiritHealer(GraveyardStruct const* grave)
 {
     // No line-of-sight filter: a statue between the graveyard point and its healer must not hide it.
+    // Reach far enough from the bot to cover the whole radius round the graveyard.
+    float const range = bot->GetDistance(grave->x, grave->y, grave->z) + sPlayerbotAIConfig.spiritHealerGraveRadius;
     std::list<Unit*> units;
-    Acore::AnyUnitInObjectRangeCheck check(bot, sPlayerbotAIConfig.sightDistance);
+    Acore::AnyUnitInObjectRangeCheck check(bot, range);
     Acore::UnitListSearcher<Acore::AnyUnitInObjectRangeCheck> searcher(bot, units, check);
-    Cell::VisitObjects(bot, searcher, sPlayerbotAIConfig.sightDistance);
+    Cell::VisitObjects(bot, searcher, range);
 
     Creature* best = nullptr;
     float bestDist = 0.0f;
