@@ -808,6 +808,29 @@ AiPlayerbot.FixedPopulation.ErrandCooldownSeconds = 600
 AiPlayerbot.FixedPopulation.ProfessionMinLevel = 5
 AiPlayerbot.FixedPopulation.ProfessionMaxLevel = 10
 
+# Death knight "raisings" (only with FixedPopulation = 1). None at launch. Once a bot of a faction reaches
+# UnlockLevel, every WaveIntervalHours that faction raises bots that died within RecentDeathHours at
+# MinCandidateLevel or higher: the original character retires (kept in the database) and a level-55
+# death knight with the same name, looks, professions, gold and bank appears in Acherus.
+# Limits per faction: death knights at most MaxFactionPercent of its online population, at most MaxPerWeek
+# raisings per 7 days, at most MaxUserGuildPerWave members of guild UserGuildId per wave (0 = no such guild).
+# DryRun = 1 logs each wave's decision instead of raising anyone.
+# ChainFallbackHours: a raised death knight that has not finished the death knight starting quest chain this
+# many hours after its raising gets it completed by the server: the chain's quests are rewarded in order
+# (with their normal rewards) and it is moved to where the chain ends (its faction's capital). 0 = never.
+# Defaults: 0, 0, 55, 45, 24, 10, 3, 0, 1, 24, 24
+AiPlayerbot.Raisings.Enabled = 0
+AiPlayerbot.Raisings.DryRun = 0
+AiPlayerbot.Raisings.UnlockLevel = 55
+AiPlayerbot.Raisings.MinCandidateLevel = 45
+AiPlayerbot.Raisings.RecentDeathHours = 24
+AiPlayerbot.Raisings.MaxFactionPercent = 10
+AiPlayerbot.Raisings.MaxPerWeek = 3
+AiPlayerbot.Raisings.UserGuildId = 0
+AiPlayerbot.Raisings.MaxUserGuildPerWave = 1
+AiPlayerbot.Raisings.WaveIntervalHours = 24
+AiPlayerbot.Raisings.ChainFallbackHours = 24
+
 # Enable simulated expansion limitation for talents and glyphs
 # If enabled, limits talent trees to 6 rows plus the middle talent of the 7th row for bots until level 61
 # and 8 rows plus the middle talent of the 9th row for bots from level 61 until level 71

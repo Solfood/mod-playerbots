@@ -141,7 +141,8 @@ public:
         PLAYERHOOK_CAN_PLAYER_USE_GUILD_CHAT,
         PLAYERHOOK_CAN_PLAYER_USE_CHANNEL_CHAT,
         PLAYERHOOK_ON_GIVE_EXP,
-        PLAYERHOOK_ON_BEFORE_TELEPORT
+        PLAYERHOOK_ON_BEFORE_TELEPORT,
+        PLAYERHOOK_ON_PLAYER_JUST_DIED
     }) {}
 
     void OnPlayerLogin(Player* player) override
@@ -183,6 +184,13 @@ public:
         }
 
         sRandomPlayerbotMgr.OnPlayerLogout(player);
+    }
+
+    // Map thread. Honest world: a recent death at 45+ makes a bot a raisings candidate.
+    void OnPlayerJustDied(Player* player) override
+    {
+        if (GET_PLAYERBOT_AI(player))
+            sRaisingMgr.NoteDeath(player);
     }
 
     void OnPlayerCreatureKillCredit(Player* player, Creature* killed) override

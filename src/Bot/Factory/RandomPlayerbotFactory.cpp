@@ -20,6 +20,7 @@
 #include "PlayerbotWorldThreadProcessor.h"
 #include "Playerbots.h"
 #include "RaceMgr.h"
+#include "RaisingMgr.h"
 #include "RandomPlayerbotMgr.h"
 #include "ScriptMgr.h"
 #include "SharedDefines.h"
@@ -660,6 +661,10 @@ void RandomPlayerbotFactory::CreateRandomBots()
     }
 
     LOG_INFO("playerbots", "Creating random bot characters...");
+    // Honest world: new characters must not take a guid a raisings row already used (a failed raising's death
+    // knight guid, for one); EnsureLoaded() runs too late for boot-time creation.
+    if (sPlayerbotAIConfig.fixedPopulation)
+        RaisingMgr::ReserveRaisingGuids();
     uint32 totalRandomBotChars = 0;
     std::vector<std::pair<Player*, uint32>> playerBots;
     std::vector<WorldSession*> sessionBots;

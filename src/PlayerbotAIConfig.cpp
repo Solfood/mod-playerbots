@@ -688,6 +688,17 @@ bool PlayerbotAIConfig::Initialize()
     professionPickMaxLevel = sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.ProfessionMaxLevel", 10);
     if (professionPickMaxLevel < professionPickMinLevel)
         professionPickMaxLevel = professionPickMinLevel;
+    raisingsEnabled = sConfigMgr->GetOption<bool>("AiPlayerbot.Raisings.Enabled", false);
+    raisingsDryRun = sConfigMgr->GetOption<bool>("AiPlayerbot.Raisings.DryRun", false);
+    raisingsUnlockLevel = sConfigMgr->GetOption<uint32>("AiPlayerbot.Raisings.UnlockLevel", 55);
+    raisingsMinCandidateLevel = sConfigMgr->GetOption<uint32>("AiPlayerbot.Raisings.MinCandidateLevel", 45);
+    raisingsRecentDeathHours = sConfigMgr->GetOption<uint32>("AiPlayerbot.Raisings.RecentDeathHours", 24);
+    raisingsMaxFactionPercent = sConfigMgr->GetOption<uint32>("AiPlayerbot.Raisings.MaxFactionPercent", 10);
+    raisingsMaxPerWeek = sConfigMgr->GetOption<uint32>("AiPlayerbot.Raisings.MaxPerWeek", 3);
+    raisingsUserGuildId = sConfigMgr->GetOption<uint32>("AiPlayerbot.Raisings.UserGuildId", 0);
+    raisingsMaxUserGuildPerWave = sConfigMgr->GetOption<uint32>("AiPlayerbot.Raisings.MaxUserGuildPerWave", 1);
+    raisingsWaveIntervalHours = sConfigMgr->GetOption<uint32>("AiPlayerbot.Raisings.WaveIntervalHours", 24);
+    raisingsChainFallbackHours = sConfigMgr->GetOption<uint32>("AiPlayerbot.Raisings.ChainFallbackHours", 24);
     limitTalentsExpansion = sConfigMgr->GetOption<bool>("AiPlayerbot.LimitTalentsExpansion", 0);
     botActiveAlone = sConfigMgr->GetOption<int32>("AiPlayerbot.BotActiveAlone", 10);
     BotActiveAloneDurationSeconds = sConfigMgr->GetOption<int32>("AiPlayerbot.BotActiveAloneDurationSeconds", 30);

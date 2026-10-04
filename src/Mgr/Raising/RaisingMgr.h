@@ -9,7 +9,10 @@
 
 #include "Define.h"
 #include "ObjectGuid.h"
+#include <ctime>
+#include <mutex>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 class Player;
@@ -36,6 +39,23 @@ public:
     // True while a raising is between "original taken out" and "death knight or original back in". The
     // population manager must not top the population up meanwhile, or it ends one bot over its size.
     bool HasActive() const { return !_active.empty(); }
+
+    // Called on the bot's map thread when it dies (OnPlayerJustDied): remembers recent deaths at
+    // MinCandidateLevel or higher, the candidates of the next wave.
+    void NoteDeath(Player* bot);
+    // The wave decision for both factions; raises the chosen bots unless `dryRun` (which computes the same
+    // decision and only skips the raising and storing the unlock). World thread only.
+    std::string RunWave(bool dryRun);
+    // Completes the death knight starting quest chain for `deathKnight` the way the server would if it had
+    // played it: every chain quest rewarded in order (rewards, reputation, talents, spells), then moved to the
+    // chain's last quest ender. False, with a reason in `report`, if it can't be done now. World thread only.
+    bool CompleteStarterChain(Player* deathKnight, std::string& report);
+    // True once the chain's last quest (Where Kings Walk / Warchief's Blessing) is rewarded.
+    static bool StarterChainFinished(Player* deathKnight);
+    // One line describing the chain state, for checks (`playerbots econ dkchain <name> check`).
+    static std::string DescribeStarterChain(Player* deathKnight);
+    // Moves the player guid generator past every guid a raisings row used (world thread or startup).
+    static void ReserveRaisingGuids();
 
 private:
     enum class Stage : uint8
@@ -69,6 +89,7 @@ private:
         std::string carry;
         Stage stage = Stage::WaitLogout;
         uint32 stageStartMs = 0;
+        time_t raisedAt = 0;
         bool failCreate = false;
         bool failSave = false;
     };
@@ -84,9 +105,23 @@ private:
     static void ApplyCarry(Player* deathKnight, std::string const& carry);
     static uint32 MailBelongings(Player* original, ObjectGuid::LowType newGuid);
 
+    // A raised death knight whose starting chain may still need the server-side fallback.
+    struct ChainWatch
+    {
+        ObjectGuid::LowType guid = 0;
+        time_t raisedAt = 0;
+    };
+
+    void MaybeRunWave();
+    void CheckChainFallback();
+
     std::vector<Raising> _active;
+    std::vector<ChainWatch> _chainWatch;
     bool _loaded = false;
     uint32 _updateTimer = 0;
+    uint32 _waveTimer = 0;
+    std::mutex _deathsLock;
+    std::unordered_map<ObjectGuid::LowType, time_t> _recentDeaths;  // guarded by _deathsLock
 };
 
 #define sRaisingMgr RaisingMgr::instance()

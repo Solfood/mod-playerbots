@@ -7,6 +7,7 @@
 #include "EconomyCommand.h"
 
 #include "Bag.h"
+#include "CharacterCache.h"
 #include "Chat.h"
 #include "DatabaseEnv.h"
 #include "EarnedTraining.h"
@@ -19,6 +20,7 @@
 #include "PlayerbotAI.h"
 #include "PlayerbotAIConfig.h"
 #include "PlayerbotFactory.h"
+#include "PlayerbotsDatabase.h"
 #include "Playerbots.h"
 #include "ProfessionPicker.h"
 #include "RaisingMgr.h"
@@ -152,7 +154,8 @@ bool EconomyCommand::Handle(ChatHandler* handler, char const* args)
         handler->PSendSysMessage(
             "ECONERR usage: econ show|kill|wear|money|due|deaths|idle|forget|errands|mail|fillbags|raise <name> "
             "[value] | econ raise <name> [failcreate|failsave] | econ active | econ stats | "
-            "econ picktable <classId> <rolls>");
+            "econ picktable <classId> <rolls> | econ raisings | econ dkchain <name> [check] | "
+            "econ dklogin|dklogout <name>");
         return false;
     }
     std::string const& sub = words[0];
@@ -210,6 +213,50 @@ bool EconomyCommand::Handle(ChatHandler* handler, char const* args)
         handler->PSendSysMessage("ECONPICKS class={} rolls={} rolls_valid={} with_gathering={} double_gathering={}",
                                  classId, rolls, rollsValid, total ? withGathering * 100 / total : 0,
                                  total ? doubleGathering * 100 / total : 0);
+        return true;
+    }
+
+    if (sub == "raisings")
+    {
+        // The automatic wave's decision for both factions, without acting (nobody is raised, no unlock stored).
+        handler->PSendSysMessage("ECONRAISINGS {}", sRaisingMgr.RunWave(true));
+        return true;
+    }
+
+    if ((sub == "dklogin" || sub == "dklogout") && words.size() > 1)
+    {
+        // Test seam for the death knight chain fallback without a real raising: brings one of the never-played
+        // death knights the bot accounts were created with into the population (marked raised so the login gate
+        // lets it in), and takes it out again. Refuses any death knight a raising created.
+        ObjectGuid const guid = sCharacterCache->GetCharacterGuidByName(words[1]);
+        CharacterCacheEntry const* entry = guid.IsEmpty() ? nullptr : sCharacterCache->GetCharacterCacheByGuid(guid);
+        if (!entry || entry->Class != CLASS_DEATH_KNIGHT || !sPlayerbotAIConfig.IsInRandomAccountList(entry->AccountId))
+        {
+            handler->PSendSysMessage("ECONERR {} is not a random bot death knight", words[1]);
+            return false;
+        }
+        uint32 const low = guid.GetCounter();
+        if (PlayerbotsDatabase.Query("SELECT 1 FROM playerbots_raisings WHERE new_guid = {}", low))
+        {
+            handler->PSendSysMessage("ECONERR {} was created by a raising; the seam never touches it", words[1]);
+            return false;
+        }
+        if (sub == "dklogin")
+        {
+            if (sRandomPlayerbotMgr.GetValue(low, "raised"))
+            {
+                handler->PSendSysMessage("ECONERR {} is already marked raised", words[1]);
+                return false;
+            }
+            sRandomPlayerbotMgr.MarkRaised(low);
+            sRandomPlayerbotMgr.AddToPopulation(low);
+        }
+        else
+        {
+            sRandomPlayerbotMgr.RemoveFromPopulation(low);
+            sRandomPlayerbotMgr.SetValue(low, "raised", 0);
+        }
+        handler->PSendSysMessage("ECONOK {} {} guid={}", sub, words[1], low);
         return true;
     }
 
@@ -420,6 +467,25 @@ bool EconomyCommand::Handle(ChatHandler* handler, char const* args)
         }
         handler->PSendSysMessage("ECONOK raising {}{}", bot->GetName(),
                                  failCreate ? " (forced failure)" : (failSave ? " (forced lost save)" : ""));
+        return true;
+    }
+
+    if (sub == "dkchain")
+    {
+        // The death knight starting chain fallback, now (normally ChainFallbackHours after a raising); `check` only
+        // describes the chain state.
+        if (words.size() > 2 && words[2] == "check")
+        {
+            handler->PSendSysMessage("ECONDK {}", RaisingMgr::DescribeStarterChain(bot));
+            return true;
+        }
+        std::string report;
+        if (!sRaisingMgr.CompleteStarterChain(bot, report))
+        {
+            handler->PSendSysMessage("ECONERR dkchain {}: {}", bot->GetName(), report);
+            return false;
+        }
+        handler->PSendSysMessage("ECONOK dkchain {} {}", bot->GetName(), report);
         return true;
     }
 

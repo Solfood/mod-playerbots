@@ -365,6 +365,17 @@ public:
     uint32 fixedPopulationErrandCooldown;
     uint32 professionPickMinLevel;
     uint32 professionPickMaxLevel;
+    bool raisingsEnabled;
+    bool raisingsDryRun;
+    uint32 raisingsUnlockLevel;
+    uint32 raisingsMinCandidateLevel;
+    uint32 raisingsRecentDeathHours;
+    uint32 raisingsMaxFactionPercent;
+    uint32 raisingsMaxPerWeek;
+    uint32 raisingsUserGuildId;
+    uint32 raisingsMaxUserGuildPerWave;
+    uint32 raisingsWaveIntervalHours;
+    uint32 raisingsChainFallbackHours;
     bool limitTalentsExpansion;
     uint32 botActiveAlone;
     uint32 BotActiveAloneDurationSeconds;
