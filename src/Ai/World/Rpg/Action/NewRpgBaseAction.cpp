@@ -774,7 +774,10 @@ ObjectGuid NewRpgBaseAction::ChooseNpcOrGameObjectToInteract(bool questgiverOnly
     {
         if (uint8 const errands = TownErrands::Needed(botAI, bot))
         {
-            ObjectGuid const errandTarget = TownErrands::ChooseTarget(botAI, bot, errands, possibleTargets);
+            // One visit per NPC per wander: an errand it couldn't meet must not starve trainers and flight masters.
+            auto const* wander = std::get_if<NewRpgInfo::WanderNpc>(&botAI->rpgInfo.data);
+            ObjectGuid const errandTarget =
+                TownErrands::ChooseTarget(botAI, bot, errands, possibleTargets, wander ? &wander->reached : nullptr);
             if (!errandTarget.IsEmpty())
                 return errandTarget;
         }

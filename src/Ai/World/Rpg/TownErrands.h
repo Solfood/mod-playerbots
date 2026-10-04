@@ -32,8 +32,10 @@ public:
     static uint8 Needed(PlayerbotAI* botAI, Player* bot);
     static bool Serves(Creature const* npc, uint8 errands);
     // The nearest NPC in `nearbyNpcs` (sorted nearest first) that serves `errands`, else a nearby mailbox
-    // when mail is waiting, else an empty guid.
-    static ObjectGuid ChooseTarget(PlayerbotAI* botAI, Player* bot, uint8 errands, GuidVector const& nearbyNpcs);
+    // when mail is waiting, else an empty guid. NPCs and mailboxes in `skip` (already reached during this
+    // wander) are passed over, so a need they could not meet doesn't pin the bot to them.
+    static ObjectGuid ChooseTarget(PlayerbotAI* botAI, Player* bot, uint8 errands, GuidVector const& nearbyNpcs,
+                                   GuidSet const* skip = nullptr);
     static uint32 CollectableMailCount(Player* bot);
     // At a mailbox: take the money and items of every delivered mail, then delete emptied mails.
     static uint32 CollectMail(Player* bot, ObjectGuid mailbox);

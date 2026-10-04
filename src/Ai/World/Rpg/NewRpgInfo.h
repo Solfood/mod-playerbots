@@ -39,6 +39,7 @@ struct NewRpgInfo
     {
         ObjectGuid npcOrGo{};
         uint32 lastReach{0};
+        GuidSet reached;  // NPCs and objects reached during this wander (honest-world errands skip them)
     };
     // RPG_WANDER_RANDOM
     struct WanderRandom

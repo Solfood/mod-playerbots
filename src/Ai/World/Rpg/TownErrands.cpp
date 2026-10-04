@@ -48,7 +48,9 @@ uint8 TownErrands::Needed(PlayerbotAI* botAI, Player* bot)
         context->GetValue<uint8>("durability")->Get() < sPlayerbotAIConfig.fixedPopulationRepairBelow)
         errands |= TOWN_ERRAND_REPAIR;
 
-    if (context->GetValue<uint8>("bag space")->Get() >= sPlayerbotAIConfig.fixedPopulationSellAboveBags)
+    // Full bags alone are not enough: only when there is something a vendor buys (else no trip at all).
+    if (context->GetValue<uint8>("bag space")->Get() >= sPlayerbotAIConfig.fixedPopulationSellAboveBags &&
+        context->GetValue<bool>("can sell")->Get())
         errands |= TOWN_ERRAND_SELL;
 
     if (bot->getClass() == CLASS_HUNTER && !botAI->FindAmmo() && bot->GetMoney() >= AMMO_MONEY_FLOOR)
@@ -71,17 +73,24 @@ bool TownErrands::Serves(Creature const* npc, uint8 errands)
     return false;
 }
 
-ObjectGuid TownErrands::ChooseTarget(PlayerbotAI* botAI, Player* bot, uint8 errands, GuidVector const& nearbyNpcs)
+ObjectGuid TownErrands::ChooseTarget(PlayerbotAI* botAI, Player* bot, uint8 errands, GuidVector const& nearbyNpcs,
+                                     GuidSet const* skip)
 {
     for (ObjectGuid const& guid : nearbyNpcs)
     {
+        if (skip && skip->count(guid))
+            continue;
         Creature* npc = ObjectAccessor::GetCreature(*bot, guid);
         if (npc && npc->IsInWorld() && Serves(npc, errands))
             return guid;
     }
 
     if (errands & TOWN_ERRAND_MAIL)
-        return MailProcessor::FindMailbox(botAI);
+    {
+        ObjectGuid const mailbox = MailProcessor::FindMailbox(botAI);
+        if (!skip || !skip->count(mailbox))
+            return mailbox;
+    }
 
     return ObjectGuid();
 }

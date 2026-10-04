@@ -6,12 +6,15 @@
 
 #include "EconomyCommand.h"
 
+#include "Bag.h"
 #include "Chat.h"
 #include "DatabaseEnv.h"
 #include "EarnedTraining.h"
 #include "FixedPopulation.h"
+#include "ItemUsageValue.h"
 #include "Mail.h"
 #include "ObjectAccessor.h"
+#include "ObjectMgr.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "PlayerbotAIConfig.h"
@@ -142,7 +145,7 @@ bool EconomyCommand::Handle(ChatHandler* handler, char const* args)
     if (words.empty())
     {
         handler->PSendSysMessage(
-            "ECONERR usage: econ show|kill|wear|money|due|deaths|idle|forget|errands|mail <name> [value] | "
+            "ECONERR usage: econ show|kill|wear|money|due|deaths|idle|forget|errands|mail|fillbags <name> [value] | "
             "econ active | econ stats");
         return false;
     }
@@ -286,6 +289,48 @@ bool EconomyCommand::Handle(ChatHandler* handler, char const* args)
             (errands & TOWN_ERRAND_AMMO) ? 1 : 0, (errands & TOWN_ERRAND_MAIL) ? 1 : 0,
             TownErrands::CooldownLeftMs(botAI->rpgInfo.lastErrandMs) / IN_MILLISECONDS,
             town == WorldPosition() ? 0 : static_cast<uint32>(bot->GetExactDist(town)));
+        return true;
+    }
+    if (sub == "fillbags")
+    {
+        // Test seam (destructive): empty the backpack and bags, then fill every free slot with full stacks of
+        // item <value> (0 = just empty). Answers with the errands as seen right after, caches dropped.
+        if (value && !sObjectMgr->GetItemTemplate(value))
+        {
+            handler->PSendSysMessage("ECONERR no item {}", value);
+            return false;
+        }
+        for (uint8 slot = INVENTORY_SLOT_ITEM_START; slot < INVENTORY_SLOT_ITEM_END; ++slot)
+            if (bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slot))
+                bot->DestroyItem(INVENTORY_SLOT_BAG_0, slot, true);
+        for (uint8 bag = INVENTORY_SLOT_BAG_START; bag < INVENTORY_SLOT_BAG_END; ++bag)
+            if (Bag* container = bot->GetBagByPos(bag))
+                for (uint32 slot = 0; slot < container->GetBagSize(); ++slot)
+                    if (container->GetItemByPos(slot))
+                        bot->DestroyItem(bag, slot, true);
+
+        uint32 stacks = 0;
+        if (value)
+        {
+            uint32 const stackSize = std::max<uint32>(1, sObjectMgr->GetItemTemplate(value)->GetMaxStackSize());
+            for (; stacks < 200; ++stacks)  // more than any 5 bags hold
+            {
+                ItemPosCountVec dest;
+                if (bot->CanStoreNewItem(NULL_BAG, NULL_SLOT, dest, value, stackSize) != EQUIP_ERR_OK)
+                    break;
+                bot->StoreNewItem(dest, value, true);
+            }
+        }
+
+        AiObjectContext* context = botAI->GetAiObjectContext();
+        for (std::string const& name : {std::string("bag space"), std::string("can sell"),
+                                        "item count::usage " + std::to_string(ITEM_USAGE_VENDOR),
+                                        "item count::usage " + std::to_string(ITEM_USAGE_AH)})
+            context->GetUntypedValue(name)->Reset();
+        uint8 const errands = TownErrands::Needed(botAI, bot);
+        handler->PSendSysMessage("ECONOK {} fillbags item={} stacks={} bags={} mask={} sell={}", bot->GetName(), value,
+                                 stacks, context->GetValue<uint8>("bag space")->Get(), errands,
+                                 (errands & TOWN_ERRAND_SELL) ? 1 : 0);
         return true;
     }
     if (sub == "mail")
