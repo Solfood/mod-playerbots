@@ -1125,7 +1125,8 @@ std::string RaisingMgr::DescribeStarterChain(Player* deathKnight)
             ++done;
     std::ostringstream out;
     out << "name=" << deathKnight->GetName() << " guid=" << deathKnight->GetGUID().GetCounter()
-        << " class=" << static_cast<uint32>(deathKnight->getClass()) << " level=" << deathKnight->GetLevel()
+        << " class=" << static_cast<uint32>(deathKnight->getClass())
+        << " level=" << static_cast<uint32>(deathKnight->GetLevel())
         << " finished=" << (StarterChainFinished(deathKnight) ? 1 : 0) << " chain_rewarded=" << done
         << " map=" << deathKnight->GetMapId() << " zone=" << deathKnight->GetZoneId()
         << " phase=" << deathKnight->GetPhaseMask() << " teleporting=" << (deathKnight->IsBeingTeleported() ? 1 : 0)
