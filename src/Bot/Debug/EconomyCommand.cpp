@@ -7,7 +7,6 @@
 #include "EconomyCommand.h"
 
 #include "Bag.h"
-#include "BudgetValues.h"
 #include "CharacterCache.h"
 #include "Chat.h"
 #include "DatabaseEnv.h"
@@ -28,7 +27,6 @@
 #include "RaisingMgr.h"
 #include "RandomPlayerbotMgr.h"
 #include "SharedDefines.h"
-#include "TestSnapshots.h"
 #include "TownErrands.h"
 #include "TravelMgr.h"
 #include "World.h"
@@ -64,16 +62,6 @@ Player* FindBot(ChatHandler* handler, std::string const& name)
         return nullptr;
     }
     return bot;
-}
-
-// Mutating seams only work on a bot with an open test snapshot (`econ snap`), so every change a check makes to a
-// live bot is booked and `econ restore` can reverse it.
-bool RequireSnapshot(ChatHandler* handler, Player* bot, std::string const& sub)
-{
-    if (TestSnapshots::Has(bot))
-        return true;
-    handler->PSendSysMessage("ECONERR {} changes {}: take `econ snap {}` first", sub, bot->GetName(), bot->GetName());
-    return false;
 }
 
 std::string RpgStatusName(PlayerbotAI* botAI)
@@ -224,10 +212,8 @@ bool EconomyCommand::Handle(ChatHandler* handler, char const* args)
     if (words.empty())
     {
         handler->PSendSysMessage(
-            "ECONERR usage: econ show|snap|restore|kill|wear|money|due|deaths|idle|wander|camp|pause|levelup|forget|"
-            "errands|mail|fillbags|adjust|repairto|refundwear|raise <name> [value] | "
-            "econ giveitem|takeitem <name> <entry> <count> | econ snaps | "
-            "econ raise <name> [failcreate|failsave] | econ active | econ stats | econ census | "
+            "ECONERR usage: econ show|kill|wear|money|due|deaths|idle|wander|camp|forget|errands|mail|fillbags|raise "
+            "<name> [value] | econ raise <name> [failcreate|failsave] | econ active | econ stats | econ census | "
             "econ picktable <classId> <rolls> | econ raisings | econ dkchain <name> [check] | "
             "econ dklogin|dklogout <name> | econ ghostat <name> <map> <x> <y> <z>");
         return false;
@@ -237,12 +223,6 @@ bool EconomyCommand::Handle(ChatHandler* handler, char const* args)
     if (sub == "active")
     {
         Active(handler);
-        return true;
-    }
-
-    if (sub == "snaps")
-    {
-        handler->PSendSysMessage("ECONSNAPS open={}", TestSnapshots::List());
         return true;
     }
 
@@ -367,133 +347,6 @@ bool EconomyCommand::Handle(ChatHandler* handler, char const* args)
         Show(handler, bot);
         return true;
     }
-    if (sub == "snap" || sub == "restore")
-    {
-        std::string reply;
-        bool const ok = sub == "snap" ? TestSnapshots::Snap(bot, reply) : TestSnapshots::Restore(bot, reply);
-        if (!ok)
-        {
-            handler->PSendSysMessage("ECONERR {} {}: {}", sub, bot->GetName(), reply);
-            return false;
-        }
-        handler->PSendSysMessage("{} name={} {}", sub == "snap" ? "ECONSNAP" : "ECONRESTORE", bot->GetName(), reply);
-        return true;
-    }
-    if (sub == "giveitem" || sub == "takeitem")
-    {
-        // Reverting test pollution from before the snapshots existed (research 11): give back an item a test
-        // destroyed (`giveitem <name> <entry> <count> [randomPropertyId]`), or take back one bought with test
-        // gold (`takeitem <name> <entry> <count>`, bags and equipped). Logged.
-        uint32 const count = words.size() > 3 ? static_cast<uint32>(std::strtoul(words[3].c_str(), nullptr, 10)) : 1;
-        ItemTemplate const* proto = sObjectMgr->GetItemTemplate(value);
-        if (!proto || !count)
-        {
-            handler->PSendSysMessage("ECONERR {} needs an item entry and a count", sub);
-            return false;
-        }
-        if (sub == "takeitem")
-        {
-            uint32 const have = bot->GetItemCount(value, false);
-            uint32 const taken = std::min(have, count);
-            if (taken)
-                bot->DestroyItemCount(value, taken, true, false);
-            LOG_INFO("playerbots", "Test pollution revert {}: took {} x {} ({})", bot->GetName(), taken, value,
-                     proto->Name1);
-            handler->PSendSysMessage("ECONOK {} takeitem={} taken={}", bot->GetName(), value, taken);
-            return true;
-        }
-        int32 const randomProperty = words.size() > 4 ? std::strtol(words[4].c_str(), nullptr, 10) : 0;
-        ItemPosCountVec dest;
-        if (bot->CanStoreNewItem(NULL_BAG, NULL_SLOT, dest, value, count) != EQUIP_ERR_OK ||
-            !bot->StoreNewItem(dest, value, true, randomProperty))
-        {
-            handler->PSendSysMessage("ECONERR {} has no room for {} x {}", bot->GetName(), count, value);
-            return false;
-        }
-        LOG_INFO("playerbots", "Test pollution revert {}: gave back {} x {} ({})", bot->GetName(), count, value,
-                 proto->Name1);
-        handler->PSendSysMessage("ECONOK {} giveitem={} count={}", bot->GetName(), value, count);
-        return true;
-    }
-    if (sub == "refundwear")
-    {
-        // Reverting test pollution: pay back what repairing <value> percent of every equipped item costs (the
-        // repair price, no discount), for test damage the bot already paid to repair. Logged.
-        uint32 const pct = std::min<uint32>(value, 100);
-        uint32 refund = 0;
-        for (uint8 slot = EQUIPMENT_SLOT_START; slot < EQUIPMENT_SLOT_END; ++slot)
-            if (Item* item = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slot))
-                refund += RepairCostValue::PointsCost(item, item->GetUInt32Value(ITEM_FIELD_MAXDURABILITY) * pct / 100);
-        refund = uint32(refund * sWorld->getRate(RATE_REPAIRCOST));
-        LOG_INFO("playerbots", "Test pollution revert {}: refund of {}% wear = {} copper", bot->GetName(), pct, refund);
-        bot->ModifyMoney(static_cast<int32>(refund));
-        handler->PSendSysMessage("ECONOK {} refundwear={} refund={} money={}", bot->GetName(), pct, refund,
-                                 bot->GetMoney());
-        return true;
-    }
-    if (sub == "adjust" || sub == "repairto")
-    {
-        // Reverting test pollution from before the snapshots existed (research 11): a signed money correction,
-        // or every item's durability raised to at least <value> percent (never lowered). Logged.
-        if (sub == "adjust")
-        {
-            int64 const delta = std::strtoll(words.size() > 2 ? words[2].c_str() : "0", nullptr, 10);
-            int64 const money = std::clamp<int64>(int64(bot->GetMoney()) + delta, 0, MAX_MONEY_AMOUNT);
-            LOG_INFO("playerbots", "Test pollution revert {}: money {} -> {} ({:+})", bot->GetName(), bot->GetMoney(),
-                     money, delta);
-            bot->SetMoney(static_cast<uint32>(money));
-            handler->PSendSysMessage("ECONOK {} money={}", bot->GetName(), money);
-            return true;
-        }
-        uint32 const pct = std::min<uint32>(value, 100);
-        uint32 raised = 0;
-        for (uint8 slot = EQUIPMENT_SLOT_START; slot < EQUIPMENT_SLOT_END; ++slot)
-        {
-            Item* item = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slot);
-            uint32 const max = item ? item->GetUInt32Value(ITEM_FIELD_MAXDURABILITY) : 0;
-            uint32 const target = max * pct / 100;
-            uint32 const now = item ? item->GetUInt32Value(ITEM_FIELD_DURABILITY) : 0;
-            if (max && now < target)
-            {
-                bot->DurabilityPointsLoss(item, -static_cast<int32>(target - now));
-                raised += target - now;
-            }
-        }
-        AiObjectContext* context = botAI->GetAiObjectContext();
-        for (char const* name : {"durability", "repair cost", "max repair cost"})
-            context->GetUntypedValue(name)->Reset();
-        LOG_INFO("playerbots", "Test pollution revert {}: equipped durability raised to >= {}% (+{} points)",
-                 bot->GetName(), pct, raised);
-        handler->PSendSysMessage("ECONOK {} repairto={} points={} durability={}", bot->GetName(), pct, raised,
-                                 context->GetValue<uint8>("durability")->Get());
-        return true;
-    }
-    bool const mutating = sub == "kill" || sub == "wear" || sub == "money" || sub == "deaths" || sub == "ghostat" ||
-                          sub == "forget" || sub == "fillbags" || sub == "mail" || sub == "pause" || sub == "levelup";
-    if (mutating && !RequireSnapshot(handler, bot, sub))
-        return false;
-    if (sub == "pause")
-    {
-        // Test seam: no errand trips for this bot until `econ pause <name> 0` or the restore.
-        TestSnapshots::SetErrandsPaused(bot, value != 0);
-        handler->PSendSysMessage("ECONOK {} errands_paused={}", bot->GetName(), value ? 1 : 0);
-        return true;
-    }
-    if (sub == "levelup")
-    {
-        // Test seam: the GM `character level` change (level-up hooks run), booked so the restore takes it back.
-        if (value < 1 || value > sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL))
-        {
-            handler->PSendSysMessage("ECONERR levelup needs a level, not {}", value);
-            return false;
-        }
-        TestSnapshots::ProgressTouched(bot);
-        bot->GiveLevel(static_cast<uint8>(value));
-        bot->InitTalentForLevel();
-        bot->SetUInt32Value(PLAYER_XP, 0);
-        handler->PSendSysMessage("ECONOK {} level={}", bot->GetName(), uint32(bot->GetLevel()));
-        return true;
-    }
     if (sub == "kill")
     {
         if (bot->isDead())
@@ -501,7 +354,6 @@ bool EconomyCommand::Handle(ChatHandler* handler, char const* args)
             handler->PSendSysMessage("ECONERR {} is already dead", bot->GetName());
             return false;
         }
-        TestSnapshots::Killed(bot);
         // Same as `.die`: damage equal to current health, no durability loss from the blow itself.
         Unit::DealDamage(bot, bot, bot->GetHealth(), nullptr, DIRECT_DAMAGE, SPELL_SCHOOL_MASK_NORMAL, nullptr, false,
                          true);
@@ -510,9 +362,7 @@ bool EconomyCommand::Handle(ChatHandler* handler, char const* args)
     }
     if (sub == "wear")
     {
-        TestSnapshots::Durability const before = TestSnapshots::Capture(bot);
         bot->DurabilityLossAll(std::min<uint32>(value, 100) / 100.0, false);
-        TestSnapshots::Wore(bot, before);
         // Ruling F6: drop the cached values so the next errand check sees the new wear and bill.
         AiObjectContext* context = botAI->GetAiObjectContext();
         for (char const* name : {"durability", "repair cost", "max repair cost"})
@@ -522,7 +372,6 @@ bool EconomyCommand::Handle(ChatHandler* handler, char const* args)
     }
     if (sub == "money")
     {
-        TestSnapshots::MoneySet(bot, value);
         bot->SetMoney(value);
         handler->PSendSysMessage("ECONOK {} money={}", bot->GetName(), value);
         return true;
@@ -536,7 +385,6 @@ bool EconomyCommand::Handle(ChatHandler* handler, char const* args)
     }
     if (sub == "deaths")
     {
-        TestSnapshots::DeathsSet(bot);
         botAI->GetAiObjectContext()->GetValue<uint32>("death count")->Set(value);
         handler->PSendSysMessage("ECONOK {} deaths={}", bot->GetName(), value);
         return true;
@@ -554,7 +402,6 @@ bool EconomyCommand::Handle(ChatHandler* handler, char const* args)
             handler->PSendSysMessage("ECONERR {} is on map {}, not {}", bot->GetName(), bot->GetMapId(), value);
             return false;
         }
-        TestSnapshots::Moved(bot);
         float const x = std::strtof(words[3].c_str(), nullptr);
         float const y = std::strtof(words[4].c_str(), nullptr);
         float const z = std::strtof(words[5].c_str(), nullptr);
@@ -579,7 +426,6 @@ bool EconomyCommand::Handle(ChatHandler* handler, char const* args)
     if (sub == "forget" && words.size() > 2)
     {
         // Test seam: make a bot "untrained" so a check can watch it buy things back.
-        TestSnapshots::ProgressTouched(bot);
         uint32 forgotten = 0;
         if (words[2] == "riding")
         {
@@ -697,29 +543,14 @@ bool EconomyCommand::Handle(ChatHandler* handler, char const* args)
             handler->PSendSysMessage("ECONERR no item {}", value);
             return false;
         }
-        // Every destroyed item is booked: the restore gives the bot's own items back.
         for (uint8 slot = INVENTORY_SLOT_ITEM_START; slot < INVENTORY_SLOT_ITEM_END; ++slot)
-        {
-            if (Item* item = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slot))
-            {
-                TestSnapshots::ItemDestroyed(bot, item);
+            if (bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slot))
                 bot->DestroyItem(INVENTORY_SLOT_BAG_0, slot, true);
-            }
-        }
         for (uint8 bag = INVENTORY_SLOT_BAG_START; bag < INVENTORY_SLOT_BAG_END; ++bag)
-        {
             if (Bag* container = bot->GetBagByPos(bag))
-            {
                 for (uint32 slot = 0; slot < container->GetBagSize(); ++slot)
-                {
-                    if (Item* item = container->GetItemByPos(slot))
-                    {
-                        TestSnapshots::ItemDestroyed(bot, item);
+                    if (container->GetItemByPos(slot))
                         bot->DestroyItem(bag, slot, true);
-                    }
-                }
-            }
-        }
 
         uint32 stacks = 0;
         if (value)
@@ -731,7 +562,6 @@ bool EconomyCommand::Handle(ChatHandler* handler, char const* args)
                 if (bot->CanStoreNewItem(NULL_BAG, NULL_SLOT, dest, value, stackSize) != EQUIP_ERR_OK)
                     break;
                 bot->StoreNewItem(dest, value, true);
-                TestSnapshots::ItemsCreated(bot, value, stackSize);
             }
         }
 
@@ -749,9 +579,8 @@ bool EconomyCommand::Handle(ChatHandler* handler, char const* args)
     if (sub == "mail")
     {
         // Test seam: a letter with money, as an auction payout or guild transfer will arrive later.
-        TestSnapshots::MailMoney(bot, value);
         CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
-        MailDraft(TestSnapshots::TEST_MAIL_SUBJECT, "A test letter with money.")
+        MailDraft("Honest world test", "A test letter with money.")
             .AddMoney(value)
             .SendMailTo(trans, MailReceiver(bot), MailSender(MAIL_NORMAL, 0, MAIL_STATIONERY_GM));
         CharacterDatabase.CommitTransaction(trans);

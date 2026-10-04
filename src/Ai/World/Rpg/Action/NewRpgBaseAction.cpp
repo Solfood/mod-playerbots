@@ -35,7 +35,6 @@
 #include "RandomPlayerbotMgr.h"
 #include "SharedDefines.h"
 #include "StatsWeightCalculator.h"
-#include "TestSnapshots.h"
 #include "Timer.h"
 #include "TownErrands.h"
 #include "TravelMgr.h"
@@ -1111,7 +1110,7 @@ bool NewRpgBaseAction::GoRunErrands(bool repairOnly)
         return false;
 
     NewRpgInfo& info = botAI->rpgInfo;
-    if (TownErrands::CooldownLeftMs(info.lastErrandMs) || TestSnapshots::ErrandsPaused(bot))
+    if (TownErrands::CooldownLeftMs(info.lastErrandMs))
         return false;
 
     uint8 const errands = TownErrands::Needed(botAI, bot);

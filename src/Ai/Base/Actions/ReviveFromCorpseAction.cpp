@@ -18,7 +18,6 @@
 #include "Playerbots.h"
 #include "RandomPlayerbotMgr.h"
 #include "ServerFacade.h"
-#include "TestSnapshots.h"
 #include "WorldPacket.h"
 #include "WorldSession.h"
 #include <algorithm>
@@ -535,16 +534,11 @@ bool SpiritHealerAction::ExecuteHonest(Corpse* corpse)
     // half health, resurrection sickness, DurabilityLoss.OnSpiritResurrect, bones.
     bot->GetMotionMaster()->Clear();
     bot->StopMoving();
-    // Test seams: the spirit healer's durability cost after a check killed this bot is the check's doing.
-    TestSnapshots::Durability const testBefore =
-        TestSnapshots::SpiritHealerPending(bot) ? TestSnapshots::Capture(bot) : TestSnapshots::Durability();
     WorldPacket packet(CMSG_SPIRIT_HEALER_ACTIVATE, 8);
     packet << healer->GetGUID();
     bot->GetSession()->HandleSpiritHealerActivateOpcode(packet);
     if (!bot->IsAlive())
         return FailHonestAttempt(grave, "the spirit healer refused");
-    if (!testBefore.empty())
-        TestSnapshots::SpiritHealerUsed(bot, testBefore);
 
     LOG_DEBUG("playerbots", "Bot {} {}:{} <{}> revives at spirit healer", bot->GetGUID().ToString(),
               bot->GetTeamId() == TEAM_ALLIANCE ? "A" : "H", bot->GetLevel(), bot->GetName());

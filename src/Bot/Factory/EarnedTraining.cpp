@@ -16,7 +16,6 @@
 #include "ScriptMgr.h"
 #include "SpellInfo.h"
 #include "SpellMgr.h"
-#include "TestSnapshots.h"
 #include "Trainer.h"
 #include <algorithm>
 #include <array>
@@ -158,7 +157,6 @@ bool PayFromOwnGold(Player* bot, uint32 price, uint32 reserve)
         return false;
 
     bot->ModifyMoney(-static_cast<int32>(price));
-    TestSnapshots::Paid(bot, price);
     return true;
 }
 
@@ -264,7 +262,6 @@ void BuyGatheringTools(Player* bot, uint32 reserve, EarnedTraining::Result& resu
         }
 
         bot->StoreNewItem(dest, itemId, true);
-        TestSnapshots::ToolBought(bot, itemId, price);
         result.spent += price;
         ++result.tools;
     }

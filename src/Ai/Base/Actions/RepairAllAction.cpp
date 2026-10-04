@@ -8,7 +8,6 @@
 #include "ChatHelper.h"
 #include "Event.h"
 #include "Playerbots.h"
-#include "TestSnapshots.h"
 
 bool RepairAllAction::Execute(Event /*event*/)
 {
@@ -31,17 +30,12 @@ bool RepairAllAction::Execute(Event /*event*/)
             bot->SetMoney(10000000);
         }
 
-        // Test seams: what a check took from this bot's gear and the bot now pays to repair is booked.
-        TestSnapshots::Durability const testBefore = TestSnapshots::Capture(bot);
-
         // Repair weapons first (DurabilityRepair takes a (bag << 8) | slot position, not a bare slot).
         uint32 totalCost = 0;
         for (uint8 slot : {EQUIPMENT_SLOT_MAINHAND, EQUIPMENT_SLOT_RANGED, EQUIPMENT_SLOT_OFFHAND})
             totalCost += bot->DurabilityRepair((INVENTORY_SLOT_BAG_0 << 8) | slot, true, discountMod, false);
 
         totalCost += bot->DurabilityRepairAll(true, discountMod, false);
-        if (!testBefore.empty())
-            TestSnapshots::Repaired(bot, testBefore, discountMod);
 
         if (botAI->HasCheat(BotCheatMask::gold))
         {
