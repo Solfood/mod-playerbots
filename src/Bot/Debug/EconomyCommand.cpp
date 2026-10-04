@@ -408,6 +408,9 @@ bool EconomyCommand::Handle(ChatHandler* handler, char const* args)
         bot->GetMotionMaster()->Clear();
         bot->StopMoving();
         bot->TeleportTo(bot->GetMapId(), x, y, z, bot->GetOrientation());
+        // Land now (as the bot's own update would) and forget what it saw at the old spot.
+        botAI->HandleTeleportAck();
+        botAI->GetAiObjectContext()->GetUntypedValue("nearest npcs")->Reset();
         handler->PSendSysMessage("ECONOK {} ghost at map={} x={} y={} z={}", bot->GetName(), bot->GetMapId(), x, y,
                                  z);
         return true;
