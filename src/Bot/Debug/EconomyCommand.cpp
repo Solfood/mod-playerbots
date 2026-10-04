@@ -227,7 +227,8 @@ bool EconomyCommand::Handle(ChatHandler* handler, char const* args)
     {
         // Test seam for the death knight chain fallback without a real raising: brings one of the never-played
         // death knights the bot accounts were created with into the population (marked raised so the login gate
-        // lets it in), and takes it out again. Refuses any death knight a raising created.
+        // lets it in) and logs it in, and takes it out again (logged out by the population manager). Refuses any
+        // death knight a raising created.
         ObjectGuid const guid = sCharacterCache->GetCharacterGuidByName(words[1]);
         CharacterCacheEntry const* entry = guid.IsEmpty() ? nullptr : sCharacterCache->GetCharacterCacheByGuid(guid);
         if (!entry || entry->Class != CLASS_DEATH_KNIGHT || !sPlayerbotAIConfig.IsInRandomAccountList(entry->AccountId))
@@ -250,6 +251,10 @@ bool EconomyCommand::Handle(ChatHandler* handler, char const* args)
             }
             sRandomPlayerbotMgr.MarkRaised(low);
             sRandomPlayerbotMgr.AddToPopulation(low);
+            // The population manager only logs bots in below its bot count, and the world is at it: log in now
+            // (as ProcessBot does). One over the count until dklogout; nothing tops up or trims meanwhile.
+            if (!ObjectAccessor::FindPlayer(guid))
+                sRandomPlayerbotMgr.AddPlayerBot(guid, 0);
         }
         else
         {
