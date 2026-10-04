@@ -5,16 +5,22 @@
  */
 
 #include "ReviveFromCorpseAction.h"
+#include "CellImpl.h"
 #include "Corpse.h"
 #include "Event.h"
 #include "FixedPopulation.h"
 #include "FleeManager.h"
 #include "GameGraveyard.h"
+#include "GridNotifiers.h"
+#include "GridNotifiersImpl.h"
 #include "MapMgr.h"
 #include "PlayerbotTextMgr.h"
 #include "Playerbots.h"
 #include "RandomPlayerbotMgr.h"
 #include "ServerFacade.h"
+#include "WorldPacket.h"
+#include "WorldSession.h"
+#include <algorithm>
 
 bool ReviveFromCorpseAction::Execute(Event event)
 {
@@ -309,12 +315,14 @@ bool SpiritHealerAction::Execute(Event /*event*/)
         return false;
     }
 
+    // Honest world: healer found without line of sight, walked to, core handler, bounded tries.
+    if (sPlayerbotAIConfig.fixedPopulation)
+        return ExecuteHonest(corpse);
+
     uint32 dCount = AI_VALUE(uint32, "death count");
     int64 deadTime = time(nullptr) - corpse->GetGhostTime();
 
-    // Honest world: always the nearest graveyard. The start-zone graveyard is a free trip across the world.
-    bool const startZone = !sPlayerbotAIConfig.fixedPopulation &&
-                           (dCount > 10 || deadTime > 15 * MINUTE || AI_VALUE(uint8, "durability") < 10);
+    bool const startZone = dCount > 10 || deadTime > 15 * MINUTE || AI_VALUE(uint8, "durability") < 10;
     GraveyardStruct const* ClosestGrave = GetGrave(startZone);
     if (!ClosestGrave)
         return false;
@@ -329,22 +337,11 @@ bool SpiritHealerAction::Execute(Event /*event*/)
             {
                 LOG_DEBUG("playerbots", "Bot {} {}:{} <{}> revives at spirit healer", bot->GetGUID().ToString().c_str(),
                           bot->GetTeamId() == TEAM_ALLIANCE ? "A" : "H", bot->GetLevel(), bot->GetName());
-                if (sPlayerbotAIConfig.fixedPopulation)
-                {
-                    // The core's own spirit-healer resurrection: half health, resurrection sickness,
-                    // DurabilityLoss.OnSpiritResurrect, bones, graveyard nearest the corpse.
-                    bot->GetSession()->SendSpiritResurrect();
+                PlayerbotChatHandler ch(bot);
+                bot->ResurrectPlayer(0.5f);
+                bot->SpawnCorpseBones();
+                if (dCount > 20)
                     context->GetValue<uint32>("death count")->Set(0);
-                    FixedPopulation::Count(EconomyCounter::SpiritHealerResurrections);
-                }
-                else
-                {
-                    PlayerbotChatHandler ch(bot);
-                    bot->ResurrectPlayer(0.5f);
-                    bot->SpawnCorpseBones();
-                    if (dCount > 20)
-                        context->GetValue<uint32>("death count")->Set(0);
-                }
                 context->GetValue<Unit*>("current target")->Set(nullptr);
                 bot->SetTarget();
                 botAI->TellMaster(PlayerbotTextMgr::instance().GetBotTextOrDefault("hello", "Hello", {}));
@@ -378,3 +375,178 @@ bool SpiritHealerAction::Execute(Event /*event*/)
 }
 
 bool SpiritHealerAction::isUseful() { return bot->HasPlayerFlag(PLAYER_FLAGS_GHOST); }
+
+void SpiritHealerAction::ResetHonestAttempts()
+{
+    honestAttempts = 0;
+    honestSince = 0;
+}
+
+GraveyardStruct const* SpiritHealerAction::GetHonestGrave()
+{
+    GraveyardStruct const* closest = sGraveyard->GetClosestGraveyard(bot, bot->GetTeamId());
+    auto const avoided = [this](GraveyardStruct const* grave)
+    { return std::find(avoidGraves.begin(), avoidGraves.end(), grave->ID) != avoidGraves.end(); };
+    if (!closest || !avoided(closest))
+        return closest;
+
+    // The nearest graveyard's healer could not be reached: the next nearest graveyard of this zone/area
+    // that is friendly to the bot's faction, on the same map (a walk, never a resurrection).
+    GraveyardStruct const* best = nullptr;
+    float bestDist = 0.0f;
+    for (auto const& [id, grave] : sGraveyard->GetGraveyardData())
+    {
+        if (grave.Map != bot->GetMapId() || avoided(&grave))
+            continue;
+        GraveyardData const* link = sGraveyard->FindGraveyardData(id, bot->GetZoneId());
+        if (!link)
+            link = sGraveyard->FindGraveyardData(id, bot->GetAreaId());
+        if (!link || !link->IsNeutralOrFriendlyToTeam(bot->GetTeamId()))
+            continue;
+        float const dist = bot->GetDistance(grave.x, grave.y, grave.z);
+        if (!best || dist < bestDist)
+        {
+            best = &grave;
+            bestDist = dist;
+        }
+    }
+    if (best)
+        return best;
+
+    // Every graveyard of the zone was given up on: start over (still no free resurrection).
+    LOG_INFO("playerbots", "Bot {} <{}> gave up on every graveyard of zone {}; trying them again",
+             bot->GetGUID().ToString(), bot->GetName(), bot->GetZoneId());
+    avoidGraves.clear();
+    return closest;
+}
+
+Creature* SpiritHealerAction::FindSpiritHealer(GraveyardStruct const* grave)
+{
+    // No line-of-sight filter: a statue between the graveyard point and its healer must not hide it.
+    std::list<Unit*> units;
+    Acore::AnyUnitInObjectRangeCheck check(bot, sPlayerbotAIConfig.sightDistance);
+    Acore::UnitListSearcher<Acore::AnyUnitInObjectRangeCheck> searcher(bot, units, check);
+    Cell::VisitObjects(bot, searcher, sPlayerbotAIConfig.sightDistance);
+
+    Creature* best = nullptr;
+    float bestDist = 0.0f;
+    for (Unit* unit : units)
+    {
+        Creature* creature = unit->ToCreature();
+        if (!creature || !creature->HasNpcFlag(UNIT_NPC_FLAG_SPIRITHEALER) || !creature->IsInWorld())
+            continue;
+        if (!(creature->GetCreatureTemplate()->type_flags & CREATURE_TYPE_FLAG_VISIBLE_TO_GHOSTS))
+            continue;
+        if (creature->GetReactionTo(bot) <= REP_UNFRIENDLY)
+            continue;
+        float const dist = creature->GetDistance(grave->x, grave->y, grave->z);
+        if (dist > sPlayerbotAIConfig.spiritHealerGraveRadius)
+            continue;
+        if (!best || dist < bestDist)
+        {
+            best = creature;
+            bestDist = dist;
+        }
+    }
+    return best;
+}
+
+bool SpiritHealerAction::FailHonestAttempt(GraveyardStruct const* grave, char const* reason)
+{
+    // A failed try is not a death: the death count is left alone.
+    ++honestAttempts;
+    LOG_DEBUG("playerbots", "Bot {} <{}> spirit healer try {} at graveyard {} failed: {}",
+              bot->GetGUID().ToString(), bot->GetName(), honestAttempts, grave->ID, reason);
+    return false;
+}
+
+bool SpiritHealerAction::ExecuteHonest(Corpse* corpse)
+{
+    // A new death starts with a clean slate.
+    if (corpse->GetGhostTime() != honestGhostTime)
+    {
+        honestGhostTime = corpse->GetGhostTime();
+        avoidGraves.clear();
+        honestGrave = 0;
+        ResetHonestAttempts();
+    }
+
+    GraveyardStruct const* grave = GetHonestGrave();
+    if (!grave)
+        return false;
+    if (grave->ID != honestGrave)
+    {
+        honestGrave = grave->ID;
+        ResetHonestAttempts();
+    }
+
+    if (bot->isMoving())
+        return true;
+
+    // Far from the graveyard: walk there; if no path, the core's ghost relocation to that graveyard
+    // (what releasing the spirit does). Neither resurrects nor counts as a death.
+    if (bot->GetMapId() != grave->Map ||
+        bot->GetDistance2d(grave->x, grave->y) >= sPlayerbotAIConfig.sightDistance)
+    {
+        if (MoveTo(grave->Map, grave->x, grave->y, grave->z, false, false))
+            return true;
+        bot->RemoveAurasWithInterruptFlags(AURA_INTERRUPT_FLAG_TELEPORTED | AURA_INTERRUPT_FLAG_CHANGE_MAP);
+        return bot->TeleportTo(grave->Map, grave->x, grave->y, grave->z, 0.f);
+    }
+
+    time_t const now = time(nullptr);
+    if (!honestSince)
+        honestSince = now;
+    if (honestAttempts >= sPlayerbotAIConfig.spiritHealerMaxAttempts ||
+        now - honestSince > static_cast<time_t>(sPlayerbotAIConfig.spiritHealerMaxSeconds))
+    {
+        LOG_INFO("playerbots", "Bot {} <{}> could not reach the spirit healer of graveyard {} ({} tries, {}s); "
+                 "going to the next graveyard", bot->GetGUID().ToString(), bot->GetName(), grave->ID,
+                 honestAttempts, now - honestSince);
+        avoidGraves.push_back(grave->ID);
+        honestGrave = 0;
+        ResetHonestAttempts();
+        return true;
+    }
+
+    Creature* healer = FindSpiritHealer(grave);
+    if (!healer)
+    {
+        // No healer known near this graveyard: stand on the graveyard point (never re-teleport onto it).
+        if (bot->GetDistance2d(grave->x, grave->y) > 1.0f &&
+            MoveTo(grave->Map, grave->x, grave->y, grave->z, false, false))
+            return true;
+        return FailHonestAttempt(grave, "no spirit healer near the graveyard");
+    }
+
+    if (!bot->IsWithinDistInMap(healer, INTERACTION_DISTANCE))
+    {
+        // Pathfinding walks round whatever blocks the straight line (Shadowglen's statue).
+        if (MoveTo(healer->GetMapId(), healer->GetPositionX(), healer->GetPositionY(), healer->GetPositionZ(), false,
+                   false))
+            return true;
+        return FailHonestAttempt(grave, "cannot walk to the spirit healer");
+    }
+
+    // The core's own handler, exactly as a player's click: distance, faction and ghost checks, then
+    // half health, resurrection sickness, DurabilityLoss.OnSpiritResurrect, bones.
+    bot->GetMotionMaster()->Clear();
+    bot->StopMoving();
+    WorldPacket packet(CMSG_SPIRIT_HEALER_ACTIVATE, 8);
+    packet << healer->GetGUID();
+    bot->GetSession()->HandleSpiritHealerActivateOpcode(packet);
+    if (!bot->IsAlive())
+        return FailHonestAttempt(grave, "the spirit healer refused");
+
+    LOG_DEBUG("playerbots", "Bot {} {}:{} <{}> revives at spirit healer", bot->GetGUID().ToString(),
+              bot->GetTeamId() == TEAM_ALLIANCE ? "A" : "H", bot->GetLevel(), bot->GetName());
+    context->GetValue<uint32>("death count")->Set(0);
+    FixedPopulation::Count(EconomyCounter::SpiritHealerResurrections);
+    avoidGraves.clear();
+    honestGrave = 0;
+    ResetHonestAttempts();
+    context->GetValue<Unit*>("current target")->Set(nullptr);
+    bot->SetTarget();
+    botAI->TellMaster(PlayerbotTextMgr::instance().GetBotTextOrDefault("hello", "Hello", {}));
+    return true;
+}

@@ -228,9 +228,10 @@ bool AutoReleaseSpiritAction::ShouldDelayBattlegroundRelease() const
 
 bool RepopAction::Execute(Event /*event*/)
 {
+    // Honest world: never the start-zone graveyard, which is a free trip across the world.
     GraveyardStruct const* graveyard = GetGrave(
-        AI_VALUE(uint32, "death count") > 10 ||
-        CalculateDeadTime() > 30 * MINUTE
+        !sPlayerbotAIConfig.fixedPopulation &&
+        (AI_VALUE(uint32, "death count") > 10 || CalculateDeadTime() > 30 * MINUTE)
     );
 
     if (!graveyard)

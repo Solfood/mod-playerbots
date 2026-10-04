@@ -808,6 +808,16 @@ AiPlayerbot.FixedPopulation.ErrandCooldownSeconds = 600
 AiPlayerbot.FixedPopulation.ProfessionMinLevel = 5
 AiPlayerbot.FixedPopulation.ProfessionMaxLevel = 10
 
+# Honest world spirit healer (only with FixedPopulation = 1). A ghost that goes to the spirit healer
+# looks for a friendly spirit healer within SpiritHealerRadius yards of its graveyard, even out of line
+# of sight, walks to it and resurrects through the normal spirit-healer handler (sickness, durability
+# loss). If it still cannot reach one after SpiritHealerMaxAttempts failed tries or SpiritHealerMaxSeconds
+# near that graveyard, it gives up on that graveyard and walks to the next nearest one of its zone.
+# Defaults: 40, 20, 300
+AiPlayerbot.FixedPopulation.SpiritHealerRadius = 40
+AiPlayerbot.FixedPopulation.SpiritHealerMaxAttempts = 20
+AiPlayerbot.FixedPopulation.SpiritHealerMaxSeconds = 300
+
 # Death knight "raisings" (only with FixedPopulation = 1). None at launch. Once a bot of a faction reaches
 # UnlockLevel, every WaveIntervalHours that faction raises bots that died within RecentDeathHours at
 # MinCandidateLevel or higher: the original character retires (kept in the database) and a level-55

@@ -365,6 +365,9 @@ public:
     uint32 fixedPopulationErrandCooldown;
     uint32 professionPickMinLevel;
     uint32 professionPickMaxLevel;
+    float spiritHealerGraveRadius;
+    uint32 spiritHealerMaxAttempts;
+    uint32 spiritHealerMaxSeconds;
     bool raisingsEnabled;
     bool raisingsDryRun;
     uint32 raisingsUnlockLevel;
