@@ -79,6 +79,14 @@ bool TownErrands::Serves(Creature const* npc, uint8 errands)
 ObjectGuid TownErrands::ChooseTarget(PlayerbotAI* botAI, Player* bot, uint8 errands, GuidVector const& nearbyNpcs,
                                      GuidSet const* skip)
 {
+    // Repair first: it is what most trips are for, and a nearer vendor or mailbox must not use up the wander.
+    if ((errands & TOWN_ERRAND_REPAIR) && errands != TOWN_ERRAND_REPAIR)
+    {
+        ObjectGuid const repairer = ChooseTarget(botAI, bot, TOWN_ERRAND_REPAIR, nearbyNpcs, skip);
+        if (!repairer.IsEmpty())
+            return repairer;
+    }
+
     for (ObjectGuid const& guid : nearbyNpcs)
     {
         if (skip && skip->count(guid))
@@ -178,6 +186,19 @@ WorldPosition TownErrands::NearestTown(Player* bot, bool ownLevelOnly)
     if (town != WorldPosition() || ownLevelOnly)
         return town;
     return TravelMgr::instance().GetNearestTravelHub(bot, TOWN_MIN_DISTANCE, maxDistance);
+}
+
+WorldPosition TownErrands::RepairTrip(Player* bot, WorldPosition const& avoid)
+{
+    float const maxDistance = bot->GetLevel() <= 5 ? TOWN_MAX_DISTANCE_LOW_LEVEL : TOWN_MAX_DISTANCE;
+    WorldPosition const repairer =
+        TravelMgr::instance().GetNearestRepairer(bot, TOWN_MIN_DISTANCE, maxDistance, avoid);
+    return repairer != WorldPosition() ? repairer : NearestTown(bot);
+}
+
+bool TownErrands::AvoidFights(PlayerbotAI* botAI, Player* bot)
+{
+    return botAI->rpgInfo.GetStatus() == RPG_GO_CAMP && PlaySafe(botAI, bot);
 }
 
 bool TownErrands::CanAffordRepair(PlayerbotAI* botAI, Player* bot)

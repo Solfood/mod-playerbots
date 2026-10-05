@@ -1117,18 +1117,22 @@ bool NewRpgBaseAction::GoRunErrands(bool repairOnly)
     if (!errands || (repairOnly && !(errands & TOWN_ERRAND_REPAIR)))
         return false;
 
-    // A serving NPC or mailbox already in reach: wander among the NPCs here, else walk to the nearest town.
+    // A serving NPC or mailbox already in reach (a repairer, for a repair errand): wander among the NPCs here,
+    // else walk to the nearest repairer (not the one of a trip given up, if there is another) or the nearest town.
     GuidVector const nearby = AI_VALUE(GuidVector, "possible new rpg targets");
-    bool const servedHere = !TownErrands::ChooseTarget(botAI, bot, errands, nearby).IsEmpty();
+    uint8 const servedErrands = (errands & TOWN_ERRAND_REPAIR) ? uint8(TOWN_ERRAND_REPAIR) : errands;
+    bool const servedHere = !TownErrands::ChooseTarget(botAI, bot, servedErrands, nearby).IsEmpty();
     WorldPosition camp;
     if (!servedHere)
     {
-        camp = TownErrands::NearestTown(bot);
+        camp = (errands & TOWN_ERRAND_REPAIR) ? TownErrands::RepairTrip(bot, info.abandonedTrip)
+                                              : TownErrands::NearestTown(bot);
         if (camp == WorldPosition())
             return false;  // no town within reach: keep playing, try again later
     }
 
     info.lastErrandMs = getMSTime();
+    info.abandonedTrip = WorldPosition();
     FixedPopulation::Count(EconomyCounter::ErrandsStarted);
     if (servedHere)
         info.ChangeToWanderNpc();

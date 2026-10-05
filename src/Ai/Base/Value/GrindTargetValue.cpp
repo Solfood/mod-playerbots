@@ -48,6 +48,10 @@ Unit* GrindTargetValue::FindTargetForGrinding(uint32 assistCount)
         return unit;
     }
 
+    // Honest world: worn-out gear on the way to town fights back but picks no fights.
+    if (TownErrands::AvoidFights(botAI, bot))
+        return nullptr;
+
     GuidVector targets = *context->GetValue<GuidVector>("possible targets");
     if (targets.empty())
         return nullptr;

@@ -90,6 +90,7 @@ struct NewRpgInfo
     uint32 startT{0};  // start timestamp of the current status
     uint32 lastErrandMs{0};  // getMSTime() of the last honest-world errand trip (0 = never)
     uint32 lastWearCheckMs{0};  // getMSTime() of the last honest-world mid-activity gear check
+    WorldPosition abandonedTrip;  // where the last town trip given up was going (the next repair trip avoids it)
 
     // MOVE_FAR
     float nearestMoveFarDis{FLT_MAX};

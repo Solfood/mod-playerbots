@@ -4528,6 +4528,42 @@ WorldPosition TravelMgr::GetNearestTravelHub(Player* bot, float minDistance, flo
     return nearest;
 }
 
+WorldPosition TravelMgr::GetNearestRepairer(Player* bot, float minDistance, float maxDistance,
+                                            WorldPosition const& avoid) const
+{
+    constexpr float AVOID_RADIUS = 30.0f;
+    auto const itr = repairersByMap.find(bot->GetMapId());
+    if (itr == repairersByMap.end())
+        return WorldPosition();
+
+    bool const horde = bot->GetTeamId() == TEAM_HORDE;
+    WorldPosition nearest, nearestAvoided;
+    float nearestDistance = maxDistance, nearestAvoidedDistance = maxDistance;
+    for (RepairerInfo const& repairer : itr->second)
+    {
+        if (!(horde ? repairer.forHorde : repairer.forAlliance) || IsZoneAboveLevel(repairer.zoneId, bot->GetLevel()))
+            continue;
+
+        float const distance = bot->GetExactDist(repairer.pos);
+        if (distance < minDistance)
+            continue;
+
+        bool const avoided = avoid != WorldPosition() && avoid.GetMapId() == repairer.pos.GetMapId() &&
+                             repairer.pos.GetExactDist(avoid) < AVOID_RADIUS;
+        if (avoided && distance <= nearestAvoidedDistance)
+        {
+            nearestAvoided = repairer.pos;
+            nearestAvoidedDistance = distance;
+        }
+        else if (!avoided && distance <= nearestDistance)
+        {
+            nearest = repairer.pos;
+            nearestDistance = distance;
+        }
+    }
+    return nearest != WorldPosition() ? nearest : nearestAvoided;
+}
+
 bool TravelMgr::IsZoneAboveLevel(uint32 zoneId, uint32 level) const
 {
     // Starting zones are listed from level 5 but are made for levels 1-12.
@@ -4713,6 +4749,16 @@ void TravelMgr::PrepareDestinationCache()
             continue;
 
         uint32 areaId = area->zone ? area->zone : area->ID;
+
+        // Honest world: repairers, where repair errands walk to (a town's inn can be far from its repairer).
+        // "[DND]" templates are the test realm's vendor pedestals.
+        if (sPlayerbotAIConfig.fixedPopulation && (creatureTemplate->npcflag & UNIT_NPC_FLAG_REPAIR) &&
+            creatureTemplate->Name.rfind("[DND]", 0) != 0)
+        {
+            if (FactionTemplateEntry const* faction = sFactionTemplateStore.LookupEntry(creatureTemplate->faction))
+                repairersByMap[mapId].push_back({WorldPosition(mapId, x, y, z, orient), areaId,
+                                                 !(faction->hostileMask & 4), !(faction->hostileMask & 2)});
+        }
 
         // CREATURES
         if (creatureTemplate->npcflag == 0 &&

@@ -268,6 +268,7 @@ bool NewRpgStatusUpdateAction::CheckWornGearAndTownTrip(NewRpgStatus status)
         LOG_DEBUG("playerbots", "[New RPG] Bot {} gives up a town trip after {} s", bot->GetName(),
                   GetMSTimeDiffToNow(info.startT) / IN_MILLISECONDS);
         info.lastErrandMs = getMSTime();
+        info.abandonedTrip = std::get<NewRpgInfo::GoCamp>(info.data).pos;
         FixedPopulation::Count(EconomyCounter::TownTripsAbandoned);
         info.ChangeToIdle();
         return true;

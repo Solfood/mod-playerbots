@@ -32,9 +32,9 @@ public:
     // money for a repair. Not called every tick (the mid-activity check is throttled).
     static uint8 Needed(PlayerbotAI* botAI, Player* bot);
     static bool Serves(Creature const* npc, uint8 errands);
-    // The nearest NPC in `nearbyNpcs` (sorted nearest first) that serves `errands`, else a nearby mailbox
-    // when mail is waiting, else an empty guid. NPCs and mailboxes in `skip` (already reached during this
-    // wander) are passed over, so a need they could not meet doesn't pin the bot to them.
+    // The nearest NPC in `nearbyNpcs` (sorted nearest first) that serves `errands` (a repairer first when REPAIR
+    // is among them), else a nearby mailbox when mail is waiting, else an empty guid. NPCs and mailboxes in `skip`
+    // (already reached during this wander) are passed over, so a need they could not meet doesn't pin the bot.
     static ObjectGuid ChooseTarget(PlayerbotAI* botAI, Player* bot, uint8 errands, GuidVector const& nearbyNpcs,
                                    GuidSet const* skip = nullptr);
     static uint32 CollectableMailCount(Player* bot);
@@ -47,6 +47,11 @@ public:
     // bracket, else (unless `ownLevelOnly`) of any level bracket, so a bot that outgrew its zone still finds
     // the zone's town. Empty WorldPosition if none.
     static WorldPosition NearestTown(Player* bot, bool ownLevelOnly = false);
+    // Where a repair errand walks to: the nearest repairer of the bot's faction on its map in a zone not above its
+    // level, passing over `avoid` (the target of a trip it gave up) while another is in reach; else NearestTown.
+    static WorldPosition RepairTrip(Player* bot, WorldPosition const& avoid = WorldPosition());
+    // Worn-out gear on the way to town (honest world, PlaySafe, GO_CAMP): fight back, but pick no fights.
+    static bool AvoidFights(PlayerbotAI* botAI, Player* bot);
 
     // Repair is worth a trip when the bot can pay for its weapons (the core repairs them first, then item by
     // item as far as the money goes), counting the junk it sells to the vendor first. With whole weapons: the

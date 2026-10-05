@@ -885,6 +885,12 @@ public:
     // True when the zone's level range starts above `level` (starting zones count as open to every level;
     // zones without a known range are never above). Read-only.
     bool IsZoneAboveLevel(uint32 zoneId, uint32 level) const;
+    // Honest world (AiPlayerbot.FixedPopulation): the nearest repairer friendly to the bot's faction on its map,
+    // between minDistance and maxDistance yards away, in a zone whose level range does not start above the bot's
+    // level. A repairer within 30 yards of `avoid` is passed over while another one is in reach. An empty
+    // WorldPosition when there is none. Read-only (the index is built at startup).
+    WorldPosition GetNearestRepairer(Player* bot, float minDistance, float maxDistance,
+                                     WorldPosition const& avoid = WorldPosition()) const;
     std::vector<WorldLocation> GetCityLocations(Player* bot);
     std::vector<uint32> GetFlightNodesInZone(uint32 zoneId, TeamId team, uint32 excludeNode = 0) const;
     bool SelectAuctioneerByMap(Player* bot, NpcLocation& outAuctioneer);
@@ -992,6 +998,14 @@ private:
         bool InsideBracket(uint32 val) const { return val >= low && val <= high; }
     };
 
+    struct RepairerInfo
+    {
+        WorldPosition pos;
+        uint32 zoneId;
+        bool forHorde;
+        bool forAlliance;
+    };
+
     struct BankerLocation
     {
         WorldLocation loc;
@@ -1008,6 +1022,7 @@ private:
     std::map<uint8, std::vector<WorldLocation>> locsPerLevelCache;
     std::unordered_map<uint32, std::vector<WorldLocation>> creatureSpawnsByTemplate;
     std::map<uint32, LevelBracket> zone2LevelBracket;
+    std::unordered_map<uint32, std::vector<RepairerInfo>> repairersByMap;  // honest world only
 };
 
 #define sTravelMgr TravelMgr::instance()
