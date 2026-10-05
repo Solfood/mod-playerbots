@@ -222,6 +222,13 @@ bool RaisingMgr::Begin(Player* original, std::string& reason, bool failCreate, b
         reason = "not a random bot";
         return false;
     }
+    // The guildmaster bridge holds a bot while it restores it or lends it to a dungeon run: it may be deleted and
+    // loaded back, or be on its way into an instance.
+    if (sRandomPlayerbotMgr.IsHeld(original->GetGUID().GetCounter()))
+    {
+        reason = "held by the guildmaster bridge";
+        return false;
+    }
     if (original->getClass() == CLASS_DEATH_KNIGHT)
     {
         reason = "already a death knight";

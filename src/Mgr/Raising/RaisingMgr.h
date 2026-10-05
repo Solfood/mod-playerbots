@@ -39,6 +39,15 @@ public:
     // True while a raising is between "original taken out" and "death knight or original back in". The
     // population manager must not top the population up meanwhile, or it ends one bot over its size.
     bool HasActive() const { return !_active.empty(); }
+    // True while `guid` is the original or the death knight of an unfinished raising (the guildmaster bridge
+    // refuses to restore it meanwhile). World thread.
+    bool IsRaising(ObjectGuid::LowType guid) const
+    {
+        for (Raising const& raising : _active)
+            if (raising.oldGuid == guid || raising.newGuid == guid)
+                return true;
+        return false;
+    }
 
     // Called on the bot's map thread when it dies (OnPlayerJustDied): remembers recent deaths at
     // MinCandidateLevel or higher, the candidates of the next wave.
