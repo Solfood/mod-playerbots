@@ -4958,4 +4958,33 @@ void TravelMgr::PrepareDestinationCache()
         }
     }
     LOG_INFO("playerbots", ">> {} flight masters and {} innkeepers and {} banker locations for level collected.", flightMastersCount, innkeepersCount, bankerCount);
+
+    // Honest world: keep only town repairers (near an inn, camp or flight master). A lone vendor out in the
+    // wilds (the Defias Profiteer in Moonbrook) is no place to send a bot on worn-out gear.
+    if (!repairersByMap.empty())
+    {
+        constexpr float TOWN_RADIUS = 300.0f;
+        std::vector<WorldLocation> towns;
+        for (auto const* hubs : {&allianceHubsPerLevelCache, &hordeHubsPerLevelCache})
+            for (auto const& [level, locs] : *hubs)
+                towns.insert(towns.end(), locs.begin(), locs.end());
+        for (auto const* masters : {&allianceFlightMasterCache, &hordeFlightMasterCache})
+            for (auto const& [guid, info] : *masters)
+                towns.push_back(info.pos);
+
+        uint32 kept = 0;
+        for (auto& [mapId, repairers] : repairersByMap)
+        {
+            auto const inTown = [&towns, mapId](RepairerInfo const& repairer)
+            {
+                for (WorldLocation const& town : towns)
+                    if (town.GetMapId() == mapId && repairer.pos.GetExactDist(town) < TOWN_RADIUS)
+                        return true;
+                return false;
+            };
+            std::erase_if(repairers, [&inTown](RepairerInfo const& repairer) { return !inTown(repairer); });
+            kept += repairers.size();
+        }
+        LOG_INFO("playerbots", ">> {} town repairers for honest-world repair trips.", kept);
+    }
 }
