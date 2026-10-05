@@ -2830,7 +2830,11 @@ void RandomPlayerbotMgr::OnBotLoginInternal(Player* const bot)
     }
 
     // Run guild recovery/assignment at login to handle empty guild tables after restart.
-    if (sPlayerbotAIConfig.randomBotGuildCount > 0)
+    // Honest world: only population bots join bot guilds. Characters logged in masterless from outside the
+    // population (the guildmaster bridge's clones and the guild leader it logs in to found a guild) must stay
+    // guildless until the bridge places them.
+    bool const guildable = !sPlayerbotAIConfig.fixedPopulation || IsRandomBot(bot);
+    if (sPlayerbotAIConfig.randomBotGuildCount > 0 && guildable)
     {
         PlayerbotFactory factory(bot, bot->GetLevel());
         factory.InitGuild();
