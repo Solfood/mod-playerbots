@@ -1393,8 +1393,35 @@ void RandomPlayerbotMgr::RemoveFromPopulation(uint32 bot)
 
 void RandomPlayerbotMgr::MarkRaised(uint32 bot) { SetEventValue(bot, "raised", 1, 0); }
 
+void RandomPlayerbotMgr::Hold(uint32 bot)
+{
+    std::lock_guard<std::mutex> lock(_heldMutex);
+    _held.insert(bot);
+}
+
+void RandomPlayerbotMgr::Release(uint32 bot)
+{
+    std::lock_guard<std::mutex> lock(_heldMutex);
+    _held.erase(bot);
+}
+
+bool RandomPlayerbotMgr::IsHeld(uint32 bot) const
+{
+    std::lock_guard<std::mutex> lock(_heldMutex);
+    return _held.count(bot) != 0;
+}
+
+bool RandomPlayerbotMgr::HasHeld() const
+{
+    std::lock_guard<std::mutex> lock(_heldMutex);
+    return !_held.empty();
+}
+
 bool RandomPlayerbotMgr::ProcessBot(uint32 bot)
 {
+    if (IsHeld(bot))
+        return false;  // the guildmaster bridge has it (restore or dungeon run)
+
     ObjectGuid botGUID = ObjectGuid::Create<HighGuid::Player>(bot);
     Player* player = GetPlayerBot(botGUID);
     PlayerbotAI* botAI = player ? GET_PLAYERBOT_AI(player) : nullptr;
@@ -1515,6 +1542,8 @@ bool RandomPlayerbotMgr::ProcessBot(uint32 bot)
 
 bool RandomPlayerbotMgr::ProcessBot(Player* bot)
 {
+    if (bot && IsHeld(bot->GetGUID().GetCounter()))
+        return false;
 
     PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
     if (!botAI)

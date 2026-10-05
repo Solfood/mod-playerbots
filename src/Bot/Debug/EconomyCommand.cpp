@@ -116,7 +116,8 @@ void Show(ChatHandler* handler, Player* bot)
 
     handler->PSendSysMessage(
         "ECON name={} guid={} level={} money={} durability={} bags={} dead={} ghost={} sick={} riding={} prof={} "
-        "deaths={} rpg={} spells={} randomize={} teleport={} revive={} mounts={} mail={} tools={} map={} zone={}",
+        "deaths={} rpg={} spells={} randomize={} teleport={} revive={} mounts={} mail={} tools={} map={} zone={} "
+        "held={} focus={} stucktp={}",
         bot->GetName(), botId, bot->GetLevel(), bot->GetMoney(), context->GetValue<uint8>("durability")->Get(),
         context->GetValue<uint8>("bag space")->Get(), bot->isDead() ? 1 : 0,
         bot->HasPlayerFlag(PLAYER_FLAGS_GHOST) ? 1 : 0, bot->HasAura(SPELL_RESURRECTION_SICKNESS) ? 1 : 0, riding,
@@ -126,7 +127,8 @@ void Show(ChatHandler* handler, Player* bot)
         mounts, TownErrands::CollectableMailCount(bot),
         bot->GetItemCount(EarnedTraining::ITEM_MINING_PICK, true) +
             bot->GetItemCount(EarnedTraining::ITEM_SKINNING_KNIFE, true),
-        bot->GetMapId(), bot->GetZoneId());
+        bot->GetMapId(), bot->GetZoneId(), sRandomPlayerbotMgr.IsHeld(botId) ? 1 : 0, botAI->rpgInfo.focus,
+        botAI->rpgInfo.stuckTeleports);
 }
 
 void Active(ChatHandler* handler)
@@ -215,7 +217,8 @@ bool EconomyCommand::Handle(ChatHandler* handler, char const* args)
             "ECONERR usage: econ show|kill|wear|money|due|deaths|idle|wander|camp|forget|errands|mail|fillbags|raise "
             "<name> [value] | econ raise <name> [failcreate|failsave] | econ active | econ stats | econ census | "
             "econ picktable <classId> <rolls> | econ raisings | econ dkchain <name> [check] | "
-            "econ dklogin|dklogout <name> | econ ghostat <name> <map> <x> <y> <z>");
+            "econ dklogin|dklogout <name> | econ ghostat <name> <map> <x> <y> <z> | econ hold|holdout|release <name> | "
+            "econ focus <name> <0-5> | econ outsider|outsiderout <name>");
         return false;
     }
     std::string const& sub = words[0];
@@ -331,6 +334,43 @@ bool EconomyCommand::Handle(ChatHandler* handler, char const* args)
         return true;
     }
 
+    if (sub == "release" && words.size() > 1)
+    {
+        // Guildmaster bridge: works for an offline bot (a held bot is usually logged out).
+        std::string name = words[1];
+        normalizePlayerName(name);
+        ObjectGuid const guid = sCharacterCache->GetCharacterGuidByName(name);
+        if (!guid)
+        {
+            handler->PSendSysMessage("ECONERR no character named {}", name);
+            return false;
+        }
+        sRandomPlayerbotMgr.Release(guid.GetCounter());
+        handler->PSendSysMessage("ECONOK {} released", name);
+        return true;
+    }
+
+    if ((sub == "outsider" || sub == "outsiderout") && words.size() > 1)
+    {
+        // Test seam (preflight C3): logs a bot-account character in masterless, the way the guildmaster bridge
+        // logs its clones and guild leader in, without putting it in the population; and logs it out again.
+        // Refuses population bots. Such a bot must not use up the population's login budget.
+        ObjectGuid const guid = sCharacterCache->GetCharacterGuidByName(words[1]);
+        CharacterCacheEntry const* entry = guid.IsEmpty() ? nullptr : sCharacterCache->GetCharacterCacheByGuid(guid);
+        if (!entry || !sPlayerbotAIConfig.IsInRandomAccountList(entry->AccountId) ||
+            sRandomPlayerbotMgr.IsRandomBot(guid.GetCounter()))
+        {
+            handler->PSendSysMessage("ECONERR {} is not a bot-account character outside the population", words[1]);
+            return false;
+        }
+        if (sub == "outsider" && !ObjectAccessor::FindPlayer(guid))
+            sRandomPlayerbotMgr.AddPlayerBot(guid, 0);
+        else if (sub == "outsiderout" && sRandomPlayerbotMgr.GetPlayerBot(guid))
+            sRandomPlayerbotMgr.LogoutPlayerBot(guid);
+        handler->PSendSysMessage("ECONOK {} {} guid={}", sub, words[1], guid.GetCounter());
+        return true;
+    }
+
     if (words.size() < 2)
     {
         handler->PSendSysMessage("ECONERR {} needs a bot name", sub);
@@ -345,6 +385,21 @@ bool EconomyCommand::Handle(ChatHandler* handler, char const* args)
     if (sub == "show")
     {
         Show(handler, bot);
+        return true;
+    }
+    if (sub == "hold" || sub == "holdout")
+    {
+        std::string const name = bot->GetName();  // logout deletes the Player
+        sRandomPlayerbotMgr.Hold(bot->GetGUID().GetCounter());
+        if (sub == "holdout")
+            sRandomPlayerbotMgr.LogoutPlayerBot(bot->GetGUID());
+        handler->PSendSysMessage("ECONOK {} held{}", name, sub == "holdout" ? " and logged out" : "");
+        return true;
+    }
+    if (sub == "focus" && words.size() > 2)
+    {
+        botAI->rpgInfo.focus = static_cast<uint8>(std::min<uint32>(value, 5));
+        handler->PSendSysMessage("ECONOK {} focus={}", bot->GetName(), botAI->rpgInfo.focus);
         return true;
     }
     if (sub == "kill")

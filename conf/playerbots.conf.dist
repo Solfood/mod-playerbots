@@ -1531,6 +1531,15 @@ AiPlayerbot.RpgStatusProbWeight.Rest = 5
 AiPlayerbot.RpgStatusProbWeight.OutdoorPvp = 10
 AiPlayerbot.RpgStatusProbWeight.DoGather = 15
 
+#    AiPlayerbot.RpgFocusMultiplier
+#        Description: Guildmaster bridge focus. A bot with a focus picks the matching new-RPG activities this
+#                     many times more often (questing: DoQuest, TravelFlight; grinding: GoGrind, WanderRandom;
+#                     pvp: OutdoorPvp; gathering: DoGather; resting: Rest, WanderNpc, GoCamp). A bot without a
+#                     focus (the default; only the bridge sets one) is unaffected.
+#        Default:     6
+
+AiPlayerbot.RpgFocusMultiplier = 6
+
 # Bots' minimum and maximum level when teleporting in and out of a zone, according to the new RPG strategy
 # Format: AiPlayerbot.ZoneBracket.zoneID = minLevel,maxLevel
 #

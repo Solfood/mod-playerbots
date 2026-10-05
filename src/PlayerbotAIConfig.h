@@ -417,6 +417,7 @@ public:
     bool autoDoQuests;
     bool enableNewRpgStrategy;
     std::unordered_map<NewRpgStatus, uint32> RpgStatusProbWeight;
+    uint32 rpgFocusMultiplier;  // guildmaster bridge: weight multiplier for a bot's focus statuses
     bool syncLevelWithPlayers;
     bool randomBotConcentrateInPlayerZone;
     bool autoLearnQuestSpells;

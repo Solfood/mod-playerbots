@@ -12,6 +12,7 @@
 #include "ObjectGuid.h"
 #include "PlayerbotCommandServer.h"
 #include "PlayerbotMgr.h"
+#include <mutex>
 #include <unordered_set>
 
 struct BattlegroundInfo
@@ -149,6 +150,15 @@ public:
     // turn) or take one out (the manager logs it out on its next turn).
     void AddToPopulation(uint32 bot);
     void RemoveFromPopulation(uint32 bot);
+    // Guildmaster bridge: a held bot is left alone by the population manager (no login, logout, re-roll,
+    // teleport or revive) while the bridge restores it or lends it to a dungeon run. It stays in the
+    // population, so nothing is logged in in its place. Thread-safe.
+    void Hold(uint32 bot);
+    void Release(uint32 bot);
+    bool IsHeld(uint32 bot) const;
+    bool HasHeld() const;
+    // Guildmaster bridge: how many bots the population has (held ones included). World thread.
+    uint32 PopulationSize() const { return static_cast<uint32>(currentBots.size()); }
     // Honest world: a raised death knight may log in (the Death Knight login gate lets it through). Never expires.
     void MarkRaised(uint32 bot);
     ObjectGuid GetBattleMasterGUID(Player* bot, BattlegroundTypeId bgTypeId);
@@ -259,6 +269,8 @@ private:
     std::map<TeamId, std::map<BattlegroundTypeId, std::vector<uint32>>> BattleMastersCache;
     std::unordered_map<uint32, BotEventCache> eventCache;
     std::unordered_set<uint32> currentBots;
+    mutable std::mutex _heldMutex;
+    std::unordered_set<uint32> _held;
     uint32 playersLevel;
 
     // Account lists

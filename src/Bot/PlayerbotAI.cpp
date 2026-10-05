@@ -922,10 +922,14 @@ void PlayerbotAI::Reset(bool full)
             ->setTarget(TravelMgr::instance().nullTravelDestination, TravelMgr::instance().nullWorldPosition, true);
         aiObjectContext->GetValue<TravelTarget*>("travel target")->Get()->setStatus(TRAVEL_STATUS_EXPIRED);
         aiObjectContext->GetValue<TravelTarget*>("travel target")->Get()->setExpireIn(1000);
-        // Keep the honest-world errand cooldown across a reset (teleport, "reset"): no errand loop.
-        uint32 const lastErrandMs = rpgInfo.lastErrandMs;
-        rpgInfo = NewRpgInfo();
-        rpgInfo.lastErrandMs = lastErrandMs;
+        // Keep across a reset (teleport, "reset"): the honest-world errand cooldown (no errand loop), and the
+        // guildmaster bridge's focus and stuck-teleport record (a stuck teleport resets the AI right after it counts).
+        NewRpgInfo fresh;
+        fresh.lastErrandMs = rpgInfo.lastErrandMs;
+        fresh.focus = rpgInfo.focus;
+        fresh.stuckTeleports = rpgInfo.stuckTeleports;
+        fresh.lastStuckDest = rpgInfo.lastStuckDest;
+        rpgInfo = std::move(fresh);
     }
 
     aiObjectContext->GetValue<GuidSet&>("ignore rpg target")->Get().clear();

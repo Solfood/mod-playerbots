@@ -92,6 +92,31 @@ struct NewRpgInfo
     uint32 lastWearCheckMs{0};  // getMSTime() of the last honest-world mid-activity gear check
     WorldPosition abandonedTrip;  // where the last town trip given up was going (the next repair trip avoids it)
 
+    // Guildmaster bridge focus (0 none, 1 questing, 2 grinding, 3 pvp, 4 gathering, 5 resting; the bridge's
+    // Focus enum uses the same numbers). Multiplies the weights of matching statuses in RandomChangeStatus.
+    uint8 focus{0};
+    static bool FocusBoosts(uint8 focus, NewRpgStatus status)
+    {
+        switch (focus)
+        {
+            case 1:
+                return status == RPG_DO_QUEST || status == RPG_TRAVEL_FLIGHT;
+            case 2:
+                return status == RPG_GO_GRIND || status == RPG_WANDER_RANDOM;
+            case 3:
+                return status == RPG_OUTDOOR_PVP;
+            case 4:
+                return status == RPG_DO_GATHER;
+            case 5:
+                return status == RPG_REST || status == RPG_WANDER_NPC || status == RPG_GO_CAMP;
+            default:
+                return false;
+        }
+    }
+    // Stuck teleports in MoveFarTo (the stuck detector's "repeated path failures"), and where it was going.
+    uint32 stuckTeleports{0};
+    WorldPosition lastStuckDest;
+
     // MOVE_FAR
     float nearestMoveFarDis{FLT_MAX};
     uint32 stuckTs{0};

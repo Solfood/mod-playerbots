@@ -116,6 +116,8 @@ bool NewRpgBaseAction::MoveFarTo(WorldPosition dest)
         // No meaningful progress toward dest for `stuckTime`: fall
         // back to teleporting directly so the bot can get on with
         // its RPG objective instead of oscillating indefinitely.
+        ++botAI->rpgInfo.stuckTeleports;
+        botAI->rpgInfo.lastStuckDest = dest;
         botAI->rpgInfo.stuckTs = getMSTime();
         botAI->rpgInfo.stuckAttempts = 0;
         AreaTableEntry const* entry = sAreaTableStore.LookupEntry(bot->GetZoneId());
@@ -1151,17 +1153,25 @@ bool NewRpgBaseAction::IsQuestTooHardForWornGear(uint32 questId)
 
 bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> candidateStatus)
 {
+    // Guildmaster bridge focus: the matching statuses weigh rpgFocusMultiplier times more. A weight of 0 stays 0
+    // (focus never turns on an activity the config turned off). Both loops below must use the same weight.
+    auto weightOf = [this](NewRpgStatus status) -> uint32
+    {
+        uint32 const base = sPlayerbotAIConfig.RpgStatusProbWeight[status];
+        return NewRpgInfo::FocusBoosts(botAI->rpgInfo.focus, status) ? base * sPlayerbotAIConfig.rpgFocusMultiplier
+                                                                       : base;
+    };
     std::vector<NewRpgStatus> availableStatus;
     uint32 probSum = 0;
     for (NewRpgStatus status : candidateStatus)
     {
-        if (sPlayerbotAIConfig.RpgStatusProbWeight[status] == 0)
+        if (weightOf(status) == 0)
             continue;
 
         if (CheckRpgStatusAvailable(status))
         {
             availableStatus.push_back(status);
-            probSum += sPlayerbotAIConfig.RpgStatusProbWeight[status];
+            probSum += weightOf(status);
         }
     }
     // Safety check. Default to "rest" if all RPG weights = 0
@@ -1176,7 +1186,7 @@ bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> candidateSta
     NewRpgStatus chosenStatus = RPG_STATUS_END;
     for (NewRpgStatus status : availableStatus)
     {
-        accumulate += sPlayerbotAIConfig.RpgStatusProbWeight[status];
+        accumulate += weightOf(status);
         if (accumulate >= rand)
         {
             chosenStatus = status;

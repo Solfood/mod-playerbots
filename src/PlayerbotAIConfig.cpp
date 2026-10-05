@@ -767,6 +767,7 @@ bool PlayerbotAIConfig::Initialize()
     RpgStatusProbWeight[RPG_REST] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.Rest", 5);
     RpgStatusProbWeight[RPG_OUTDOOR_PVP] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.OutdoorPvp", 10);
     RpgStatusProbWeight[RPG_DO_GATHER] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.DoGather", 15);
+    rpgFocusMultiplier = sConfigMgr->GetOption<uint32>("AiPlayerbot.RpgFocusMultiplier", 6);
 
     syncLevelWithPlayers = sConfigMgr->GetOption<bool>("AiPlayerbot.SyncLevelWithPlayers", false);
     randomBotConcentrateInPlayerZone =
