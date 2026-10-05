@@ -317,6 +317,13 @@ void RandomPlayerbotMgr::UpdateAIInternal(uint32 /*elapsed*/, bool /*minimal*/)
     std::unordered_set<uint32> availableBots = currentBots;
     uint32 availableBotCount = availableBots.size();
     uint32 onlineBotCount = playerBots.size();
+    // Honest world: only population bots use up the population's login budget. Bots logged in masterless from
+    // outside it (the guildmaster bridge's clones and guild leader, mod-dungeon-clear's driver) would otherwise
+    // keep a held-then-released bot, or a founder, offline for good once the population is at its bot count.
+    if (sPlayerbotAIConfig.fixedPopulation)
+        onlineBotCount = static_cast<uint32>(std::count_if(playerBots.begin(), playerBots.end(),
+                                                           [this](auto const& entry)
+                                                           { return IsRandomBot(entry.first.GetCounter()); }));
 
     uint32 onlineBotFocus = 75;
     if (onlineBotCount < (uint32)(sPlayerbotAIConfig.minRandomBots * 90 / 100))
