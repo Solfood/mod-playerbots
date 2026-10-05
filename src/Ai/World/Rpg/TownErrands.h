@@ -49,7 +49,7 @@ public:
     static WorldPosition NearestTown(Player* bot, bool ownLevelOnly = false);
     // Where a repair errand walks to: the nearest repairer of the bot's faction on its map in a zone not above its
     // level, passing over `avoid` (the target of a trip it gave up) while another is in reach; else NearestTown.
-    static WorldPosition RepairTrip(Player* bot, WorldPosition const& avoid = WorldPosition());
+    static WorldPosition RepairTrip(Player* bot, WorldPosition const& avoid);
     // Worn-out gear on the way to town (honest world, PlaySafe, GO_CAMP): fight back, but pick no fights.
     static bool AvoidFights(PlayerbotAI* botAI, Player* bot);
 
