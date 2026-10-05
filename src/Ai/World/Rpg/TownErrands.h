@@ -50,7 +50,8 @@ public:
     // Where a repair errand walks to: the nearest repairer of the bot's faction on its map in a zone not above its
     // level, passing over `avoid` (the target of a trip it gave up) while another is in reach; else NearestTown.
     static WorldPosition RepairTrip(Player* bot, WorldPosition const& avoid);
-    // Worn-out gear on the way to town (honest world, PlaySafe, GO_CAMP): fight back, but pick no fights.
+    // On the way to town (honest world, GO_CAMP) with worn-out gear (PlaySafe) or through a zone above the bot's
+    // level: fight back, but pick no fights.
     static bool AvoidFights(PlayerbotAI* botAI, Player* bot);
 
     // Repair is worth a trip when the bot can pay for its weapons (the core repairs them first, then item by

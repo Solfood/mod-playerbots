@@ -790,14 +790,16 @@ AiPlayerbot.DisableDeathKnightLogin = 0
 AiPlayerbot.FixedPopulation = 0
 
 # Honest world town errands (only with FixedPopulation = 1). When a bot finishes an activity and needs
-# something from town, it walks to the nearest camp or inn of its level range (any level if none is in
-# reach) and visits the NPC that serves the need:
+# something from town, it walks there and visits the NPC that serves the need:
 # - a repairer when gear durability is below RepairBelowDurability percent and it can pay for its weapons
 #   (counting the junk it will sell first; the rest of the gear is repaired as far as the money goes).
-#   This one is also checked during an activity, so a bot leaves for town before its gear breaks;
+#   The trip goes to the nearest town repairer of the bot's faction (within 300 yards of an inn, camp or
+#   flight master) in a zone not above its level, else to the nearest camp or inn. This one is also checked
+#   during an activity, so a bot leaves for town before its gear breaks;
 # - a vendor when bags are at least SellAboveBagUsage percent full;
 # - an ammo vendor when a hunter has no ammo; a mailbox when mail with money or items is waiting.
-# ErrandCooldownSeconds: at most one errand trip per bot in this many seconds.
+# Trips other than repair walk to the nearest camp or inn of the bot's level range (any level if none is in
+# reach). ErrandCooldownSeconds: at most one errand trip per bot in this many seconds.
 # Defaults: 40, 80, 600
 AiPlayerbot.FixedPopulation.RepairBelowDurability = 40
 AiPlayerbot.FixedPopulation.SellAboveBagUsage = 80
@@ -805,10 +807,13 @@ AiPlayerbot.FixedPopulation.ErrandCooldownSeconds = 600
 
 # Honest world worn gear and town trips (only with FixedPopulation = 1).
 # PlaySafeBelowDurability: below this durability percent a bot plays safe until it can repair: no gathering
-# trips, no grind trips, no fights with or quests for anything above its level; in a zone above its level it
-# walks to a town of its own level range. Gathering never follows nodes into zones above the bot's level.
-# TownTripTimeoutSeconds: a trip to a camp or inn that has not arrived after this long is given up (the
-# errand cooldown starts) and the bot plays on.
+# trips, no grind trips, no fights with or quests for anything above its level. Gathering never follows nodes
+# into zones above the bot's level. A bot in a zone above its level walks to a town of its own level range
+# (worn out: at once; otherwise when it is idle or resting, since the random teleport that used to move it
+# is off). On a town trip with gear below this durability, or through a zone above its level, a bot fights
+# back but picks no fights.
+# TownTripTimeoutSeconds: a town trip that has not arrived after this long is given up (the errand cooldown
+# starts) and the bot plays on; its next repair trip goes to another repairer if one is in reach.
 # Defaults: 20, 1200
 AiPlayerbot.FixedPopulation.PlaySafeBelowDurability = 20
 AiPlayerbot.FixedPopulation.TownTripTimeoutSeconds = 1200

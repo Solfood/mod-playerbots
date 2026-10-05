@@ -198,7 +198,8 @@ WorldPosition TownErrands::RepairTrip(Player* bot, WorldPosition const& avoid)
 
 bool TownErrands::AvoidFights(PlayerbotAI* botAI, Player* bot)
 {
-    return botAI->rpgInfo.GetStatus() == RPG_GO_CAMP && PlaySafe(botAI, bot);
+    return botAI->rpgInfo.GetStatus() == RPG_GO_CAMP &&
+           (PlaySafe(botAI, bot) || ZoneAboveBot(bot, bot->GetZoneId()));
 }
 
 bool TownErrands::CanAffordRepair(PlayerbotAI* botAI, Player* bot)

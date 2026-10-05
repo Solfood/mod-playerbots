@@ -280,18 +280,22 @@ bool NewRpgStatusUpdateAction::CheckWornGearAndTownTrip(NewRpgStatus status)
     if (AI_VALUE(uint8, "durability") < sPlayerbotAIConfig.fixedPopulationRepairBelow && GoRunErrands(true))
         return true;
 
-    if (!TownErrands::PlaySafe(botAI, bot))
-        return false;
+    bool const playSafe = TownErrands::PlaySafe(botAI, bot);
 
     // Worn out and can't repair yet: stop gathering and grind trips and quests above the bot's level...
     auto const* quest = std::get_if<NewRpgInfo::DoQuest>(&info.data);
-    if (status == RPG_DO_GATHER || status == RPG_GO_GRIND || (quest && IsQuestTooHardForWornGear(quest->questId)))
+    if (playSafe &&
+        (status == RPG_DO_GATHER || status == RPG_GO_GRIND || (quest && IsQuestTooHardForWornGear(quest->questId))))
     {
         info.ChangeToIdle();
         return true;
     }
 
-    // ...and walk out of a zone above its level to a town of its own level range.
+    // ...and walk out of a zone above its level to a town of its own level range. Healthy bots too, between
+    // activities: stock playerbots teleported them out, which the honest world blocks, so a low-level bot that
+    // found nothing of its level around an over-level town (the Darkshire inn) would rest there for good.
+    if (!playSafe && status != RPG_IDLE && status != RPG_REST)
+        return false;
     if (TownErrands::ZoneAboveBot(bot, bot->GetZoneId()) && !TownErrands::CooldownLeftMs(info.lastErrandMs))
     {
         WorldPosition const town = TownErrands::NearestTown(bot, true);
