@@ -312,6 +312,10 @@ void RandomPlayerbotMgr::UpdateAIInternal(uint32 /*elapsed*/, bool /*minimal*/)
     }
 
     GetBots();
+    // Honest world: the population is whoever has an "add" record, and it can be larger than the bot count
+    // (the guildmaster bridge's founders join on top of it). Log all of them in, and never top it up past them.
+    if (sPlayerbotAIConfig.fixedPopulation)
+        maxAllowedBotCount = std::max<uint32>(maxAllowedBotCount, currentBots.size());
     // Copied deliberately: ProcessBot() erases from currentBots while this is
     // being iterated below, so the loops must run over a snapshot.
     std::unordered_set<uint32> availableBots = currentBots;
@@ -1384,12 +1388,26 @@ bool RandomPlayerbotMgr::IsUnraisedDeathKnight(uint32 bot)
     return entry && entry->Class == CLASS_DEATH_KNIGHT && !GetEventValue(bot, "raised");
 }
 
-void RandomPlayerbotMgr::AddToPopulation(uint32 bot)
+void RandomPlayerbotMgr::AddToPopulation(uint32 bot, bool joinsBotGuild)
 {
     // The same "add" record the population uses; with FixedPopulation the boot roster keeps it across restarts.
     SetEventValue(bot, "add", 1, sPlayerbotAIConfig.permanentlyInWorldTime);
     SetEventValue(bot, "logout", 0, 0);
+    if (!joinsBotGuild)
+        SetJoinsBotGuild(bot, false);
     currentBots.insert(bot);
+}
+
+void RandomPlayerbotMgr::SetJoinsBotGuild(uint32 bot, bool joins)
+{
+    SetEventValue(bot, "no_bot_guild", joins ? 0 : 1, joins ? 0 : sPlayerbotAIConfig.permanentlyInWorldTime);
+}
+
+void RandomPlayerbotMgr::AddPopulationAccount(uint32 accountId)
+{
+    std::vector<uint32>& accounts = sPlayerbotAIConfig.randomBotAccounts;
+    if (accountId && std::find(accounts.begin(), accounts.end(), accountId) == accounts.end())
+        accounts.push_back(accountId);
 }
 
 void RandomPlayerbotMgr::RemoveFromPopulation(uint32 bot)
@@ -2428,7 +2446,8 @@ void RandomPlayerbotMgr::GetBots()
             if (GetEventValue(bot, "add"))
                 currentBots.insert(bot);
 
-            if (currentBots.size() >= maxAllowedBotCount)
+            // Honest world: every "add" record is a member (founders join on top of the bot count; preflight C2).
+            if (!sPlayerbotAIConfig.fixedPopulation && currentBots.size() >= maxAllowedBotCount)
                 break;
         } while (result->NextRow());
     }
@@ -2833,7 +2852,9 @@ void RandomPlayerbotMgr::OnBotLoginInternal(Player* const bot)
     // Honest world: only population bots join bot guilds. Characters logged in masterless from outside the
     // population (the guildmaster bridge's clones and the guild leader it logs in to found a guild) must stay
     // guildless until the bridge places them.
-    bool const guildable = !sPlayerbotAIConfig.fixedPopulation || IsRandomBot(bot);
+    // A founder the bridge has not placed in its guild yet waits guildless ("no_bot_guild").
+    bool const guildable = !sPlayerbotAIConfig.fixedPopulation ||
+                           (IsRandomBot(bot) && !GetEventValue(bot->GetGUID().GetCounter(), "no_bot_guild"));
     if (sPlayerbotAIConfig.randomBotGuildCount > 0 && guildable)
     {
         PlayerbotFactory factory(bot, bot->GetLevel());

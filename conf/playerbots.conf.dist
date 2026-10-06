@@ -783,7 +783,9 @@ AiPlayerbot.DisableDeathKnightLogin = 0
 #   level-up, keeping the bot's full repair bill in reserve; what it can't afford is skipped);
 # - death works the normal way: corpse run or spirit healer (resurrection sickness, durability loss);
 # - death knights log in only after they were "raised" (AiPlayerbot.Raisings.*);
-# - the same bots log in again after a restart (the online roster is kept, not picked afresh).
+# - the same bots log in again after a restart (the online roster is kept, not picked afresh);
+# - characters added to the population later (the guildmaster bridge's founders) count on top of
+#   Min/MaxRandomBots: all of them log in and are kept, and none is topped up or dropped for them.
 # Turn this on only together with the vendor, trainer and mail loops this fork ships with it, or bots
 # end up with broken gear and old spells.
 # Default: 0 (disabled)

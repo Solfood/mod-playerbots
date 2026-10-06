@@ -148,7 +148,11 @@ public:
     void Remove(Player* bot);
     // Honest world: put a character into the permanent population (it logs in on the manager's next
     // turn) or take one out (the manager logs it out on its next turn).
-    void AddToPopulation(uint32 bot);
+    // joinsBotGuild = false (guildmaster bridge founders): the bridge puts the bot into a guild itself, so while it
+    // is guildless it joins no bot guild at login (kept across restarts; see SetJoinsBotGuild).
+    void AddToPopulation(uint32 bot, bool joinsBotGuild = true);
+    void SetJoinsBotGuild(uint32 bot, bool joins);
+    bool JoinsBotGuild(uint32 bot) { return !GetEventValue(bot, "no_bot_guild"); }
     void RemoveFromPopulation(uint32 bot);
     // Guildmaster bridge: a held bot is left alone by the population manager (no login, logout, re-roll,
     // teleport or revive) while the bridge restores it or lends it to a dungeon run. It stays in the
@@ -159,6 +163,9 @@ public:
     bool HasHeld() const;
     // Guildmaster bridge: how many bots the population has (held ones included). World thread.
     uint32 PopulationSize() const { return static_cast<uint32>(currentBots.size()); }
+    // Guildmaster bridge (founders): an account outside the RandomBotAccountPrefix range whose characters may join
+    // the population (IsRandomBot, AddToPopulation). The factory never fills it. Startup only (before map updates).
+    void AddPopulationAccount(uint32 accountId);
     // Honest world: a raised death knight may log in (the Death Knight login gate lets it through). Never expires.
     void MarkRaised(uint32 bot);
     ObjectGuid GetBattleMasterGUID(Player* bot, BattlegroundTypeId bgTypeId);

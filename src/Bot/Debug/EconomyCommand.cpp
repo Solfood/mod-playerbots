@@ -139,7 +139,8 @@ void Active(ChatHandler* handler)
     for (auto const& [guid, bot] : sRandomPlayerbotMgr.GetAllBots())
     {
         PlayerbotAI* botAI = bot ? GET_PLAYERBOT_AI(bot) : nullptr;
-        if (!botAI)
+        // The population only (preflight D22): not the bridge's clones or guild leader, not dungeon-clear's driver.
+        if (!botAI || !sRandomPlayerbotMgr.IsRandomBot(bot))
             continue;
         if (!online)
             scale = botAI->AutoScaleActivity(100);
@@ -164,7 +165,7 @@ void Census(ChatHandler* handler)
     for (auto const& [guid, bot] : sRandomPlayerbotMgr.GetAllBots())
     {
         PlayerbotAI* botAI = bot ? GET_PLAYERBOT_AI(bot) : nullptr;
-        if (!botAI || !bot->IsInWorld())
+        if (!botAI || !bot->IsInWorld() || !sRandomPlayerbotMgr.IsRandomBot(bot))
             continue;
         AiObjectContext* context = botAI->GetAiObjectContext();
         uint32 known = 0;
