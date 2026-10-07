@@ -360,6 +360,7 @@ public:
     uint32 randomBotHordeRatio;
     bool disableDeathKnightLogin;
     bool fixedPopulation;
+    uint32 fixedPopulationSeed;
     uint32 fixedPopulationRepairBelow;
     uint32 fixedPopulationSellAboveBags;
     uint32 fixedPopulationErrandCooldown;

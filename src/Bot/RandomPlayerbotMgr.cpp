@@ -691,8 +691,12 @@ uint32 RandomPlayerbotMgr::AddRandomBots()
         maxAllowedBotCount -= currentBots.size();
         maxAllowedBotCount = std::min(sPlayerbotAIConfig.randomBotsPerInterval, maxAllowedBotCount);
 
-        // Single RNG instance for all shuffling
-        std::mt19937 rng(std::chrono::steady_clock::now().time_since_epoch().count());
+        // Single RNG instance for all shuffling. Honest world with a population seed: seeded the same way on
+        // every call, so the same characters come in the same order whatever the batch sizes (bots already added
+        // are skipped).
+        uint32 const populationSeed = RandomPlayerbotFactory::PopulationSeed();
+        uint32 const clockSeed = static_cast<uint32>(std::chrono::steady_clock::now().time_since_epoch().count());
+        std::mt19937 rng(populationSeed ? populationSeed : clockSeed);
 
         // Only need to track the Alliance count, as it's in Phase 1
         uint32 totalRatio = sPlayerbotAIConfig.randomBotAllianceRatio + sPlayerbotAIConfig.randomBotHordeRatio;
@@ -701,7 +705,10 @@ uint32 RandomPlayerbotMgr::AddRandomBots()
         uint32 remainder = maxAllowedBotCount * (sPlayerbotAIConfig.randomBotAllianceRatio) % totalRatio;
 
         // Fix #1082: Randomly add one based on reminder
-        if (remainder && urand(1, totalRatio) <= remainder)
+        // With a seed the roll is always drawn, so the shuffles below start from the same generator state; without
+        // one it is urand, only when there is a remainder, as before.
+        uint32 const seededRoll = populationSeed ? std::uniform_int_distribution<uint32>(1, totalRatio)(rng) : 0;
+        if (remainder && (populationSeed ? seededRoll : urand(1, totalRatio)) <= remainder)
         {
             allowedAllianceCount++;
         }
@@ -748,7 +755,8 @@ uint32 RandomPlayerbotMgr::AddRandomBots()
             std::unordered_set<uint32> selectedAccounts(accountsToUse.begin(), accountsToUse.end());
             // A plain query: the core has no prepared statement for this range (Seth's patch added one to it).
             QueryResult result = CharacterDatabase.Query(
-                "SELECT guid, class, race, account FROM characters WHERE account BETWEEN {} AND {}", *minimum, *maximum);
+                "SELECT guid, class, race, account FROM characters WHERE account BETWEEN {} AND {}{}", *minimum,
+                *maximum, populationSeed ? " ORDER BY guid" : "");
             if (result)
             {
                 do

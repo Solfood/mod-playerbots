@@ -13,6 +13,7 @@
 #include "DBCEnums.h"
 #include "SharedDefines.h"
 #include <map>
+#include <random>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -49,6 +50,11 @@ public:
     static constexpr NameRaceAndGender CombineRaceAndGender(uint8 race, uint8 gender);
 
     RandomPlayerbotFactory() {};
+    // Honest world population seed (AiPlayerbot.FixedPopulation.Seed, only with FixedPopulation); 0 = off.
+    static uint32 PopulationSeed();
+    // With a population seed, every pick this factory makes comes from this generator (one per bot account).
+    std::mt19937* seededRng = nullptr;
+    uint32 Roll(uint32 min, uint32 max);
     virtual ~RandomPlayerbotFactory() {}
 
     Player* CreateRandomBot(WorldSession* session, uint8 cls, std::unordered_map<NameRaceAndGender, std::vector<std::string>>& names);

@@ -679,6 +679,7 @@ bool PlayerbotAIConfig::Initialize()
     randomBotHordeRatio = sConfigMgr->GetOption<int32>("AiPlayerbot.RandomBotHordeRatio", 50);
     disableDeathKnightLogin = sConfigMgr->GetOption<bool>("AiPlayerbot.DisableDeathKnightLogin", 0);
     fixedPopulation = sConfigMgr->GetOption<bool>("AiPlayerbot.FixedPopulation", false);
+    fixedPopulationSeed = sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.Seed", 0);
     fixedPopulationRepairBelow =
         sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.RepairBelowDurability", 40);
     fixedPopulationSellAboveBags = sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.SellAboveBagUsage", 80);

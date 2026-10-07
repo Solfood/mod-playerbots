@@ -66,11 +66,25 @@ bool RandomPlayerbotFactory::IsValidRaceClassCombination(uint8 race, uint8 cls, 
     return info != nullptr;
 }
 
+uint32 RandomPlayerbotFactory::PopulationSeed()
+{
+    return sPlayerbotAIConfig.fixedPopulation ? sPlayerbotAIConfig.fixedPopulationSeed : 0;
+}
+
+// Honest world: with a population seed every pick comes from the account's own seeded generator, so the same seed
+// makes the same bots; without one it is urand, as before.
+uint32 RandomPlayerbotFactory::Roll(uint32 min, uint32 max)
+{
+    if (!seededRng)
+        return urand(min, max);
+    return std::uniform_int_distribution<uint32>(min, max)(*seededRng);
+}
+
 Player* RandomPlayerbotFactory::CreateRandomBot(WorldSession* session, uint8 cls, std::unordered_map<NameRaceAndGender, std::vector<std::string>>& nameCache)
 {
     LOG_DEBUG("playerbots", "Creating a new random bot for class: {}", cls);
 
-    const bool alliance = static_cast<bool>(urand(0, 1));
+    const bool alliance = static_cast<bool>(Roll(0, 1));
 
     std::vector<uint8> raceOptions;
     for (uint8 race = RACE_HUMAN; race < sRaceMgr->GetMaxRaces(); ++race)
@@ -94,8 +108,8 @@ Player* RandomPlayerbotFactory::CreateRandomBot(WorldSession* session, uint8 cls
         return nullptr;
     }
 
-    const uint8 race = raceOptions[urand(0, raceOptions.size() - 1)];
-    const uint8 gender = urand(0, 1) ? GENDER_MALE : GENDER_FEMALE;
+    const uint8 race = raceOptions[Roll(0, raceOptions.size() - 1)];
+    const uint8 gender = Roll(0, 1) ? GENDER_MALE : GENDER_FEMALE;
     const auto raceAndGender = CombineRaceAndGender(race, gender);
 
     std::string name;
@@ -108,7 +122,7 @@ Player* RandomPlayerbotFactory::CreateRandomBot(WorldSession* session, uint8 cls
             return nullptr;
         }
 
-        uint32 i = urand(0, nameCache[raceAndGender].size() - 1);
+        uint32 i = Roll(0, nameCache[raceAndGender].size() - 1);
         name = nameCache[raceAndGender][i];
         swap(nameCache[raceAndGender][i], nameCache[raceAndGender].back());
         nameCache[raceAndGender].pop_back();
@@ -149,12 +163,12 @@ Player* RandomPlayerbotFactory::CreateRandomBot(WorldSession* session, uint8 cls
     }
 
     //uint8 skinColor = skinColors[urand(0, skinColors.size() - 1)]; //not used, line marked for removal.
-    std::pair<uint8, uint8> face = faces[urand(0, faces.size() - 1)];
-    std::pair<uint8, uint8> hair = hairs[urand(0, hairs.size() - 1)];
+    std::pair<uint8, uint8> face = faces[Roll(0, faces.size() - 1)];
+    std::pair<uint8, uint8> hair = hairs[Roll(0, hairs.size() - 1)];
 
     bool excludeCheck = (race == RACE_TAUREN) || (race == RACE_DRAENEI) ||
                         (gender == GENDER_FEMALE && race != RACE_NIGHTELF && race != RACE_UNDEAD_PLAYER);
-    uint8 facialHair = excludeCheck ? 0 : facialHairTypes[urand(0, facialHairTypes.size() - 1)];
+    uint8 facialHair = excludeCheck ? 0 : facialHairTypes[Roll(0, facialHairTypes.size() - 1)];
 
     std::unique_ptr<CharacterCreateInfo> characterInfo = std::make_unique<CharacterCreateInfo>(
         name, race, cls, gender, face.second, face.first, hair.first, hair.second, facialHair);
@@ -707,7 +721,10 @@ void RandomPlayerbotFactory::CreateRandomBots()
         {
             nameCached = true;
             LOG_INFO("playerbots", "Creating cache for names per gender and race...");
-            QueryResult result = CharacterDatabase.Query("SELECT name, gender FROM playerbots_names");
+            // Honest world with a population seed: the names in a fixed order, so the seeded picks repeat.
+            QueryResult result = CharacterDatabase.Query(PopulationSeed()
+                ? "SELECT name, gender FROM playerbots_names ORDER BY name_id"
+                : "SELECT name, gender FROM playerbots_names");
             if (!result)
             {
                 LOG_ERROR("playerbots", "No more unused names left");
@@ -734,6 +751,11 @@ void RandomPlayerbotFactory::CreateRandomBots()
 
         LOG_DEBUG("playerbots", "Creating random bot characters for account: [{}/{}]", accountNumber + 1, totalAccountCount);
         RandomPlayerbotFactory factory;
+        // Honest world with a population seed: one generator per account, from the seed and the account number, so
+        // the accounts a later wave adds are reproducible too.
+        std::mt19937 accountRng(PopulationSeed() * 2654435761u + accountNumber);
+        if (PopulationSeed())
+            factory.seededRng = &accountRng;
 
         WorldSession* session = new WorldSession(accountId, "", 0x0, nullptr, SEC_PLAYER, EXPANSION_WRATH_OF_THE_LICH_KING,
                                                 time_t(0), LOCALE_enUS, 0, false, false, 0);

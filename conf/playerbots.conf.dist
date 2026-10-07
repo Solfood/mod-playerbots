@@ -791,6 +791,14 @@ AiPlayerbot.DisableDeathKnightLogin = 0
 # Default: 0 (disabled)
 AiPlayerbot.FixedPopulation = 0
 
+#
+# Honest world population seed (only with FixedPopulation = 1). 0 = off: the bots are random, as before. Any other
+# number makes the bot factory and the population pick reproducible: a fresh world made with the same seed, settings
+# and name list gets the same bots (names, races, classes, genders, looks, and so start spots). What happens after
+# they log in is not seeded. Set per world by the guildmaster world controller.
+# Default: 0
+AiPlayerbot.FixedPopulation.Seed = 0
+
 # Honest world town errands (only with FixedPopulation = 1). When a bot finishes an activity and needs
 # something from town, it walks there and visits the NPC that serves the need:
 # - a repairer when gear durability is below RepairBelowDurability percent and it can pay for its weapons
