@@ -276,6 +276,10 @@ private:
     std::map<TeamId, std::map<BattlegroundTypeId, std::vector<uint32>>> BattleMastersCache;
     std::unordered_map<uint32, BotEventCache> eventCache;
     std::unordered_set<uint32> currentBots;
+    // Honest world: accounts added by AddPopulationAccount (the bridge's founders). Their rows join the population on
+    // top of the bot count and never count toward it (contract §1: Min = Max = N, never N + founders).
+    std::unordered_set<uint32> _populationAccounts;
+    uint32 FactoryBotCount() const;
     mutable std::mutex _heldMutex;
     std::unordered_set<uint32> _held;
     uint32 playersLevel;

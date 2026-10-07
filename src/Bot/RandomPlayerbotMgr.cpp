@@ -314,8 +314,13 @@ void RandomPlayerbotMgr::UpdateAIInternal(uint32 /*elapsed*/, bool /*minimal*/)
     GetBots();
     // Honest world: the population is whoever has an "add" record, and it can be larger than the bot count
     // (the guildmaster bridge's founders join on top of it). Log all of them in, and never top it up past them.
+    // The bot count is the factory's bots only: the target is bot count + founders, so raising the bot count adds
+    // that many factory bots (an arrival wave), whether or not the founders are already in.
     if (sPlayerbotAIConfig.fixedPopulation)
-        maxAllowedBotCount = std::max<uint32>(maxAllowedBotCount, currentBots.size());
+    {
+        uint32 const founders = currentBots.size() - FactoryBotCount();
+        maxAllowedBotCount = std::max<uint32>(maxAllowedBotCount + founders, currentBots.size());
+    }
     // Copied deliberately: ProcessBot() erases from currentBots while this is
     // being iterated below, so the loops must run over a snapshot.
     std::unordered_set<uint32> availableBots = currentBots;
@@ -685,10 +690,12 @@ uint32 RandomPlayerbotMgr::AddRandomBots()
     uint32 maxAllowedBotCount = GetEventValue(0, "bot_count");
     static time_t missingBotsTimer = 0;
 
-    if (currentBots.size() < maxAllowedBotCount)
+    // Honest world: only the factory's bots count toward the bot count (founders join on top of it).
+    uint32 const populated = sPlayerbotAIConfig.fixedPopulation ? FactoryBotCount() : currentBots.size();
+    if (populated < maxAllowedBotCount)
     {
         // Calculate how many bots to add
-        maxAllowedBotCount -= currentBots.size();
+        maxAllowedBotCount -= populated;
         maxAllowedBotCount = std::min(sPlayerbotAIConfig.randomBotsPerInterval, maxAllowedBotCount);
 
         // Single RNG instance for all shuffling. Honest world with a population seed: seeded the same way on
@@ -1415,7 +1422,26 @@ void RandomPlayerbotMgr::AddPopulationAccount(uint32 accountId)
 {
     std::vector<uint32>& accounts = sPlayerbotAIConfig.randomBotAccounts;
     if (accountId && std::find(accounts.begin(), accounts.end(), accountId) == accounts.end())
+    {
         accounts.push_back(accountId);
+        _populationAccounts.insert(accountId);
+    }
+}
+
+// The population's rows on the bot factory's accounts: every "add" row but those on AddPopulationAccount accounts.
+// In memory only (character cache), so it is safe on every population turn.
+uint32 RandomPlayerbotMgr::FactoryBotCount() const
+{
+    if (_populationAccounts.empty())
+        return currentBots.size();
+    uint32 count = 0;
+    for (uint32 bot : currentBots)
+    {
+        ObjectGuid const guid = ObjectGuid::Create<HighGuid::Player>(bot);
+        if (!_populationAccounts.contains(sCharacterCache->GetCharacterAccountIdByGuid(guid)))
+            ++count;
+    }
+    return count;
 }
 
 void RandomPlayerbotMgr::RemoveFromPopulation(uint32 bot)
