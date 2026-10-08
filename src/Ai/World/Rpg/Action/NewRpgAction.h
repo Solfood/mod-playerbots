@@ -73,6 +73,7 @@ protected:
     const int32 statusDoQuestDuration = 30 * MINUTE  * IN_MILLISECONDS ;
     const int32 statusOutDoorPvPDuration = HOUR * IN_MILLISECONDS ;
     const int32 statusDoGatherDuration = 15 * MINUTE * IN_MILLISECONDS;
+    const int32 statusFollowRouteDuration = 45 * MINUTE * IN_MILLISECONDS;
 };
 
 class NewRpgGoGrindAction : public NewRpgBaseAction

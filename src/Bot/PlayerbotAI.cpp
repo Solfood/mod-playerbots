@@ -929,6 +929,7 @@ void PlayerbotAI::Reset(bool full)
         fresh.focus = rpgInfo.focus;
         fresh.stuckTeleports = rpgInfo.stuckTeleports;
         fresh.lastStuckDest = rpgInfo.lastStuckDest;
+        fresh.route = std::move(rpgInfo.route);  // quest routes: hub, style, head_to (and later the survival state)
         rpgInfo = std::move(fresh);
     }
 

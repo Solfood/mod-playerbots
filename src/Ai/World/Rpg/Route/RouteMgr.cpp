@@ -12,9 +12,11 @@
 #include "GridTerrainData.h"
 #include "Log.h"
 #include "MapMgr.h"
+#include "NewRpgInfo.h"
 #include "ObjectMgr.h"
 #include "Player.h"
 #include "PlayerbotAIConfig.h"
+#include "Playerbots.h"
 #include "QuestDef.h"
 #include "RandomPlayerbotMgr.h"
 #include "Timer.h"
@@ -411,4 +413,125 @@ std::vector<uint32> const* RouteMgr::FollowUpsOf(uint32 questId) const
 {
     auto const it = _followUps.find(questId);
     return it == _followUps.end() ? nullptr : &it->second;
+}
+
+RouteMgr::HubWork RouteMgr::WorkAt(Player* bot, Routes::Hub const& hub) const
+{
+    HubWork work;
+    for (uint32 id : hub.quests)
+    {
+        Quest const* quest = sObjectMgr->GetQuestTemplate(id);
+        Routes::QuestRoute const* q = QuestById(id);
+        if (!quest || !q || !Routes::RoutedKind(q->kind) || _fix.skipQuests.count(id))
+            continue;
+        if (!bot->SatisfyQuestRace(quest, false) || !bot->SatisfyQuestClass(quest, false))
+            continue;
+        if (bot->GetQuestRewardStatus(id))
+        {
+            ++work.done;
+            continue;
+        }
+        ++work.remaining;
+        QuestStatus const status = bot->GetQuestStatus(id);
+        bool const inLog = status == QUEST_STATUS_INCOMPLETE || status == QUEST_STATUS_COMPLETE;
+        if (inLog || (status == QUEST_STATUS_NONE && bot->CanTakeQuest(quest, false) && MayAccept(bot, quest)))
+            ++work.doableNow;
+    }
+    return work;
+}
+
+bool RouteMgr::NextJob(Player* bot, Routes::Hub const& hub, uint32 carryQuest, std::unordered_set<uint32> const& skip,
+                       Job& job) const
+{
+    float best = JOB_REACH_YARDS;
+    bool found = false;
+    auto consider = [&](std::vector<Routes::Spawn> const& spawns, uint32 questId, int32 objective)
+    {
+        for (Routes::Spawn const& s : spawns)
+        {
+            if (s.map != bot->GetMapId())
+                continue;
+            float const distance = bot->GetExactDist2d(s.x, s.y);
+            if (distance < best)
+            {
+                best = distance;
+                found = true;
+                job.where = WorldPosition(s.map, s.x, s.y, s.z);
+                job.questId = questId;
+                job.objective = objective;
+            }
+        }
+    };
+    // 1. Hand in a finished routed quest.
+    for (uint8 slot = 0; slot < MAX_QUEST_LOG_SIZE; ++slot)
+    {
+        uint32 const id = bot->GetQuestSlotQuestId(slot);
+        Routes::QuestRoute const* q = id ? QuestById(id) : nullptr;
+        if (q && !skip.count(id) && bot->GetQuestStatus(id) == QUEST_STATUS_COMPLETE)
+            consider(q->enders, id, JOB_ENDER);
+    }
+    if (found)
+        return true;
+    // 2. Take a quest this hub gives (the carried follow-up first).
+    std::vector<uint32> offers;
+    if (carryQuest)
+        offers.push_back(carryQuest);
+    offers.insert(offers.end(), hub.quests.begin(), hub.quests.end());
+    for (uint32 id : offers)
+    {
+        Quest const* quest = sObjectMgr->GetQuestTemplate(id);
+        Routes::QuestRoute const* q = QuestById(id);
+        if (!quest || !q || skip.count(id) || bot->GetQuestStatus(id) != QUEST_STATUS_NONE ||
+            !bot->CanTakeQuest(quest, false) || !bot->CanAddQuest(quest, false) || !MayAccept(bot, quest))
+            continue;
+        consider(q->givers, id, JOB_GIVER);
+        if (found && id == carryQuest)
+            return true;
+    }
+    if (found)
+        return true;
+    // 3. The nearest unfinished objective of a routed quest in the log.
+    for (uint8 slot = 0; slot < MAX_QUEST_LOG_SIZE; ++slot)
+    {
+        uint32 const id = bot->GetQuestSlotQuestId(slot);
+        Quest const* quest = id ? sObjectMgr->GetQuestTemplate(id) : nullptr;
+        Routes::QuestRoute const* q = id ? QuestById(id) : nullptr;
+        if (!quest || !q || skip.count(id) || !Routes::RoutedKind(q->kind) ||
+            bot->GetQuestStatus(id) != QUEST_STATUS_INCOMPLETE)
+            continue;
+        auto const statusIt = bot->getQuestStatusMap().find(id);
+        if (statusIt == bot->getQuestStatusMap().end())
+            continue;
+        QuestStatusData const& status = statusIt->second;
+        for (int i = 0; i < QUEST_OBJECTIVES_COUNT; ++i)
+            if (quest->RequiredNpcOrGo[i] > 0 && status.CreatureOrGOCount[i] < quest->RequiredNpcOrGoCount[i])
+                consider(q->spots[i], id, i);
+        for (int i = 0; i < QUEST_ITEM_OBJECTIVES_COUNT; ++i)
+            if (quest->RequiredItemId[i] && status.ItemCount[i] < quest->RequiredItemCount[i])
+                consider(q->spots[QUEST_OBJECTIVES_COUNT + i], id, QUEST_OBJECTIVES_COUNT + i);
+    }
+    return found;
+}
+
+Routes::NextChoice RouteMgr::Decide(Player* bot) const
+{
+    PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
+    if (!botAI || !Routed(bot))
+        return {};
+    NewRpgInfo::RouteState const& route = botAI->rpgInfo.route;
+    Routes::NextInput in;
+    in.botLevel = bot->GetLevel();
+    in.currentHub = route.hubId;
+    in.softCap = sPlayerbotAIConfig.questRoutes.hubSoftCap;
+    for (Routes::Hub const* hub : PathFor(bot->GetTeamId(), bot->GetMapId()))
+    {
+        // Hubs it outlevelled, and hubs far above it, cannot be chosen: skip the work count for them.
+        if (Routes::Outlevelled(in.botLevel, *hub) || hub->minLevel > in.botLevel + Routes::DECIDE_LEVELS_AHEAD)
+            continue;
+        HubWork const work = WorkAt(bot, *hub);
+        if (!work.remaining && hub->id != route.hubId)
+            continue;
+        in.options.push_back({hub, work.doableNow, work.remaining, work.done, 0, bot->GetExactDist2d(hub->x, hub->y)});
+    }
+    return Routes::PickNextHub(in);
 }

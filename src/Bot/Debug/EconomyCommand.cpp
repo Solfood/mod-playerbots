@@ -64,17 +64,6 @@ Player* FindBot(ChatHandler* handler, std::string const& name)
     return bot;
 }
 
-std::string RpgStatusName(PlayerbotAI* botAI)
-{
-    // NewRpgInfo::ToString() starts with "Status: <NAME>" followed by details on later lines.
-    std::string const text = botAI->rpgInfo.ToString();
-    std::string::size_type const start = text.find(' ');
-    if (start == std::string::npos)
-        return "?";
-    std::string::size_type const end = text.find('\n', start + 1);
-    return text.substr(start + 1, end == std::string::npos ? std::string::npos : end - start - 1);
-}
-
 // Live spell count: GetSpellMap() keeps removed spells around until the next character save, so
 // this only counts entries the bot can actually cast right now (controller ruling F3).
 uint32 LiveSpellCount(Player* bot)
@@ -122,7 +111,7 @@ void Show(ChatHandler* handler, Player* bot)
         context->GetValue<uint8>("bag space")->Get(), bot->isDead() ? 1 : 0,
         bot->HasPlayerFlag(PLAYER_FLAGS_GHOST) ? 1 : 0, bot->HasAura(SPELL_RESURRECTION_SICKNESS) ? 1 : 0, riding,
         professions.tellp() > 0 ? professions.str() : std::string("-"), context->GetValue<uint32>("death count")->Get(),
-        RpgStatusName(botAI), LiveSpellCount(bot), sRandomPlayerbotMgr.GetValue(botId, "randomize") ? 1 : 0,
+        botAI->rpgInfo.StatusName(), LiveSpellCount(bot), sRandomPlayerbotMgr.GetValue(botId, "randomize") ? 1 : 0,
         sRandomPlayerbotMgr.GetValue(botId, "teleport") ? 1 : 0, sRandomPlayerbotMgr.GetValue(botId, "revive") ? 1 : 0,
         mounts, TownErrands::CollectableMailCount(bot),
         bot->GetItemCount(EarnedTraining::ITEM_MINING_PICK, true) +
@@ -176,7 +165,7 @@ void Census(ChatHandler* handler)
         uint32 const pending = EarnedTraining::PendingClassSpells(bot, pendCost);
         uint32 const reserve = EarnedTraining::RepairReserve(bot);
         uint8 const durability = context->GetValue<uint8>("durability")->Get();
-        std::string rpg = RpgStatusName(botAI);
+        std::string rpg = botAI->rpgInfo.StatusName();
         std::replace(rpg.begin(), rpg.end(), ' ', '_');
 
         ++bots;

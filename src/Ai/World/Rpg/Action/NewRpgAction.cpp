@@ -31,6 +31,7 @@
 #include "Playerbots.h"
 #include "QuestDef.h"
 #include "Random.h"
+#include "RouteMgr.h"
 #include "SharedDefines.h"
 #include "Timer.h"
 #include "TownErrands.h"
@@ -221,11 +222,23 @@ bool TellRpgStatusAction::Execute(Event event)
         WhisperStatusChange(owner, "DO_QUEST " + std::to_string(questId));
         return true;
     }
+    else if (status == RPG_FOLLOW_ROUTE)
+    {
+        if (!ChangeToRouteChoice(RouteMgr::instance().Decide(bot)))
+        {
+            std::string msg = PlayerbotTextMgr::instance().GetBotTextOrDefault(
+                "rpg_no_route_error", "No quest route for me here.", {});
+            bot->Whisper(msg, LANG_UNIVERSAL, owner);
+            return false;
+        }
+        WhisperStatusChange(owner, "FOLLOW_ROUTE");
+        return true;
+    }
 
     std::string msg = PlayerbotTextMgr::instance().GetBotTextOrDefault(
         "rpg_unknown_status_error",
         "Unknown rpg status. Options: idle, rest, wander random, wander npc, "
-        "go grind, go camp, do quest [<id>], travel flight, outdoor pvp, do gather.", {});
+        "go grind, go camp, do quest [<id>], travel flight, outdoor pvp, do gather, follow route.", {});
     bot->Whisper(msg, LANG_UNIVERSAL, owner);
     return false;
 }
@@ -317,11 +330,20 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
     switch (status)
     {
         case RPG_IDLE:
+        {
             // Honest world: what the bot needs from town comes before a random new activity.
             if (GoRunErrands())
                 return true;
-            return RandomChangeStatus({RPG_GO_CAMP, RPG_GO_GRIND, RPG_WANDER_RANDOM, RPG_WANDER_NPC, RPG_DO_QUEST,
-                                       RPG_TRAVEL_FLIGHT, RPG_REST, RPG_OUTDOOR_PVP, RPG_DO_GATHER});
+            std::vector<NewRpgStatus> candidates = {RPG_GO_CAMP,       RPG_GO_GRIND, RPG_WANDER_RANDOM,
+                                                    RPG_WANDER_NPC,    RPG_DO_QUEST, RPG_TRAVEL_FLIGHT,
+                                                    RPG_REST,          RPG_OUTDOOR_PVP, RPG_DO_GATHER};
+            // Quest routes: a routed bot is also offered FOLLOW_ROUTE. The roll decides once whether its route has a
+            // hub for it; if so FOLLOW_ROUTE takes DO_QUEST's place and weight, else it rolls as before (spec §4
+            // step 3). Any other bot gets exactly the list above.
+            if (RouteMgr::instance().Routed(bot))
+                candidates.push_back(RPG_FOLLOW_ROUTE);
+            return RandomChangeStatus(candidates);
+        }
 
         case RPG_GO_GRIND:
         {
@@ -412,6 +434,16 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
         {
             // DO_GATHER -> IDLE
             if (info.HasStatusPersisted(statusDoGatherDuration))
+            {
+                info.ChangeToIdle();
+                return true;
+            }
+            break;
+        }
+        case RPG_FOLLOW_ROUTE:
+        {
+            // FOLLOW_ROUTE -> IDLE now and then, so a routed bot still rests, sells and wanders.
+            if (info.HasStatusPersisted(statusFollowRouteDuration))
             {
                 info.ChangeToIdle();
                 return true;

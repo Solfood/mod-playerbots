@@ -28,6 +28,8 @@
 #include "PlayerbotAIConfig.h"
 #include "PlayerbotTextMgr.h"
 #include "Playerbots.h"
+#include "RouteMgr.h"
+#include <algorithm>
 #include "Position.h"
 #include "QuestDef.h"
 #include "QuestPackets.h"
@@ -332,7 +334,7 @@ bool NewRpgBaseAction::InteractWithNpcOrGameObjectForQuest(ObjectGuid guid)
 
         QuestStatus const& status = bot->GetQuestStatus(item.QuestId);
         if (status == QUEST_STATUS_NONE && bot->CanTakeQuest(quest, false) && bot->CanAddQuest(quest, false) &&
-            IsQuestWorthDoing(quest) && IsQuestCapableDoing(quest))
+            WouldAccept(quest))
         {
             AcceptQuest(quest, guid);
             if (botAI->GetMaster())
@@ -563,6 +565,15 @@ uint32 NewRpgBaseAction::BestRewardIndex(Quest const* quest)
         }
         return best;
     }
+}
+
+// Quest routes: a routed bot takes only quests its route can do (RouteMgr::MayAccept); any other bot as before.
+bool NewRpgBaseAction::WouldAccept(Quest const* quest)
+{
+    if (!IsQuestWorthDoing(quest) || !IsQuestCapableDoing(quest))
+        return false;
+    RouteMgr const& routes = RouteMgr::instance();
+    return !routes.Routed(bot) || routes.MayAccept(bot, quest);
 }
 
 bool NewRpgBaseAction::IsQuestWorthDoing(Quest const* quest)
@@ -830,7 +841,7 @@ bool NewRpgBaseAction::HasQuestToAcceptOrReward(WorldObject* object)
 
         QuestStatus const& status = bot->GetQuestStatus(item.QuestId);
         if (status == QUEST_STATUS_NONE && bot->CanTakeQuest(quest, false) && bot->CanAddQuest(quest, false) &&
-            IsQuestWorthDoing(quest) && IsQuestCapableDoing(quest))
+            WouldAccept(quest))
         {
             return true;
         }
@@ -1157,10 +1168,19 @@ bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> candidateSta
     // (focus never turns on an activity the config turned off). Both loops below must use the same weight.
     auto weightOf = [this](NewRpgStatus status) -> uint32
     {
-        uint32 const base = sPlayerbotAIConfig.RpgStatusProbWeight[status];
+        // FOLLOW_ROUTE takes DO_QUEST's place and weight (guildmaster spec §3 part 2).
+        NewRpgStatus const weightKey = status == RPG_FOLLOW_ROUTE ? RPG_DO_QUEST : status;
+        uint32 const base = sPlayerbotAIConfig.RpgStatusProbWeight[weightKey];
         return NewRpgInfo::FocusBoosts(botAI->rpgInfo.focus, status) ? base * sPlayerbotAIConfig.rpgFocusMultiplier
                                                                        : base;
     };
+    // Quest routes: only a routed bot is offered FOLLOW_ROUTE (the IDLE roll). Decide runs once per roll (preflight
+    // D15) and the choice is reused below. When the route has a hub for it, FOLLOW_ROUTE replaces DO_QUEST; when it
+    // has none (another continent, the end of its path, catch-up), DO_QUEST rolls as before (spec §4 step 3).
+    Routes::NextChoice route;
+    if (std::find(candidateStatus.begin(), candidateStatus.end(), RPG_FOLLOW_ROUTE) != candidateStatus.end())
+        route = RouteMgr::instance().Decide(bot);
+    bool const routeAvailable = route.kind == Routes::Next::Stay || route.kind == Routes::Next::Hub;
     std::vector<NewRpgStatus> availableStatus;
     uint32 probSum = 0;
     for (NewRpgStatus status : candidateStatus)
@@ -1168,7 +1188,14 @@ bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> candidateSta
         if (weightOf(status) == 0)
             continue;
 
-        if (CheckRpgStatusAvailable(status))
+        bool available;
+        if (status == RPG_FOLLOW_ROUTE)
+            available = routeAvailable;
+        else if (status == RPG_DO_QUEST && routeAvailable)
+            available = false;  // the route's hub is this bot's questing now
+        else
+            available = CheckRpgStatusAvailable(status);
+        if (available)
         {
             availableStatus.push_back(status);
             probSum += weightOf(status);
@@ -1272,6 +1299,8 @@ bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> candidateSta
             botAI->rpgInfo.ChangeToDoGather();
             return true;
         }
+        case RPG_FOLLOW_ROUTE:
+            return ChangeToRouteChoice(route);
         case RPG_IDLE:
         {
             botAI->rpgInfo.ChangeToIdle();
@@ -1296,6 +1325,21 @@ bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> candidateSta
         }
     }
     return false;
+}
+
+bool NewRpgBaseAction::ChangeToRouteChoice(Routes::NextChoice const& next)
+{
+    if (next.kind != Routes::Next::Stay && next.kind != Routes::Next::Hub)
+        return false;
+    Routes::Hub const* hub = RouteMgr::instance().HubById(next.hubId);
+    if (!hub)
+        return false;
+    // "Stay" means the hub still has work, not that the bot is there (preflight C1): it counts as arrived only near
+    // the hub; farther away it walks back first (the action sets arrived itself at the hub).
+    bool const arrived =
+        next.kind == Routes::Next::Stay && bot->GetExactDist2d(hub->x, hub->y) <= RouteMgr::STAY_ARRIVED_YARDS;
+    botAI->rpgInfo.ChangeToFollowRoute(next.hubId, 0, arrived);
+    return true;
 }
 
 bool NewRpgBaseAction::CheckRpgStatusAvailable(NewRpgStatus status)
@@ -1366,6 +1410,12 @@ bool NewRpgBaseAction::CheckRpgStatusAvailable(NewRpgStatus status)
             WorldPosition flightMasterPos;
             std::vector<uint32> path;
             return SelectRandomFlightTaxiNode(flightMasterEntry, flightMasterPos, path);
+        }
+        case RPG_FOLLOW_ROUTE:
+        {
+            // RandomChangeStatus decides once per roll itself; this is for any other caller.
+            Routes::Next const kind = RouteMgr::instance().Decide(bot).kind;  // Decide checks Routed first
+            return kind == Routes::Next::Stay || kind == Routes::Next::Hub;
         }
         case RPG_OUTDOOR_PVP:
         {

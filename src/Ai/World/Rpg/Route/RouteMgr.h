@@ -10,6 +10,7 @@
 #include "Define.h"
 #include "RouteHubRules.h"
 #include "RouteQuestRules.h"
+#include "TravelMgr.h"  // WorldPosition (RouteMgr::Job)
 #include <array>
 #include <atomic>
 #include <map>
@@ -80,6 +81,33 @@ public:
     uint32 BuildMs() const { return _buildMs; }
     uint32 RoutedKinds() const { return _routedKinds; }
     uint32 QuestCount() const { return static_cast<uint32>(_quests.size()); }
+
+    // A bot at a hub (spec §3 part 2, §4).
+    struct HubWork
+    {
+        uint32 doableNow = 0;  // quests it could take or work right now
+        uint32 remaining = 0;  // not done yet, any level (race and class allowed, not skipped or dropped)
+        uint32 done = 0;       // turned in
+    };
+    struct Job
+    {
+        WorldPosition where;
+        uint32 questId = 0;
+        int32 objective = 0;   // JOB_ENDER, JOB_GIVER, or the objective index 0-9 (items from 4)
+    };
+    static constexpr int32 JOB_ENDER = -1;
+    static constexpr int32 JOB_GIVER = -2;
+    static constexpr float JOB_REACH_YARDS = 1500.0f;  // as far as DO_QUEST looks for a quest's area
+    // A bot told to stay on its hub counts as arrived when it is this close to the hub's centre (preflight C1: "stay"
+    // means the hub still has work, not that the bot is there; farther away it walks back first).
+    static constexpr float STAY_ARRIVED_YARDS = JOB_REACH_YARDS / 2;
+    HubWork WorkAt(Player* bot, Routes::Hub const& hub) const;
+    // The next job, nearest first within each kind: hand in a finished routed quest (any ender in reach), take a quest
+    // this hub gives (the carried follow-up first), then the nearest unfinished objective of a routed quest in the log.
+    // Quests in `skip` (the bot's own per-session low-priority list) are passed over. False: nothing left.
+    bool NextJob(Player* bot, Routes::Hub const& hub, uint32 carryQuest, std::unordered_set<uint32> const& skip,
+                 Job& job) const;
+    Routes::NextChoice Decide(Player* bot) const;  // spec §4 steps 1-3 for this bot now
 
 private:
     std::atomic<bool> _built{false};

@@ -3236,6 +3236,8 @@ void RandomPlayerbotMgr::PrintStats()
                  rpgStatusCount[RPG_GO_CAMP], rpgStatusCount[RPG_WANDER_RANDOM], rpgStatusCount[RPG_WANDER_NPC],
                  rpgStatusCount[RPG_DO_QUEST], rpgStatusCount[RPG_TRAVEL_FLIGHT], rpgStatusCount[RPG_OUTDOOR_PVP],
                  rpgStatusCount[RPG_DO_GATHER]);
+        if (sPlayerbotAIConfig.questRoutes.enabled)
+            LOG_INFO("playerbots", "    FollowRoute: {}", rpgStatusCount[RPG_FOLLOW_ROUTE]);
 
         LOG_INFO("playerbots", "Bots total quests:");
         LOG_INFO("playerbots", "    Accepted: {}, Rewarded: {}, Dropped: {}", rpgStasticTotal.questAccepted,

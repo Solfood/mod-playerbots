@@ -6,10 +6,15 @@
 
 #include "RouteCommand.h"
 
+#include "CharacterCache.h"
 #include "Chat.h"
+#include "NewRpgInfo.h"
+#include "ObjectAccessor.h"
 #include "ObjectMgr.h"
 #include "Player.h"
 #include "PlayerbotAIConfig.h"
+#include "Playerbots.h"
+#include "RandomPlayerbotMgr.h"
 #include "RouteMgr.h"
 #include <algorithm>
 #include <cstdlib>
@@ -48,6 +53,18 @@ PlayerInfo const* StartOf(uint8 race)
     return nullptr;
 }
 
+// The bot seams act on online population bots only (never a guild member: the checks pick bots outside our guilds).
+Player* FindBot(ChatHandler* handler, std::string const& name)
+{
+    Player* bot = ObjectAccessor::FindPlayerByName(name, true);
+    if (!bot || !GET_PLAYERBOT_AI(bot) || !sRandomPlayerbotMgr.IsRandomBot(bot))
+    {
+        handler->PSendSysMessage("ROUTEERR no online population bot named {}", name);
+        return nullptr;
+    }
+    return bot;
+}
+
 void PrintHub(ChatHandler* handler, uint32 order, Routes::Hub const& h)
 {
     uint32 routed = 0;
@@ -65,7 +82,7 @@ bool RouteCommand::Handle(ChatHandler* handler, char const* args)
     if (words.empty())
     {
         handler->PSendSysMessage("ROUTEERR usage: routes stats | dump <alliance|horde> <start> | kind <quest> | "
-                                 "hubinfo <hub id>");
+                                 "hubinfo <hub id> | on|off|bot|decide|log <name> | go <name> <hub id>");
         return false;
     }
     RouteMgr& routes = RouteMgr::instance();
@@ -128,6 +145,87 @@ bool RouteCommand::Handle(ChatHandler* handler, char const* args)
                 handler->PSendSysMessage("ROUTEQUEST quest={} kind={} level={}", id, Routes::KindName(q->kind),
                                          uint32(q->level));
         return true;
+    }
+    if (sub == "off" && words.size() > 1 && !ObjectAccessor::FindPlayerByName(words[1], true))
+    {
+        // The seam turns off for a logged-out bot too (preflight D13), so no test leaves a bot routed until a
+        // restart. Seats (Task 6) are freed at logout.
+        ObjectGuid const guid = sCharacterCache->GetCharacterGuidByName(words[1]);
+        if (!guid)
+        {
+            handler->PSendSysMessage("ROUTEERR no character named {}", words[1]);
+            return false;
+        }
+        routes.SetTestRouted(guid.GetCounter(), false);
+        handler->PSendSysMessage("ROUTEOK {} routed=0 (offline)", words[1]);
+        return true;
+    }
+    if (words.size() > 1 && (sub == "on" || sub == "off" || sub == "bot" || sub == "decide" || sub == "log" ||
+                             sub == "go"))
+    {
+        Player* bot = FindBot(handler, words[1]);
+        if (!bot)
+            return false;
+        PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
+        NewRpgInfo& info = botAI->rpgInfo;
+        if (sub == "on" || sub == "off")
+        {
+            routes.SetTestRouted(bot->GetGUID().GetCounter(), sub == "on");
+            if (sub == "off" && info.GetStatus() == RPG_FOLLOW_ROUTE)
+                info.ChangeToIdle();
+            handler->PSendSysMessage("ROUTEOK {} routed={}", bot->GetName(), routes.Routed(bot) ? 1 : 0);
+            return true;
+        }
+        if (sub == "bot")
+        {
+            Routes::Hub const* hub = routes.HubById(info.route.hubId);
+            RouteMgr::HubWork const work = hub ? routes.WorkAt(bot, *hub) : RouteMgr::HubWork();
+            auto const* follow = std::get_if<NewRpgInfo::FollowRoute>(&info.data);
+            handler->PSendSysMessage(
+                "ROUTEBOT name={} guid={} routed={} level={} rpg={} hub={} hubdist={} arrived={} quest={} objective={} "
+                "done={} remaining={} doable={} rewarded={} style={} headto={} chain={} carry={}",
+                bot->GetName(), bot->GetGUID().GetCounter(), routes.Routed(bot) ? 1 : 0, bot->GetLevel(),
+                info.StatusName(), info.route.hubId, hub ? uint32(bot->GetExactDist2d(hub->x, hub->y)) : 0,
+                follow && follow->arrived ? 1 : 0, follow ? follow->questId : 0, follow ? follow->objective : 0,
+                work.done, work.remaining, work.doableNow, botAI->rpgStatistic.questRewarded,
+                Routes::StyleName(static_cast<Routes::Style>(info.route.style)), info.route.headToZone,
+                info.route.chainHub, info.route.carryQuest);
+            return true;
+        }
+        if (sub == "decide")
+        {
+            Routes::NextChoice const next = routes.Decide(bot);
+            static char const* const kinds[] = {"stay", "hub", "catchup", "wait", "none"};
+            Routes::Hub const* hub = routes.HubById(next.hubId);
+            handler->PSendSysMessage("ROUTEDECIDE name={} kind={} hub={} zone={}", bot->GetName(),
+                                     kinds[static_cast<int>(next.kind)], next.hubId, hub ? hub->zone : 0);
+            return true;
+        }
+        if (sub == "log")
+        {
+            for (uint8 slot = 0; slot < MAX_QUEST_LOG_SIZE; ++slot)
+                if (uint32 const id = bot->GetQuestSlotQuestId(slot))
+                {
+                    Quest const* quest = sObjectMgr->GetQuestTemplate(id);
+                    handler->PSendSysMessage("ROUTELOG quest={} kind={} status={} level={}", id,
+                                             Routes::KindName(routes.KindOf(id)), uint32(bot->GetQuestStatus(id)),
+                                             quest ? bot->GetQuestLevel(quest) : 0);
+                }
+            return true;
+        }
+        if (sub == "go" && words.size() > 2)
+        {
+            // Test seam: follow the route to this hub now (the bot must be routed).
+            uint32 const hubId = static_cast<uint32>(std::strtoul(words[2].c_str(), nullptr, 10));
+            if (!routes.Routed(bot) || !routes.HubById(hubId))
+            {
+                handler->PSendSysMessage("ROUTEERR {} is not routed or there is no hub {}", bot->GetName(), hubId);
+                return false;
+            }
+            info.ChangeToFollowRoute(hubId);
+            handler->PSendSysMessage("ROUTEOK {} rpg=FOLLOW_ROUTE hub={}", bot->GetName(), hubId);
+            return true;
+        }
     }
     handler->PSendSysMessage("ROUTEERR unknown or incomplete command: {}", sub);
     return false;

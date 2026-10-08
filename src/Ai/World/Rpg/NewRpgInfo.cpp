@@ -78,6 +78,17 @@ void NewRpgInfo::ChangeToIdle()
     data = Idle{};
 }
 
+void NewRpgInfo::ChangeToFollowRoute(uint32 hubId, uint32 fromArea, bool arrived)
+{
+    startT = getMSTime();
+    FollowRoute follow;
+    follow.hubId = hubId;
+    follow.fromArea = fromArea;
+    follow.arrived = arrived;
+    data = follow;
+    route.hubId = hubId;
+}
+
 bool NewRpgInfo::CanChangeTo(NewRpgStatus)
 {
     return true;
@@ -109,6 +120,7 @@ NewRpgStatus NewRpgInfo::StatusFromString(std::string const& name)
     if (name == "travel flight")  return RPG_TRAVEL_FLIGHT;
     if (name == "outdoor pvp")    return RPG_OUTDOOR_PVP;
     if (name == "do gather")      return RPG_DO_GATHER;
+    if (name == "follow route")   return RPG_FOLLOW_ROUTE;
     return RPG_STATUS_END;
 }
 
@@ -126,6 +138,7 @@ NewRpgStatus NewRpgInfo::GetStatus()
         if constexpr (std::is_same_v<T, TravelFlight>) return RPG_TRAVEL_FLIGHT;
         if constexpr (std::is_same_v<T, OutdoorPvP>) return RPG_OUTDOOR_PVP;
         if constexpr (std::is_same_v<T, DoGather>) return RPG_DO_GATHER;
+        if constexpr (std::is_same_v<T, FollowRoute>) return RPG_FOLLOW_ROUTE;
         return RPG_IDLE;
     }, data);
 }
@@ -207,8 +220,26 @@ std::string NewRpgInfo::ToString()
             out << "\nvisited: " << arg.visited.size();
             out << "\nlastReach: " << (arg.lastReach ? GetMSTimeDiffToNow(arg.lastReach) : 0);
         }
+        else if constexpr (std::is_same_v<T, FollowRoute>)
+        {
+            out << "FOLLOW_ROUTE";
+            out << "\nhub: " << arg.hubId << (arg.arrived ? " (arrived)" : "");
+            out << "\nquest: " << arg.questId << " objective: " << arg.objective;
+            out << "\nclassQuest: " << arg.classQuest;
+        }
         else
             out << "UNKNOWN";
     }, data);
     return out.str();
+}
+
+std::string NewRpgInfo::StatusName()
+{
+    // ToString() starts with "Status: <NAME>" followed by details on later lines.
+    std::string const text = ToString();
+    std::string::size_type const start = text.find(' ');
+    if (start == std::string::npos)
+        return "?";
+    std::string::size_type const end = text.find('\n', start + 1);
+    return text.substr(start + 1, end == std::string::npos ? std::string::npos : end - start - 1);
 }

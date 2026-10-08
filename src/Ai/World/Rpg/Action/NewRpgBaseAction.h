@@ -16,6 +16,7 @@
 #include "ObjectGuid.h"
 #include "PlayerbotAI.h"
 #include "QuestDef.h"
+#include "RouteHubRules.h"
 #include "TravelMgr.h"
 
 struct POIInfo
@@ -48,6 +49,8 @@ protected:
     uint32 BestRewardIndex(Quest const* quest);
     bool IsQuestWorthDoing(Quest const* quest);
     bool IsQuestCapableDoing(Quest const* quest);
+    // Worth doing and capable of it; a routed bot also only takes quests its route can do (RouteMgr::MayAccept).
+    bool WouldAccept(Quest const* quest);
 
     /* QUEST RELATED ACTION */
     bool SearchQuestGiverAndAcceptOrReward();
@@ -68,6 +71,9 @@ protected:
     // Honest world, worn gear: no quest above the bot's level.
     bool IsQuestTooHardForWornGear(uint32 questId);
     bool CheckRpgStatusAvailable(NewRpgStatus status);
+    // Quest routes: carry out the route's choice for this bot (spec §4): Stay or Hub start FOLLOW_ROUTE, anything
+    // else changes nothing. The caller ran RouteMgr::Decide once (preflight D15). True if the status changed.
+    bool ChangeToRouteChoice(Routes::NextChoice const& next);
 
 protected:
     /* FOR MOVE FAR */

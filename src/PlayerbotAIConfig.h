@@ -74,7 +74,9 @@ enum NewRpgStatus : int
     RPG_OUTDOOR_PVP = 8,
     // Roam the current zone harvesting herb/ore nodes
     RPG_DO_GATHER = 9,
-    RPG_STATUS_END = 10
+    // Follow a quest route hub to hub (guildmaster quest routes; only when AiPlayerbot.QuestRoutes = 1 or a test seam)
+    RPG_FOLLOW_ROUTE = 10,
+    RPG_STATUS_END = 11
 };
 
 #define MAX_SPECNO 20
