@@ -92,9 +92,24 @@ struct QuestFacts
     std::array<bool, QUEST_ITEM_COUNT> itemFromMob{};    // some creature's loot table holds the item
     std::array<bool, QUEST_ITEM_COUNT> itemFromObject{}; // some game object's loot table holds it
     uint32_t startItem = 0;               // given to the bot when it accepts
+    // The objective's creature is friendly to a faction the quest is offered to (RouteMgr::Build reads the faction
+    // templates): "kill" credit on it comes from a spell or a script (heal the guard), not from a kill.
+    std::array<bool, QUEST_OBJECTIVE_COUNT> npcFriendly{};
 };
 
 inline QuestKind Harder(QuestKind a, QuestKind b) { return a < b ? b : a; }
+
+// A creature objective that would count as a kill, on a creature friendly to the quest's faction (5621 Garments of
+// the Moon: heal and buff Sentinel Shaya). A bot cannot kill it, so the quest is unsupported (Task 6 ruling).
+inline bool FriendlyKillTarget(QuestFacts const& f)
+{
+    if (f.specialFlags & SPECIAL_CAST)
+        return false;  // spell credit: cast_on_target already
+    for (std::size_t i = 0; i < QUEST_OBJECTIVE_COUNT; ++i)
+        if (f.npcOrGo[i] > 0 && !f.startItem && f.npcFriendly[i])
+            return true;
+    return false;
+}
 
 inline QuestKind ClassifyQuest(QuestFacts const& f)
 {
@@ -104,8 +119,9 @@ inline QuestKind ClassifyQuest(QuestFacts const& f)
     QuestKind kind = QuestKind::Deliver;
     if (f.specialFlags & SPECIAL_EXPLORATION_OR_EVENT)
         kind = (f.flags & FLAG_PARTY_ACCEPT) ? QuestKind::Escort : QuestKind::Event;
-    for (int32_t target : f.npcOrGo)
+    for (std::size_t i = 0; i < QUEST_OBJECTIVE_COUNT; ++i)
     {
+        int32_t const target = f.npcOrGo[i];
         if (!target)
             continue;
         // A creature plus a start item is "use the item on it" even without the cast flag (9303 Inoculation).
@@ -113,8 +129,10 @@ inline QuestKind ClassifyQuest(QuestFacts const& f)
             kind = Harder(kind, QuestKind::UseItemOnTarget);
         else if (f.specialFlags & SPECIAL_CAST)
             kind = Harder(kind, f.startItem ? QuestKind::UseItemOnTarget : QuestKind::CastOnTarget);
+        else if (target < 0)
+            kind = Harder(kind, QuestKind::UseObject);
         else
-            kind = Harder(kind, target < 0 ? QuestKind::UseObject : QuestKind::Kill);
+            kind = Harder(kind, f.npcFriendly[i] ? QuestKind::Unsupported : QuestKind::Kill);  // FriendlyKillTarget
     }
     for (std::size_t i = 0; i < QUEST_ITEM_COUNT; ++i)
     {

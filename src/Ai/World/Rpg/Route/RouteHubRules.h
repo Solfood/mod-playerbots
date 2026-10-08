@@ -496,11 +496,24 @@ public:
         --_count[it->second];
         _hubOf.erase(it);
     }
-    uint32_t Seats(uint32_t hubId) const
+    uint32_t Seats(uint32_t hubId) const  // real seats plus phantom ones
     {
         std::lock_guard<std::mutex> guard(_lock);
         auto const it = _count.find(hubId);
-        return it == _count.end() ? 0 : it->second;
+        auto const ph = _phantoms.find(hubId);
+        return (it == _count.end() ? 0 : it->second) + (ph == _phantoms.end() ? 0 : ph->second);
+    }
+    // Test seam: made-up bots so the hub holds n seats in all, real ones included (preflight D12); 0 clears them.
+    // Phantoms are not bots: Seated and MaxSeats leave them out.
+    void SetPhantoms(uint32_t hubId, uint32_t n)
+    {
+        std::lock_guard<std::mutex> guard(_lock);
+        auto const it = _count.find(hubId);
+        uint32_t const real = it == _count.end() ? 0 : it->second;
+        if (n > real)
+            _phantoms[hubId] = n - real;
+        else
+            _phantoms.erase(hubId);
     }
     uint32_t HubOf(uint32_t guid) const
     {
@@ -523,6 +536,7 @@ private:
     mutable std::mutex _lock;
     std::unordered_map<uint32_t, uint32_t> _hubOf;
     std::unordered_map<uint32_t, uint32_t> _count;
+    std::unordered_map<uint32_t, uint32_t> _phantoms;  // hub -> made-up seats (test seam)
     uint32_t _max = 0;
 };
 }  // namespace Routes

@@ -142,6 +142,11 @@ int main()
     in.currentHub = 3;
     c = PickNextHub(in);
     CHECK_TRUE(c.kind == Next::Stay && c.hubId == 3);
+    // ... nor by a head_to: it applies once the current hub runs dry (Task 6, spec §4 order).
+    in.headToZone = 130;
+    c = PickNextHub(in);
+    CHECK_TRUE(c.kind == Next::Stay && c.hubId == 3);
+    in.headToZone = 0;
     in.currentHub = 2;
     in.options[1].seats = 0;
     in.options[2].seats = 0;
@@ -260,6 +265,24 @@ int main()
     CHECK_EQ(2u, book.MaxSeats());
     book.Unseat(999);  // never seated: nothing happens
     CHECK_EQ(2u, book.Seated());
+    // Phantom seats (the `routes seats` test seam) top the hub up to n in all, real seats included (preflight D12),
+    // are not bots (Seated and MaxSeats leave them out) and 0 clears them.
+    book.SetPhantoms(5, 15);
+    CHECK_EQ(15u, book.Seats(5));
+    CHECK_EQ(2u, book.Seated());
+    CHECK_EQ(2u, book.MaxSeats());
+    book.Seat(104, 5);  // a real bot joins: the top-up was made before, so 16 now (the seam is a snapshot)
+    CHECK_EQ(16u, book.Seats(5));
+    book.SetPhantoms(5, 15);
+    CHECK_EQ(15u, book.Seats(5));
+    book.SetPhantoms(5, 1);  // fewer than the real seats: no phantom
+    CHECK_EQ(3u, book.Seats(5));
+    book.SetPhantoms(5, 0);
+    CHECK_EQ(3u, book.Seats(5));
+    book.SetPhantoms(9, 4);  // a hub with no bot
+    CHECK_EQ(4u, book.Seats(9));
+    book.SetPhantoms(9, 0);
+    CHECK_EQ(0u, book.Seats(9));
 
     // A hub is named after the most common area among its giver spots; a tie goes to the one seen first (preflight D7).
     CHECK_EQ(8u, MostCommon(std::vector<uint32_t>{3, 8, 8}));

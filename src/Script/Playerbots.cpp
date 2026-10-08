@@ -143,7 +143,8 @@ public:
         PLAYERHOOK_CAN_PLAYER_USE_CHANNEL_CHAT,
         PLAYERHOOK_ON_GIVE_EXP,
         PLAYERHOOK_ON_BEFORE_TELEPORT,
-        PLAYERHOOK_ON_PLAYER_JUST_DIED
+        PLAYERHOOK_ON_PLAYER_JUST_DIED,
+        PLAYERHOOK_ON_MAP_CHANGED
     }) {}
 
     void OnPlayerLogin(Player* player) override
@@ -176,6 +177,7 @@ public:
 
     void OnPlayerBeforeLogout(Player* player) override
     {
+        RouteMgr::instance().Unseat(player->GetGUID().GetCounter());  // quest routes: its hub seat (cheap when off)
         if (PlayerbotMgr* playerbotMgr = GET_PLAYERBOT_MGR(player))
         {
             PlayerbotAI* botAI = PlayerbotsMgr::instance().GetPlayerbotAI(player);
@@ -185,6 +187,12 @@ public:
         }
 
         sRandomPlayerbotMgr.OnPlayerLogout(player);
+    }
+
+    // Quest routes: a bot that changes map leaves its hub seat (hubs are per map; cheap when off).
+    void OnPlayerMapChanged(Player* player) override
+    {
+        RouteMgr::instance().Unseat(player->GetGUID().GetCounter());
     }
 
     // Map thread. Honest world: a recent death at 45+ makes a bot a raisings candidate.

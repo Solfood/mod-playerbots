@@ -89,6 +89,15 @@ void NewRpgInfo::ChangeToFollowRoute(uint32 hubId, uint32 fromArea, bool arrived
     route.hubId = hubId;
 }
 
+void NewRpgInfo::ChangeToClassQuest(uint32 questId, WorldPosition giver)
+{
+    startT = getMSTime();
+    FollowRoute follow;
+    follow.classQuest = questId;
+    follow.classGiver = giver;
+    data = follow;
+}
+
 bool NewRpgInfo::CanChangeTo(NewRpgStatus)
 {
     return true;

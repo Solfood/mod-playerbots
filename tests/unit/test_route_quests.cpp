@@ -68,6 +68,29 @@ int main()
     daily.dailyOrWeekly = true;
     CHECK_EQ(std::string("unsupported"), std::string(KindName(ClassifyQuest(daily))));
 
+    // A "kill" objective on a creature friendly to the quest's faction is no kill (5621 Garments of the Moon: heal
+    // and buff Sentinel Shaya): unsupported, never routed (Task 6 ruling). Hostile or neutral targets stay kill.
+    QuestFacts heal = Kill(12429);
+    heal.npcFriendly[0] = true;
+    CHECK_EQ(std::string("unsupported"), std::string(KindName(ClassifyQuest(heal))));
+    CHECK_TRUE(FriendlyKillTarget(heal));
+    CHECK_TRUE(!FriendlyKillTarget(Kill(1505)));
+    QuestFacts healLoot = heal;  // plus a mob drop: still unsupported (the hardest objective wins)
+    healLoot.items[0] = 2855;
+    healLoot.itemFromMob[0] = true;
+    CHECK_EQ(std::string("unsupported"), std::string(KindName(ClassifyQuest(healLoot))));
+    QuestFacts friendlyCast = heal;  // spell credit on a friendly creature is cast_on_target, as before
+    friendlyCast.specialFlags = SPECIAL_CAST;
+    CHECK_EQ(std::string("cast_on_target"), std::string(KindName(ClassifyQuest(friendlyCast))));
+    CHECK_TRUE(!FriendlyKillTarget(friendlyCast));
+    QuestFacts friendlyObject = Kill(-180516);  // the flag means nothing on a game object objective
+    friendlyObject.npcFriendly[0] = true;
+    CHECK_EQ(std::string("use_object"), std::string(KindName(ClassifyQuest(friendlyObject))));
+    QuestFacts secondSlot = Kill(1505);  // a friendly creature in any slot
+    secondSlot.npcOrGo[2] = 12429;
+    secondSlot.npcFriendly[2] = true;
+    CHECK_EQ(std::string("unsupported"), std::string(KindName(ClassifyQuest(secondSlot))));
+
     // Names round-trip; 5a routes exactly three kinds.
     QuestKind k = QuestKind::Unsupported;
     CHECK_TRUE(KindFromName("loot_from_mob", k));

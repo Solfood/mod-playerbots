@@ -8,6 +8,7 @@
 
 #include "CharacterCache.h"
 #include "Chat.h"
+#include "DBCStores.h"
 #include "NewRpgInfo.h"
 #include "ObjectAccessor.h"
 #include "ObjectMgr.h"
@@ -19,6 +20,7 @@
 #include <algorithm>
 #include <cstdlib>
 #include <iterator>
+#include <map>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -44,6 +46,7 @@ struct Start
 constexpr Start STARTS[] = {{"northshire", 1}, {"valley", 2},  {"coldridge", 3},  {"shadowglen", 4},
                             {"deathknell", 5}, {"narache", 6}, {"sunstrider", 10}, {"ammen", 11}};
 constexpr uint8 MAX_CLASS_ID = 11;
+constexpr uint32 MAX_PHANTOM_SEATS = 64;  // `routes seats` test seam
 
 PlayerInfo const* StartOf(uint8 race)
 {
@@ -82,7 +85,9 @@ bool RouteCommand::Handle(ChatHandler* handler, char const* args)
     if (words.empty())
     {
         handler->PSendSysMessage("ROUTEERR usage: routes stats | dump <alliance|horde> <start> | kind <quest> | "
-                                 "hubinfo <hub id> | on|off|bot|decide|log <name> | go <name> <hub id>");
+                                 "hubinfo <hub id> | on|off|bot|decide|log|zones|classstop|forget <name> | go <name> <hub id> | "
+                                 "headto <name> <zone> | style <name> <steady|curious|easygoing> | seats <hub id> <n> | "
+                                 "chains [n]");
         return false;
     }
     RouteMgr& routes = RouteMgr::instance();
@@ -92,11 +97,12 @@ bool RouteCommand::Handle(ChatHandler* handler, char const* args)
     if (sub == "stats")
     {
         handler->PSendSysMessage("ROUTESTAT on={} built={} hubs={} quests={} routed_kinds={} class_stops={} "
-                                 "build_ms={} fix_errors={} test_routed={}",
+                                 "build_ms={} fix_errors={} test_routed={} friendly_kills={} seated={} maxseat={}",
                                  sPlayerbotAIConfig.questRoutes.enabled ? 1 : 0, routes.Built() ? 1 : 0,
                                  routes.Hubs().size(), routes.QuestCount(), routes.RoutedKinds(),
                                  routes.ClassStops().size(), routes.BuildMs(), routes.Fixes().errors.size(),
-                                 routes.TestRoutedCount());
+                                 routes.TestRoutedCount(), routes.FriendlyKillCount(), routes.Seated(),
+                                 routes.MaxSeats());
         return true;
     }
     if (sub == "dump" && words.size() > 2)
@@ -128,7 +134,9 @@ bool RouteCommand::Handle(ChatHandler* handler, char const* args)
     if (sub == "kind" && words.size() > 1)
     {
         uint32 const quest = static_cast<uint32>(std::strtoul(words[1].c_str(), nullptr, 10));
-        handler->PSendSysMessage("ROUTEKIND quest={} kind={}", quest, Routes::KindName(routes.KindOf(quest)));
+        // friendly=1: a "kill" objective on a creature friendly to its faction made it unsupported (Task 6 ruling).
+        handler->PSendSysMessage("ROUTEKIND quest={} kind={} friendly={}", quest, Routes::KindName(routes.KindOf(quest)),
+                                 routes.FriendlyKill(quest) ? 1 : 0);
         return true;
     }
     if (sub == "hubinfo" && words.size() > 1)
@@ -149,7 +157,7 @@ bool RouteCommand::Handle(ChatHandler* handler, char const* args)
     if (sub == "off" && words.size() > 1 && !ObjectAccessor::FindPlayerByName(words[1], true))
     {
         // The seam turns off for a logged-out bot too (preflight D13), so no test leaves a bot routed until a
-        // restart. Seats (Task 6) are freed at logout.
+        // restart; its seat goes too (freed at logout already, kept free here).
         ObjectGuid const guid = sCharacterCache->GetCharacterGuidByName(words[1]);
         if (!guid)
         {
@@ -157,11 +165,48 @@ bool RouteCommand::Handle(ChatHandler* handler, char const* args)
             return false;
         }
         routes.SetTestRouted(guid.GetCounter(), false);
+        routes.Unseat(guid.GetCounter());
         handler->PSendSysMessage("ROUTEOK {} routed=0 (offline)", words[1]);
         return true;
     }
+    if (sub == "seats" && words.size() > 2)
+    {
+        // Test seam: made-up bots so the hub holds n seats in all, real ones included (preflight D12); 0 clears.
+        uint32 const hubId = static_cast<uint32>(std::strtoul(words[1].c_str(), nullptr, 10));
+        if (!routes.HubById(hubId))
+        {
+            handler->PSendSysMessage("ROUTEERR no hub {}", words[1]);
+            return false;
+        }
+        uint32 const n = std::min<uint32>(MAX_PHANTOM_SEATS, static_cast<uint32>(std::strtoul(words[2].c_str(), nullptr, 10)));
+        routes.SetPhantomSeats(hubId, n);
+        handler->PSendSysMessage("ROUTEOK hub={} seats={}", hubId, routes.Seats(hubId));
+        return true;
+    }
+    if (sub == "chains")
+    {
+        // Follow-ups given out in another hub than the quest before them (spec §4 chains), the first `n`.
+        uint32 const limit = words.size() > 1 ? static_cast<uint32>(std::strtoul(words[1].c_str(), nullptr, 10)) : 5;
+        uint32 shown = 0;
+        for (Routes::Hub const& hub : routes.Hubs())
+            for (uint32 id : hub.quests)
+                if (std::vector<uint32> const* next = routes.FollowUpsOf(id))
+                    for (uint32 n : *next)
+                    {
+                        Routes::QuestRoute const* q = routes.QuestById(n);
+                        if (shown >= limit)
+                            return true;
+                        if (q && Routes::RoutedKind(q->kind) && q->giverHub[hub.team] && q->giverHub[hub.team] != hub.id)
+                        {
+                            ++shown;
+                            handler->PSendSysMessage("ROUTECHAIN quest={} next={} hub={}", id, n, q->giverHub[hub.team]);
+                        }
+                    }
+        return true;
+    }
     if (words.size() > 1 && (sub == "on" || sub == "off" || sub == "bot" || sub == "decide" || sub == "log" ||
-                             sub == "go"))
+                             sub == "go" || sub == "headto" || sub == "style" || sub == "zones" ||
+                             sub == "classstop" || sub == "forget"))
     {
         Player* bot = FindBot(handler, words[1]);
         if (!bot)
@@ -171,8 +216,12 @@ bool RouteCommand::Handle(ChatHandler* handler, char const* args)
         if (sub == "on" || sub == "off")
         {
             routes.SetTestRouted(bot->GetGUID().GetCounter(), sub == "on");
-            if (sub == "off" && info.GetStatus() == RPG_FOLLOW_ROUTE)
-                info.ChangeToIdle();
+            if (sub == "off")
+            {
+                routes.Unseat(bot->GetGUID().GetCounter());  // preflight D13: off frees its seat
+                if (info.GetStatus() == RPG_FOLLOW_ROUTE)
+                    info.ChangeToIdle();
+            }
             handler->PSendSysMessage("ROUTEOK {} routed={}", bot->GetName(), routes.Routed(bot) ? 1 : 0);
             return true;
         }
@@ -186,13 +235,14 @@ bool RouteCommand::Handle(ChatHandler* handler, char const* args)
             bool const jobLeft = hub && routes.NextJob(bot, *hub, info.route.carryQuest, botAI->lowPriorityQuest, job);
             handler->PSendSysMessage(
                 "ROUTEBOT name={} guid={} routed={} level={} rpg={} hub={} hubdist={} arrived={} quest={} objective={} "
-                "done={} remaining={} doable={} rewarded={} style={} headto={} chain={} carry={} job={}",
+                "done={} remaining={} doable={} rewarded={} style={} headto={} chain={} carry={} job={} zone={} seat={}",
                 bot->GetName(), bot->GetGUID().GetCounter(), routes.Routed(bot) ? 1 : 0, bot->GetLevel(),
                 info.StatusName(), info.route.hubId, hub ? uint32(bot->GetExactDist2d(hub->x, hub->y)) : 0,
                 follow && follow->arrived ? 1 : 0, follow ? follow->questId : 0, follow ? follow->objective : 0,
                 work.done, work.remaining, work.doableNow, botAI->rpgStatistic.questRewarded,
-                Routes::StyleName(static_cast<Routes::Style>(info.route.style)), info.route.headToZone,
-                info.route.chainHub, info.route.carryQuest, jobLeft ? 1 : 0);
+                Routes::StyleName(routes.StyleOf(bot)), info.route.headToZone,
+                info.route.chainHub, info.route.carryQuest, jobLeft ? 1 : 0, bot->GetZoneId(),
+                routes.SeatOf(bot->GetGUID().GetCounter()));
             return true;
         }
         if (sub == "decide")
@@ -225,8 +275,66 @@ bool RouteCommand::Handle(ChatHandler* handler, char const* args)
                 handler->PSendSysMessage("ROUTEERR {} is not routed or there is no hub {}", bot->GetName(), hubId);
                 return false;
             }
+            routes.Seat(bot->GetGUID().GetCounter(), hubId);
             info.ChangeToFollowRoute(hubId);
             handler->PSendSysMessage("ROUTEOK {} rpg=FOLLOW_ROUTE hub={}", bot->GetName(), hubId);
+            return true;
+        }
+        if (sub == "headto" && words.size() > 2)
+        {
+            uint32 const zone = static_cast<uint32>(std::strtoul(words[2].c_str(), nullptr, 10));
+            std::string const problem = zone ? routes.HeadToProblem(bot, zone) : "";
+            if (!problem.empty())
+            {
+                handler->PSendSysMessage("ROUTEERR {}", problem);
+                return false;
+            }
+            RouteMgr::SetHeadTo(bot, zone);
+            handler->PSendSysMessage("ROUTEOK {} headto={}", bot->GetName(), zone);
+            return true;
+        }
+        if (sub == "style" && words.size() > 2)
+        {
+            Routes::Style style = Routes::Style::Steady;
+            if (!Routes::StyleFromName(words[2], style))
+            {
+                handler->PSendSysMessage("ROUTEERR style must be steady, curious or easygoing");
+                return false;
+            }
+            RouteMgr::SetStyle(bot, style);
+            handler->PSendSysMessage("ROUTEOK {} style={}", bot->GetName(), Routes::StyleName(style));
+            return true;
+        }
+        if (sub == "forget")
+        {
+            // Test seam: the game forgets head_to and the bridge's style, as after a relog (the bridge re-applies).
+            info.route.headToZone = 0;
+            info.route.styleSet = false;
+            handler->PSendSysMessage("ROUTEOK {} forgot head_to and style", bot->GetName());
+            return true;
+        }
+        if (sub == "zones")
+        {
+            std::map<uint32, uint32> hubs;
+            for (Routes::Hub const* hub : routes.PathFor(bot->GetTeamId(), bot->GetMapId()))
+                ++hubs[hub->zone];
+            for (auto const& [zone, count] : hubs)
+            {
+                AreaTableEntry const* area = sAreaTableStore.LookupEntry(zone);
+                handler->PSendSysMessage("ROUTEZONE zone={} hubs={} fits={} name={}", zone, count,
+                                         routes.HeadToProblem(bot, zone).empty() ? 1 : 0,
+                                         area ? area->area_name[0] : "?");
+            }
+            return true;
+        }
+        if (sub == "classstop")
+        {
+            Routes::ClassStop stop;
+            if (routes.ClassStopFor(bot, botAI->lowPriorityQuest, stop))
+                handler->PSendSysMessage("ROUTECLASS name={} quest={} at={},{}", bot->GetName(), stop.questId,
+                                         int32(stop.giver.x), int32(stop.giver.y));
+            else
+                handler->PSendSysMessage("ROUTECLASS name={} quest=0", bot->GetName());
             return true;
         }
     }

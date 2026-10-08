@@ -119,6 +119,22 @@ void RouteMgr::Build()
             objects[data.id].push_back({data.mapid, data.posX, data.posY, data.posZ, 3, 1});
     }
 
+    // Faction templates of the two teams' players (Human, Orc): a creature objective friendly to the quest's team is
+    // no kill (Task 6 ruling: heal the guard).
+    FactionTemplateEntry const* const teamFaction[2] = {sFactionTemplateStore.LookupEntry(FACTION_TEMPLATE_HUMAN),
+                                                        sFactionTemplateStore.LookupEntry(FACTION_TEMPLATE_ORC)};
+    auto friendlyToQuestTeams = [&teamFaction](uint32 creatureEntry, uint8 questTeams)
+    {
+        CreatureTemplate const* t = sObjectMgr->GetCreatureTemplate(creatureEntry);
+        FactionTemplateEntry const* ft = t ? sFactionTemplateStore.LookupEntry(t->faction) : nullptr;
+        if (!ft)
+            return false;
+        for (uint8 team : {Routes::TEAM_ALLIANCE_ID, Routes::TEAM_HORDE_ID})
+            if ((questTeams & TeamBit(team)) && teamFaction[team] && ft->IsFriendlyTo(*teamFaction[team]))
+                return true;
+        return false;
+    };
+
     // Quests, in id order, so the same database always gives the same hubs.
     std::vector<uint32> ids;
     for (auto const& [id, quest] : sObjectMgr->GetQuestTemplates())
@@ -144,8 +160,12 @@ void RouteMgr::Build()
         f.repeatable = quest->IsRepeatable();
         f.seasonal = quest->IsSeasonal();
         f.dailyOrWeekly = quest->IsDailyOrWeekly();
+        uint8 const questTeams = TeamsAllowedBy(quest);
         for (int i = 0; i < QUEST_OBJECTIVES_COUNT; ++i)
+        {
             f.npcOrGo[i] = quest->RequiredNpcOrGo[i];
+            f.npcFriendly[i] = f.npcOrGo[i] > 0 && friendlyToQuestTeams(static_cast<uint32>(f.npcOrGo[i]), questTeams);
+        }
         for (int i = 0; i < QUEST_ITEM_OBJECTIVES_COUNT; ++i)
         {
             f.items[i] = quest->RequiredItemId[i];
@@ -158,6 +178,13 @@ void RouteMgr::Build()
 
         Routes::QuestRoute& q = _quests[id];
         q.kind = Routes::ClassifyQuest(f);
+        if (Routes::FriendlyKillTarget(f))
+        {
+            Routes::QuestFacts plain = f;
+            plain.npcFriendly = {};
+            if (Routes::ClassifyQuest(plain) != q.kind)
+                _friendlyKills.insert(id);  // the guard changed its kind (the fix list may still name one)
+        }
         if (auto const fixed = _fix.kinds.find(id); fixed != _fix.kinds.end())
             q.kind = fixed->second;
         // QuestLevel -1 scales to the player (the core shows it at the player's level); for routing it counts at its
@@ -165,7 +192,7 @@ void RouteMgr::Build()
         int32 const level = quest->GetQuestLevel() > 0 ? quest->GetQuestLevel() : static_cast<int32>(quest->GetMinLevel());
         q.level = static_cast<uint8>(std::clamp<int32>(level, 1, 255));
         q.minLevel = static_cast<uint8>(std::clamp<uint32>(quest->GetMinLevel(), 1, 255));
-        q.teams = TeamsAllowedBy(quest);
+        q.teams = questTeams;
         q.classMask = quest->GetRequiredClasses();
         _routedKinds += Routes::RoutedKind(q.kind) ? 1 : 0;
         if (quest->GetPrevQuestId() > 0)
@@ -351,8 +378,8 @@ void RouteMgr::Build()
 
     _buildMs = GetMSTimeDiffToNow(started);
     LOG_INFO("playerbots", ">> Quest routes: {} hubs, {} quests ({} of a routed kind), {} class quest givers, {} fix "
-             "list errors, in {} ms", _hubs.size(), _quests.size(), _routedKinds, _classStops.size(), _fix.errors.size(),
-             _buildMs);
+             "list errors, {} kill quests on a friendly creature left unsupported, in {} ms", _hubs.size(),
+             _quests.size(), _routedKinds, _classStops.size(), _fix.errors.size(), _friendlyKills.size(), _buildMs);
     _built.store(true, std::memory_order_release);
 }
 
@@ -562,7 +589,123 @@ Routes::NextChoice RouteMgr::Decide(Player* bot) const
             Job job;
             in.currentJobLeft = NextJob(bot, *hub, route.carryQuest, botAI->lowPriorityQuest, job);
         }
-        in.options.push_back({hub, work.doableNow, work.remaining, work.done, 0, bot->GetExactDist2d(hub->x, hub->y)});
+        in.options.push_back(
+            {hub, work.doableNow, work.remaining, work.done, Seats(hub->id), bot->GetExactDist2d(hub->x, hub->y)});
     }
+    in.headToZone = route.headToZone;
+    in.chainHub = route.chainHub;
+    in.style = StyleOf(bot);
     return Routes::PickNextHub(in);
+}
+
+Routes::Style RouteMgr::StyleOf(Player* bot) const
+{
+    PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
+    if (botAI && botAI->rpgInfo.route.styleSet)
+        return static_cast<Routes::Style>(botAI->rpgInfo.route.style);
+    return Routes::StyleFromGuid(bot->GetGUID().GetCounter());
+}
+
+void RouteMgr::SetStyle(Player* bot, Routes::Style style)
+{
+    if (PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot))
+    {
+        botAI->rpgInfo.route.style = static_cast<uint8>(style);
+        botAI->rpgInfo.route.styleSet = true;
+    }
+}
+
+std::string RouteMgr::HeadToProblem(Player* bot, uint32 zone) const
+{
+    if (!Routed(bot))
+        return "routes are off";
+    return Routes::HeadToProblem(bot->GetName(), bot->GetLevel(), zone, PathFor(bot->GetTeamId(), bot->GetMapId()));
+}
+
+void RouteMgr::SetHeadTo(Player* bot, uint32 zone)
+{
+    if (PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot))
+        botAI->rpgInfo.route.headToZone = zone;
+}
+
+uint32 RouteMgr::HeadTo(Player* bot)
+{
+    PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
+    return botAI ? botAI->rpgInfo.route.headToZone : 0;
+}
+
+void RouteMgr::SettleHeadTo(Player* bot) const
+{
+    PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
+    if (!botAI)
+        return;
+    uint32& zone = botAI->rpgInfo.route.headToZone;
+    // Kept in a dungeon or another instance (no path there, preflight C7): only the open world settles it.
+    if (!zone || !bot->GetMap() || bot->GetMap()->Instanceable())
+        return;
+    if (bot->GetZoneId() == zone || !HeadToProblem(bot, zone).empty())
+        zone = 0;  // the bridge sees it gone and drops its stored target (NextHeadToStep)
+}
+
+void RouteMgr::NoteTurnIn(Player* bot, uint32 questId) const
+{
+    PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
+    std::vector<uint32> const* next = FollowUpsOf(questId);
+    if (!botAI || !next)
+        return;
+    NewRpgInfo::RouteState& route = botAI->rpgInfo.route;
+    for (uint32 id : *next)
+    {
+        Routes::QuestRoute const* q = QuestById(id);
+        if (!q || !Routes::RoutedKind(q->kind))
+            continue;
+        uint32 const hub = q->giverHub[bot->GetTeamId()];
+        if (!hub || hub == route.hubId)
+            continue;  // given out here (or nowhere on a route): the work loop finds it
+        route.chainHub = hub;
+        route.carryQuest = id;
+        return;
+    }
+}
+
+bool RouteMgr::ClassStopFor(Player* bot, std::unordered_set<uint32> const& skip, Routes::ClassStop& out) const
+{
+    float best = CLASS_STOP_YARDS;
+    bool found = false;
+    for (Routes::ClassStop const& stop : _classStops)
+    {
+        if (stop.team != bot->GetTeamId() || !(stop.classMask & bot->getClassMask()) ||
+            stop.giver.map != bot->GetMapId() || skip.count(stop.questId))
+            continue;
+        float const distance = bot->GetExactDist2d(stop.giver.x, stop.giver.y);
+        if (distance >= best)
+            continue;  // the cheap test first: the quest checks below look at the bot's log
+        Quest const* quest = sObjectMgr->GetQuestTemplate(stop.questId);
+        if (!quest || bot->GetQuestStatus(stop.questId) != QUEST_STATUS_NONE || !bot->CanTakeQuest(quest, false) ||
+            !bot->CanAddQuest(quest, false) || !MayAccept(bot, quest))
+            continue;
+        best = distance;
+        out = stop;
+        found = true;
+    }
+    return found;
+}
+
+std::vector<Routes::Point> const* RouteMgr::Waypoints(uint32 fromArea, uint32 toArea) const
+{
+    auto const it = _fix.waypoints.find({fromArea, toArea});
+    return it == _fix.waypoints.end() ? nullptr : &it->second;
+}
+
+RouteMgr::Choice RouteMgr::Choose(Player* bot) const
+{
+    Choice choice;
+    PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
+    if (!botAI || !Routed(bot))
+        return choice;
+    SettleHeadTo(bot);
+    choice.next = Decide(bot);
+    if (choice.next.kind != Routes::Next::Stay)
+        choice.classStop = ClassStopFor(bot, botAI->lowPriorityQuest, choice.stop);
+    return choice;
 }

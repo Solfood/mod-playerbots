@@ -186,6 +186,8 @@ struct NewRpgInfo
     void ChangeToRest();
     void ChangeToIdle();
     void ChangeToFollowRoute(uint32 hubId, uint32 fromArea = 0, bool arrived = false);
+    // FOLLOW_ROUTE to a class quest's giver (spec §4: class quests first); its hub binding is kept.
+    void ChangeToClassQuest(uint32 questId, WorldPosition giver);
     bool CanChangeTo(NewRpgStatus status);
     void Reset();
     void SetMoveFarTo(WorldPosition pos);

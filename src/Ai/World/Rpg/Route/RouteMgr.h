@@ -15,6 +15,7 @@
 #include <atomic>
 #include <map>
 #include <mutex>
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -81,6 +82,9 @@ public:
     uint32 BuildMs() const { return _buildMs; }
     uint32 RoutedKinds() const { return _routedKinds; }
     uint32 QuestCount() const { return static_cast<uint32>(_quests.size()); }
+    // Quests whose "kill" objective is a creature friendly to their faction (heal the guard): unsupported (Task 6).
+    uint32 FriendlyKillCount() const { return static_cast<uint32>(_friendlyKills.size()); }
+    bool FriendlyKill(uint32 questId) const { return _friendlyKills.count(questId) > 0; }
 
     // A bot at a hub (spec §3 part 2, §4).
     struct HubWork
@@ -101,6 +105,8 @@ public:
     // A bot told to stay on its hub counts as arrived when it is this close to the hub's centre (preflight C1: "stay"
     // means the hub still has work, not that the bot is there; farther away it walks back first).
     static constexpr float STAY_ARRIVED_YARDS = JOB_REACH_YARDS / 2;
+    // Class trainers stand in capitals: a class quest giver this far away on the same map is still a stop.
+    static constexpr float CLASS_STOP_YARDS = 6000.0f;
     HubWork WorkAt(Player* bot, Routes::Hub const& hub) const;
     // The next job, nearest first within each kind: hand in a finished routed quest (any ender in reach), take a quest
     // this hub gives (the carried follow-up first), then the nearest unfinished objective of a routed quest in the log.
@@ -109,6 +115,39 @@ public:
     bool NextJob(Player* bot, Routes::Hub const& hub, uint32 carryQuest, std::unordered_set<uint32> const& skip,
                  Job& job) const;
     Routes::NextChoice Decide(Player* bot) const;  // spec §4 steps 1-3 for this bot now
+
+    // Hub seats (decision 14). Freed at logout, at a map change and by the `routes off` seam.
+    void Seat(uint32 guid, uint32 hubId) { _seats.Seat(guid, hubId); }
+    void Unseat(uint32 guid) { _seats.Unseat(guid); }
+    uint32 Seats(uint32 hubId) const { return _seats.Seats(hubId); }
+    uint32 SeatOf(uint32 guid) const { return _seats.HubOf(guid); }  // the hub it holds a seat on (0 = none)
+    uint32 Seated() const { return _seats.Seated(); }
+    uint32 MaxSeats() const { return _seats.MaxSeats(); }
+    void SetPhantomSeats(uint32 hubId, uint32 n) { _seats.SetPhantoms(hubId, n); }  // test seam: n seats in all
+    // Route style: the bridge's (route_style) or, for every other bot, from its guid.
+    Routes::Style StyleOf(Player* bot) const;
+    static void SetStyle(Player* bot, Routes::Style style);
+    // head_to (contract §4): "" when the bot may go to `zone`; else the refusal.
+    std::string HeadToProblem(Player* bot, uint32 zone) const;
+    static void SetHeadTo(Player* bot, uint32 zone);
+    static uint32 HeadTo(Player* bot);
+    void SettleHeadTo(Player* bot) const;  // reached the zone or outlevelled it: the target is cleared
+    // After a turn-in: a routed follow-up given out in another hub of its path is carried there (spec §4).
+    void NoteTurnIn(Player* bot, uint32 questId) const;
+    // The nearest class quest on its map it can take now (spec §4: class quests first), none in `skip`.
+    bool ClassStopFor(Player* bot, std::unordered_set<uint32> const& skip, Routes::ClassStop& out) const;
+    std::vector<Routes::Point> const* Waypoints(uint32 fromArea, uint32 toArea) const;
+    // What a routed bot does when it rolls FOLLOW_ROUTE, worked out once per roll (preflight D15): head_to settled,
+    // then Decide; when Decide does not keep it on its hub, a class quest it can take now goes first (spec §4: at the
+    // front of the route, never pulling a bot off a hub it is working).
+    struct Choice
+    {
+        Routes::NextChoice next;
+        bool classStop = false;
+        Routes::ClassStop stop;
+        bool Any() const { return classStop || next.kind != Routes::Next::None; }
+    };
+    Choice Choose(Player* bot) const;
 
 private:
     std::atomic<bool> _built{false};
@@ -120,6 +159,8 @@ private:
     std::unordered_map<uint32, Routes::QuestRoute> _quests;
     std::unordered_map<uint32, std::vector<uint32>> _followUps;  // quest -> quests it unlocks
     std::vector<Routes::ClassStop> _classStops;
+    std::unordered_set<uint32> _friendlyKills;
+    Routes::SeatBook _seats;
     mutable std::mutex _testLock;
     std::unordered_set<uint32> _testRouted;
     std::atomic<uint32> _testCount{0};

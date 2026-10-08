@@ -348,7 +348,9 @@ bool NewRpgBaseAction::InteractWithNpcOrGameObjectForQuest(ObjectGuid guid)
         }
         if (status == QUEST_STATUS_COMPLETE && bot->CanRewardQuest(quest, 0, false))
         {
-            TurnInQuest(quest, guid);
+            // Quest routes: a follow-up given out in another hub is carried there (spec §4 chains).
+            if (TurnInQuest(quest, guid) && RouteMgr::instance().Routed(bot))
+                RouteMgr::instance().NoteTurnIn(bot, quest->GetQuestId());
             if (botAI->GetMaster())
                 botAI->TellMasterNoFacing(PlayerbotTextMgr::instance().GetBotTextOrDefault(
                     "new_rpg_quest_rewarded",
@@ -1162,26 +1164,57 @@ bool NewRpgBaseAction::IsQuestTooHardForWornGear(uint32 questId)
     return quest && static_cast<int32>(quest->GetQuestLevel()) > static_cast<int32>(bot->GetLevel());
 }
 
+namespace
+{
+// What a roll candidate means for a routed bot's pace (route styles, decision 11).
+Routes::Pace PaceOf(NewRpgStatus status)
+{
+    switch (status)
+    {
+        case RPG_FOLLOW_ROUTE:
+            return Routes::Pace::Route;
+        case RPG_REST:
+            return Routes::Pace::Rest;
+        case RPG_GO_GRIND:
+            return Routes::Pace::Grind;
+        case RPG_WANDER_RANDOM:
+            return Routes::Pace::Wander;
+        case RPG_DO_GATHER:
+            return Routes::Pace::Gather;
+        default:
+            return Routes::Pace::Other;
+    }
+}
+}  // namespace
+
 bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> candidateStatus)
 {
     // Guildmaster bridge focus: the matching statuses weigh rpgFocusMultiplier times more. A weight of 0 stays 0
     // (focus never turns on an activity the config turned off). Both loops below must use the same weight.
-    bool const routed = RouteMgr::instance().Routed(bot);  // false with routes off and no seam: the roll as before
-    auto weightOf = [this, routed](NewRpgStatus status) -> uint32
+    RouteMgr const& routes = RouteMgr::instance();
+    bool const routed = routes.Routed(bot);  // false with routes off and no seam: the roll as before
+    // A routed bot's style shifts the weights (steady: the route x3; curious: route, wander, gather x2; easygoing:
+    // rest x3, grind x2). Unrouted: x1, as before.
+    Routes::Style const style = routed ? routes.StyleOf(bot) : Routes::Style::Steady;
+    auto weightOf = [this, routed, style](NewRpgStatus status) -> uint32
     {
         // FOLLOW_ROUTE takes DO_QUEST's place and weight (guildmaster spec §3 part 2).
         NewRpgStatus const weightKey = status == RPG_FOLLOW_ROUTE ? RPG_DO_QUEST : status;
-        uint32 const base = sPlayerbotAIConfig.RpgStatusProbWeight[weightKey];
+        uint32 base = sPlayerbotAIConfig.RpgStatusProbWeight[weightKey];
+        if (routed)
+            base *= Routes::StyleMultiplier(style, PaceOf(status));
         return NewRpgInfo::FocusBoosts(botAI->rpgInfo.focus, status, routed) ? base * sPlayerbotAIConfig.rpgFocusMultiplier
                                                                        : base;
     };
-    // Quest routes: only a routed bot is offered FOLLOW_ROUTE (the IDLE roll). Decide runs once per roll (preflight
-    // D15) and the choice is reused below. When the route has a hub for it, FOLLOW_ROUTE replaces DO_QUEST; when it
-    // has none (another continent, the end of its path, catch-up), DO_QUEST rolls as before (spec §4 step 3).
-    Routes::NextChoice route;
+    // Quest routes: only a routed bot is offered FOLLOW_ROUTE (the IDLE roll). The route's choice is worked out once
+    // per roll (preflight D15) and reused below. When the route has something for it (a class quest, a hub, a
+    // catch-up, a full hub to wait out), FOLLOW_ROUTE replaces DO_QUEST; when it has none (another continent, the end
+    // of its path), DO_QUEST rolls as before (spec §4 step 3).
+    RouteMgr::Choice route;
     if (std::find(candidateStatus.begin(), candidateStatus.end(), RPG_FOLLOW_ROUTE) != candidateStatus.end())
-        route = RouteMgr::instance().Decide(bot);
-    bool const routeAvailable = route.kind == Routes::Next::Stay || route.kind == Routes::Next::Hub;
+        route = routes.Choose(bot);
+    // A class stop, a hub, a catch-up or a full hub to wait out: the route is its questing now.
+    bool const routeAvailable = route.Any();
     std::vector<NewRpgStatus> availableStatus;
     uint32 probSum = 0;
     for (NewRpgStatus status : candidateStatus)
@@ -1193,7 +1226,7 @@ bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> candidateSta
         if (status == RPG_FOLLOW_ROUTE)
             available = routeAvailable;
         else if (status == RPG_DO_QUEST && routeAvailable)
-            available = false;  // the route's hub is this bot's questing now
+            available = false;  // the route is this bot's questing now
         else
             available = CheckRpgStatusAvailable(status);
         if (available)
@@ -1328,20 +1361,66 @@ bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> candidateSta
     return false;
 }
 
-bool NewRpgBaseAction::ChangeToRouteChoice(Routes::NextChoice const& next)
+bool NewRpgBaseAction::ChangeToRouteChoice()
 {
-    if (next.kind != Routes::Next::Stay && next.kind != Routes::Next::Hub)
-        return false;
-    Routes::Hub const* hub = RouteMgr::instance().HubById(next.hubId);
-    if (!hub)
-        return false;
-    // "Stay" means the hub still has work, not that the bot is there (preflight C1): it counts as arrived only near
-    // the hub and in its zone (fix round 1, M2: not across water in the next zone); else it walks back first (the
-    // action sets arrived itself at the hub).
-    bool const arrived = next.kind == Routes::Next::Stay && bot->GetZoneId() == hub->zone &&
-                         bot->GetExactDist2d(hub->x, hub->y) <= RouteMgr::STAY_ARRIVED_YARDS;
-    botAI->rpgInfo.ChangeToFollowRoute(next.hubId, 0, arrived);
-    return true;
+    return ChangeToRouteChoice(RouteMgr::instance().Choose(bot));
+}
+
+bool NewRpgBaseAction::ChangeToRouteChoice(RouteMgr::Choice const& choice)
+{
+    RouteMgr& routes = RouteMgr::instance();
+    NewRpgInfo& info = botAI->rpgInfo;
+    uint32 const guid = bot->GetGUID().GetCounter();
+    if (choice.classStop)
+    {
+        // A class quest first (spec §4); its hub seat, if any, is kept.
+        Routes::Spawn const& giver = choice.stop.giver;
+        info.ChangeToClassQuest(choice.stop.questId, WorldPosition(giver.map, giver.x, giver.y, giver.z));
+        return true;
+    }
+    Routes::NextChoice const& next = choice.next;
+    switch (next.kind)
+    {
+        case Routes::Next::Stay:
+        case Routes::Next::Hub:
+        {
+            Routes::Hub const* hub = routes.HubById(next.hubId);
+            if (!hub)
+                return false;
+            routes.Seat(guid, next.hubId);
+            if (next.kind == Routes::Next::Hub)
+            {
+                Routes::Hub const* from = routes.HubById(info.route.hubId);
+                info.ChangeToFollowRoute(next.hubId, from ? from->area : 0, false);
+                return true;
+            }
+            // "Stay" means the hub still has work, not that the bot is there (preflight C1): it counts as arrived
+            // only near the hub and in its zone (fix round 1, M2: not across water in the next zone); else it walks
+            // back first (the action sets arrived itself at the hub).
+            bool const arrived = bot->GetZoneId() == hub->zone &&
+                                 bot->GetExactDist2d(hub->x, hub->y) <= RouteMgr::STAY_ARRIVED_YARDS;
+            info.ChangeToFollowRoute(next.hubId, 0, arrived);
+            return true;
+        }
+        case Routes::Next::CatchUp:
+        case Routes::Next::Wait:
+        {
+            // Nothing fits yet, or the hubs that fit are full: grind nearby at or below its level (the fight rule
+            // and the grind target keep it there) and choose again when that ends. No grind spot: wander, which
+            // fights what the grind target finds (preflight D16: never idle and re-decide every tick). Honest world,
+            // worn gear: no trip to a grind spot (as RPG_GO_GRIND), it wanders.
+            routes.Unseat(guid);
+            WorldPosition const pos = TownErrands::PlaySafe(botAI, bot) ? WorldPosition() : SelectRandomGrindPos(bot);
+            if (pos != WorldPosition())
+                info.ChangeToGoGrind(pos);
+            else
+                info.ChangeToWanderRandom();
+            return true;
+        }
+        default:
+            routes.Unseat(guid);
+            return false;
+    }
 }
 
 bool NewRpgBaseAction::CheckRpgStatusAvailable(NewRpgStatus status)
@@ -1414,11 +1493,8 @@ bool NewRpgBaseAction::CheckRpgStatusAvailable(NewRpgStatus status)
             return SelectRandomFlightTaxiNode(flightMasterEntry, flightMasterPos, path);
         }
         case RPG_FOLLOW_ROUTE:
-        {
-            // RandomChangeStatus decides once per roll itself; this is for any other caller.
-            Routes::Next const kind = RouteMgr::instance().Decide(bot).kind;  // Decide checks Routed first
-            return kind == Routes::Next::Stay || kind == Routes::Next::Hub;
-        }
+            // RandomChangeStatus works the choice out once per roll itself; this is for any other caller.
+            return RouteMgr::instance().Choose(bot).Any();  // Choose checks Routed first
         case RPG_OUTDOOR_PVP:
         {
             if (!bot->IsPvP())

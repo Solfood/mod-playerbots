@@ -16,7 +16,7 @@
 #include "ObjectGuid.h"
 #include "PlayerbotAI.h"
 #include "QuestDef.h"
-#include "RouteHubRules.h"
+#include "RouteMgr.h"
 #include "TravelMgr.h"
 
 struct POIInfo
@@ -71,9 +71,12 @@ protected:
     // Honest world, worn gear: no quest above the bot's level.
     bool IsQuestTooHardForWornGear(uint32 questId);
     bool CheckRpgStatusAvailable(NewRpgStatus status);
-    // Quest routes: carry out the route's choice for this bot (spec §4): Stay or Hub start FOLLOW_ROUTE, anything
-    // else changes nothing. The caller ran RouteMgr::Decide once (preflight D15). True if the status changed.
-    bool ChangeToRouteChoice(Routes::NextChoice const& next);
+    // Quest routes: carry out the route's choice for this bot (spec §4): a class quest stop or a hub (stay or go,
+    // seated) start FOLLOW_ROUTE; catch-up or a full hub: grind nearby (else wander, preflight D16) and choose again
+    // later; no hub: unseated, nothing changes. True if the status changed. The roll works the choice out once
+    // (RouteMgr::Choose, preflight D15) and passes it; the no-argument form works it out itself.
+    bool ChangeToRouteChoice(RouteMgr::Choice const& choice);
+    bool ChangeToRouteChoice();
 
 protected:
     /* FOR MOVE FAR */

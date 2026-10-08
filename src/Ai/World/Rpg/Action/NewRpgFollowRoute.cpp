@@ -22,20 +22,66 @@ bool NewRpgFollowRouteAction::Execute(Event /*event*/)
     auto* data = std::get_if<NewRpgInfo::FollowRoute>(&info.data);
     if (!data)
         return false;
-    RouteMgr const& routes = RouteMgr::instance();
-    Routes::Hub const* hub = routes.HubById(data->hubId);
-    if (!hub || !routes.Routed(bot) || bot->GetMapId() != hub->map)
+    RouteMgr& routes = RouteMgr::instance();
+    if (!routes.Routed(bot))
     {
+        info.ChangeToIdle();
+        return true;
+    }
+    if (data->classQuest)
+    {
+        // A class quest first (spec §4): walk to its giver; once near, the 80-yard search above takes it.
+        if (bot->GetQuestStatus(data->classQuest) != QUEST_STATUS_NONE || data->classGiver.GetMapId() != bot->GetMapId())
+        {
+            info.ChangeToIdle();
+            return true;
+        }
+        if (bot->GetExactDist2d(data->classGiver.GetPositionX(), data->classGiver.GetPositionY()) > GIVER_YARDS)
+            return MoveFarTo(data->classGiver) || MoveRandomNear(NUDGE_YARDS);
+        if (!data->jobSinceMs)
+            data->jobSinceMs = getMSTime();  // the clock starts at the giver, not at the start of the walk
+        if (GetMSTimeDiffToNow(data->jobSinceMs) > JOB_STUCK_MS)
+        {
+            botAI->lowPriorityQuest.insert(data->classQuest);  // a giver that never answers: not again this session
+            info.ChangeToIdle();
+            return true;
+        }
+        return ForceToWait(GIVER_WAIT_MS);
+    }
+    if (info.route.carryQuest && bot->GetQuestStatus(info.route.carryQuest) != QUEST_STATUS_NONE)
+    {
+        info.route.carryQuest = 0;  // taken (or done): the chain no longer pulls
+        info.route.chainHub = 0;
+    }
+    Routes::Hub const* hub = routes.HubById(data->hubId);
+    if (!hub || bot->GetMapId() != hub->map)
+    {
+        routes.Unseat(bot->GetGUID().GetCounter());
         info.ChangeToIdle();
         return true;
     }
 
     if (!data->arrived)
     {
+        // The fix list's waypoints between the hub it came from and this one, in order (a point on another map or
+        // already reached is passed).
+        if (std::vector<Routes::Point> const* way = routes.Waypoints(data->fromArea, hub->area))
+            while (data->waypoint < way->size())
+            {
+                Routes::Point const& p = (*way)[data->waypoint];
+                if (p.map != bot->GetMapId() || bot->GetExactDist2d(p.x, p.y) <= ARRIVE_YARDS)
+                {
+                    ++data->waypoint;
+                    continue;
+                }
+                return MoveFarTo(WorldPosition(p.map, p.x, p.y, p.z)) || MoveRandomNear(NUDGE_YARDS);
+            }
         // Arrival is set only here, when the bot is really at the hub (preflight C1).
         if (bot->GetExactDist2d(hub->x, hub->y) > ARRIVE_YARDS)
             return MoveFarTo(WorldPosition(hub->map, hub->x, hub->y, hub->z)) || MoveRandomNear(NUDGE_YARDS);
         data->arrived = true;
+        if (info.route.chainHub == hub->id)
+            info.route.chainHub = 0;  // reached the chain's hub: the carried quest is its first job here
     }
 
     RouteMgr::Job job;

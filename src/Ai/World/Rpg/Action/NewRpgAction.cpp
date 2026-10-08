@@ -224,7 +224,7 @@ bool TellRpgStatusAction::Execute(Event event)
     }
     else if (status == RPG_FOLLOW_ROUTE)
     {
-        if (!ChangeToRouteChoice(RouteMgr::instance().Decide(bot)))
+        if (!ChangeToRouteChoice())
         {
             std::string msg = PlayerbotTextMgr::instance().GetBotTextOrDefault(
                 "rpg_no_route_error", "No quest route for me here.", {});
