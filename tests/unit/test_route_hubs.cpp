@@ -171,6 +171,17 @@ int main()
     CHECK_EQ(4u, path[3]);
     CHECK_EQ(5u, path[4]);
 
+    // The dumped path takes only hubs the bot fits (MinLevel at or below it), as PickNextHub does; when none fits it
+    // catches up on the lowest MinLevel. A near hub it cannot take yet must not outlevel a far one it can (Westfall).
+    Hub const start = MakeHub(11, 12, 0, 0, 1, 3, 4);
+    Hub const nearHigh = MakeHub(12, 44, 500, 0, 9, 20, 26);
+    Hub const farLow = MakeHub(13, 40, 3000, 0, 8, 14, 18);
+    std::vector<uint32_t> const westfall = SimulatePath({&start, &nearHigh, &farLow}, 0, 0);
+    CHECK_EQ(3u, static_cast<uint32_t>(westfall.size()));
+    CHECK_EQ(11u, westfall[0]);
+    CHECK_EQ(13u, westfall[1]);
+    CHECK_EQ(12u, westfall[2]);
+
     // head_to: on the path and in reach, out of range, not on the path.
     std::vector<Hub const*> const onMap = {&deathknell, &calvin, &brill, &sepulcher};
     CHECK_EQ(std::string(""), HeadToProblem("Nori", 7, 85, onMap));

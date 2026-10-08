@@ -367,7 +367,8 @@ inline NextChoice PickNextHubElsewhere(NextInput const& in)
 }
 
 // The path `.playerbots routes dump` prints: a bot that starts at (startX, startY) at level 1, does every hub fully
-// and reaches each hub's median level, choosing with PickNextHub's order (HubOrderKey). Hubs it outlevels on the way
+// and reaches each hub's median level, choosing like PickNextHub: the hubs it fits in HubOrderKey order, else the
+// lowest MinLevel ahead (catch-up). Hubs it outlevels on the way
 // are left out. Paths are per (team, map) and never cross maps (preflight D8): an empty path means "no hub fits" and
 // PickNextHub then answers None, so the bot falls back to the old random roll.
 inline std::vector<uint32_t> SimulatePath(std::vector<Hub const*> const& hubs, float startX, float startY)
@@ -378,8 +379,11 @@ inline std::vector<uint32_t> SimulatePath(std::vector<Hub const*> const& hubs, f
     int level = 1;
     for (;;)
     {
-        std::size_t best = hubs.size();
+        // Among the hubs it fits (MinLevel at or below its level) the PickNextHub order; when none fits, catch up on
+        // the lowest MinLevel, then the nearest (PickNextHub's CatchUp).
+        std::size_t best = hubs.size(), ahead = hubs.size();
         std::tuple<bool, int, float, uint32_t> bestKey{};
+        std::tuple<int, float, uint32_t> aheadKey{};
         for (std::size_t i = 0; i < hubs.size(); ++i)
         {
             if (used[i])
@@ -391,13 +395,28 @@ inline std::vector<uint32_t> SimulatePath(std::vector<Hub const*> const& hubs, f
                     waiting = true;
             if (waiting)
                 continue;
-            auto const k = HubOrderKey(h, std::hypot(h.x - x, h.y - y));
-            if (best == hubs.size() || k < bestKey)
+            float const distance = std::hypot(h.x - x, h.y - y);
+            if (h.minLevel <= level)
             {
-                best = i;
-                bestKey = k;
+                auto const k = HubOrderKey(h, distance);
+                if (best == hubs.size() || k < bestKey)
+                {
+                    best = i;
+                    bestKey = k;
+                }
+            }
+            else
+            {
+                auto const k = std::make_tuple(static_cast<int>(h.minLevel), distance, h.id);
+                if (ahead == hubs.size() || k < aheadKey)
+                {
+                    ahead = i;
+                    aheadKey = k;
+                }
             }
         }
+        if (best == hubs.size())
+            best = ahead;
         if (best == hubs.size())
             break;
         used[best] = true;
