@@ -688,6 +688,15 @@ bool PlayerbotAIConfig::Initialize()
     fixedPopulationSafeBelow = sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.PlaySafeBelowDurability", 20);
     fixedPopulationTownTripTimeout =
         sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.TownTripTimeoutSeconds", 1200);
+    questRoutes.enabled = sConfigMgr->GetOption<bool>("AiPlayerbot.QuestRoutes", false);
+    questRoutes.hubSoftCap = sConfigMgr->GetOption<uint32>("AiPlayerbot.QuestRoutes.HubSoftCap", 15);
+    questRoutes.safeFightUntilLevel = sConfigMgr->GetOption<uint32>("AiPlayerbot.QuestRoutes.SafeFightUntilLevel", 10);
+    questRoutes.safeFightLevelGap = sConfigMgr->GetOption<uint32>("AiPlayerbot.QuestRoutes.SafeFightLevelGap", 1);
+    questRoutes.retreatReserveCopper = sConfigMgr->GetOption<uint32>("AiPlayerbot.QuestRoutes.RetreatReserveCopper", 100);
+    questRoutes.strugglingDeathsPerHour =
+        sConfigMgr->GetOption<uint32>("AiPlayerbot.QuestRoutes.StrugglingDeathsPerHour", 5);
+    questRoutes.questStallMinutes = sConfigMgr->GetOption<uint32>("AiPlayerbot.QuestRoutes.QuestStallMinutes", 20);
+    questRoutes.hubRadius = sConfigMgr->GetOption<float>("AiPlayerbot.QuestRoutes.HubRadius", 150.0f);
     professionPickMinLevel = sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.ProfessionMinLevel", 5);
     professionPickMaxLevel = sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.ProfessionMaxLevel", 10);
     if (professionPickMaxLevel < professionPickMinLevel)

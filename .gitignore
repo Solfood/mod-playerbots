@@ -56,3 +56,4 @@ local.properties
 #
 .agents/plans/**
 .claude/settings.local.json
+tests/unit/bin/

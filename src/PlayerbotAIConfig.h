@@ -8,6 +8,7 @@
 #define PLAYERBOTS_PLAYERBOTAICONFIG_H
 
 #include "DBCEnums.h"
+#include "RouteSettings.h"
 #include "SharedDefines.h"
 #include <algorithm>
 #include <map>
@@ -366,6 +367,7 @@ public:
     uint32 fixedPopulationErrandCooldown;
     uint32 fixedPopulationSafeBelow;
     uint32 fixedPopulationTownTripTimeout;
+    Routes::Settings questRoutes;  // guildmaster quest routes (AiPlayerbot.QuestRoutes.*), off by default
     uint32 professionPickMinLevel;
     uint32 professionPickMaxLevel;
     float spiritHealerGraveRadius;

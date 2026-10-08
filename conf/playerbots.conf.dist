@@ -846,6 +846,32 @@ AiPlayerbot.FixedPopulation.SpiritHealerRadius = 60
 AiPlayerbot.FixedPopulation.SpiritHealerMaxAttempts = 20
 AiPlayerbot.FixedPopulation.SpiritHealerMaxSeconds = 300
 
+# Quest routes (guildmaster). With QuestRoutes = 1, every population bot follows a quest route: at startup the
+# server groups quest givers that stand close together into hubs (towns and camps, e.g. Brill) and orders them by
+# level. A bot works the quests of its hub (turn in, take, nearest objective first), then walks to the next hub that
+# fits its level; if none fits yet it grinds mobs at or below its level until one does. It replaces "do quest" in the
+# activity roll (same weight). It only accepts quests a route can do (kill, loot from mobs, deliver), at most one level
+# above it. The hand-edited fix list is data/quest_routes_fixes.conf in the module.
+# HubSoftCap: at most this many bots bound for or working one hub; others take a hub of about the same level or wait.
+# SafeFightUntilLevel / SafeFightLevelGap: below that level a bot starts no fight with a mob more than the gap above
+# it (it always defends itself).
+# RetreatReserveCopper: a bot whose weapon is broken (or gear below FixedPopulation.PlaySafeBelowDurability) and that
+# cannot pay the weapon repair sells junk and earns near town until it has the repair plus this much, then repairs.
+# StrugglingDeathsPerHour: a bot that died this often in the last hour (or is retreating) is shown as struggling.
+# QuestStallMinutes: a quest whose objectives have not moved in this many minutes of work is abandoned and never
+# taken again (kept in the playerbots_dropped_quests table).
+# HubRadius: quest givers within this many yards form one hub.
+# Off (0) means bots behave exactly as before. Changing it needs a worldserver restart.
+# Defaults: 0, 15, 10, 1, 100, 5, 20, 150
+AiPlayerbot.QuestRoutes = 0
+AiPlayerbot.QuestRoutes.HubSoftCap = 15
+AiPlayerbot.QuestRoutes.SafeFightUntilLevel = 10
+AiPlayerbot.QuestRoutes.SafeFightLevelGap = 1
+AiPlayerbot.QuestRoutes.RetreatReserveCopper = 100
+AiPlayerbot.QuestRoutes.StrugglingDeathsPerHour = 5
+AiPlayerbot.QuestRoutes.QuestStallMinutes = 20
+AiPlayerbot.QuestRoutes.HubRadius = 150
+
 # Death knight "raisings" (only with FixedPopulation = 1). None at launch. Once a bot of a faction reaches
 # UnlockLevel, every WaveIntervalHours that faction raises bots that died within RecentDeathHours at
 # MinCandidateLevel or higher: the original character retires (kept in the database) and a level-55
