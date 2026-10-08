@@ -104,7 +104,8 @@ public:
     HubWork WorkAt(Player* bot, Routes::Hub const& hub) const;
     // The next job, nearest first within each kind: hand in a finished routed quest (any ender in reach), take a quest
     // this hub gives (the carried follow-up first), then the nearest unfinished objective of a routed quest in the log.
-    // Quests in `skip` (the bot's own per-session low-priority list) are passed over. False: nothing left.
+    // With nothing in JOB_REACH_YARDS, the nearest of those at any distance on its map (fix round 1). Quests in `skip`
+    // (the bot's own per-session low-priority list) are passed over. False: nothing left.
     bool NextJob(Player* bot, Routes::Hub const& hub, uint32 carryQuest, std::unordered_set<uint32> const& skip,
                  Job& job) const;
     Routes::NextChoice Decide(Player* bot) const;  // spec §4 steps 1-3 for this bot now

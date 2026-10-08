@@ -28,19 +28,19 @@
 #include "PlayerbotAIConfig.h"
 #include "PlayerbotTextMgr.h"
 #include "Playerbots.h"
-#include "RouteMgr.h"
-#include <algorithm>
 #include "Position.h"
 #include "QuestDef.h"
 #include "QuestPackets.h"
 #include "Random.h"
 #include "RandomPlayerbotMgr.h"
+#include "RouteMgr.h"
 #include "SharedDefines.h"
 #include "StatsWeightCalculator.h"
 #include "Timer.h"
 #include "TownErrands.h"
 #include "TravelMgr.h"
 #include "G3D/Vector2.h"
+#include <algorithm>
 
 bool NewRpgBaseAction::MoveFarTo(WorldPosition dest)
 {
@@ -1166,12 +1166,13 @@ bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> candidateSta
 {
     // Guildmaster bridge focus: the matching statuses weigh rpgFocusMultiplier times more. A weight of 0 stays 0
     // (focus never turns on an activity the config turned off). Both loops below must use the same weight.
-    auto weightOf = [this](NewRpgStatus status) -> uint32
+    bool const routed = RouteMgr::instance().Routed(bot);  // false with routes off and no seam: the roll as before
+    auto weightOf = [this, routed](NewRpgStatus status) -> uint32
     {
         // FOLLOW_ROUTE takes DO_QUEST's place and weight (guildmaster spec §3 part 2).
         NewRpgStatus const weightKey = status == RPG_FOLLOW_ROUTE ? RPG_DO_QUEST : status;
         uint32 const base = sPlayerbotAIConfig.RpgStatusProbWeight[weightKey];
-        return NewRpgInfo::FocusBoosts(botAI->rpgInfo.focus, status) ? base * sPlayerbotAIConfig.rpgFocusMultiplier
+        return NewRpgInfo::FocusBoosts(botAI->rpgInfo.focus, status, routed) ? base * sPlayerbotAIConfig.rpgFocusMultiplier
                                                                        : base;
     };
     // Quest routes: only a routed bot is offered FOLLOW_ROUTE (the IDLE roll). Decide runs once per roll (preflight
@@ -1335,9 +1336,10 @@ bool NewRpgBaseAction::ChangeToRouteChoice(Routes::NextChoice const& next)
     if (!hub)
         return false;
     // "Stay" means the hub still has work, not that the bot is there (preflight C1): it counts as arrived only near
-    // the hub; farther away it walks back first (the action sets arrived itself at the hub).
-    bool const arrived =
-        next.kind == Routes::Next::Stay && bot->GetExactDist2d(hub->x, hub->y) <= RouteMgr::STAY_ARRIVED_YARDS;
+    // the hub and in its zone (fix round 1, M2: not across water in the next zone); else it walks back first (the
+    // action sets arrived itself at the hub).
+    bool const arrived = next.kind == Routes::Next::Stay && bot->GetZoneId() == hub->zone &&
+                         bot->GetExactDist2d(hub->x, hub->y) <= RouteMgr::STAY_ARRIVED_YARDS;
     botAI->rpgInfo.ChangeToFollowRoute(next.hubId, 0, arrived);
     return true;
 }

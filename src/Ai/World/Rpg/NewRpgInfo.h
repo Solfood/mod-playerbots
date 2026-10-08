@@ -125,13 +125,15 @@ struct NewRpgInfo
     // Guildmaster bridge focus (0 none, 1 questing, 2 grinding, 3 pvp, 4 gathering, 5 resting; the bridge's
     // Focus enum uses the same numbers). Multiplies the weights of matching statuses in RandomChangeStatus.
     uint8 focus{0};
-    static bool FocusBoosts(uint8 focus, NewRpgStatus status)
+    // `routed`: the bot follows quest routes. Its questing focus boosts the route as DO_QUEST (guildmaster spec §3
+    // part 2) but not flights, which pull it off its route (research 17; fix round 1, M1). Unrouted: as before.
+    static bool FocusBoosts(uint8 focus, NewRpgStatus status, bool routed = false)
     {
         switch (focus)
         {
             case 1:
-                // The bridge's questing focus boosts the route the same way (guildmaster spec §3 part 2).
-                return status == RPG_DO_QUEST || status == RPG_TRAVEL_FLIGHT || status == RPG_FOLLOW_ROUTE;
+                return status == RPG_DO_QUEST || (status == RPG_TRAVEL_FLIGHT && !routed) ||
+                       status == RPG_FOLLOW_ROUTE;
             case 2:
                 return status == RPG_GO_GRIND || status == RPG_WANDER_RANDOM;
             case 3:

@@ -23,6 +23,7 @@
 #include "World.h"
 #include <algorithm>
 #include <fstream>
+#include <limits>
 #include <string>
 #include <tuple>
 
@@ -462,54 +463,77 @@ bool RouteMgr::NextJob(Player* bot, Routes::Hub const& hub, uint32 carryQuest, s
             }
         }
     };
-    // 1. Hand in a finished routed quest.
-    for (uint8 slot = 0; slot < MAX_QUEST_LOG_SIZE; ++slot)
+    // Hand in a finished routed quest (any ender in reach).
+    auto handIns = [&]()
     {
-        uint32 const id = bot->GetQuestSlotQuestId(slot);
-        Routes::QuestRoute const* q = id ? QuestById(id) : nullptr;
-        if (q && !skip.count(id) && bot->GetQuestStatus(id) == QUEST_STATUS_COMPLETE)
-            consider(q->enders, id, JOB_ENDER);
-    }
+        for (uint8 slot = 0; slot < MAX_QUEST_LOG_SIZE; ++slot)
+        {
+            uint32 const id = bot->GetQuestSlotQuestId(slot);
+            Routes::QuestRoute const* q = id ? QuestById(id) : nullptr;
+            if (q && !skip.count(id) && bot->GetQuestStatus(id) == QUEST_STATUS_COMPLETE)
+                consider(q->enders, id, JOB_ENDER);
+        }
+    };
+    // The unfinished objectives of the routed quests in the log.
+    auto objectives = [&]()
+    {
+        for (uint8 slot = 0; slot < MAX_QUEST_LOG_SIZE; ++slot)
+        {
+            uint32 const id = bot->GetQuestSlotQuestId(slot);
+            Quest const* quest = id ? sObjectMgr->GetQuestTemplate(id) : nullptr;
+            Routes::QuestRoute const* q = id ? QuestById(id) : nullptr;
+            if (!quest || !q || skip.count(id) || !Routes::RoutedKind(q->kind) ||
+                bot->GetQuestStatus(id) != QUEST_STATUS_INCOMPLETE)
+                continue;
+            auto const statusIt = bot->getQuestStatusMap().find(id);
+            if (statusIt == bot->getQuestStatusMap().end())
+                continue;
+            QuestStatusData const& status = statusIt->second;
+            for (int i = 0; i < QUEST_OBJECTIVES_COUNT; ++i)
+                if (quest->RequiredNpcOrGo[i] > 0 && status.CreatureOrGOCount[i] < quest->RequiredNpcOrGoCount[i])
+                    consider(q->spots[i], id, i);
+            for (int i = 0; i < QUEST_ITEM_OBJECTIVES_COUNT; ++i)
+                if (quest->RequiredItemId[i] && status.ItemCount[i] < quest->RequiredItemCount[i])
+                    consider(q->spots[QUEST_OBJECTIVES_COUNT + i], id, QUEST_OBJECTIVES_COUNT + i);
+        }
+    };
+    // 1. Hand in.
+    handIns();
     if (found)
         return true;
-    // 2. Take a quest this hub gives (the carried follow-up first).
+    // 2. Take a quest this hub gives (the carried follow-up first, when it is in reach).
     std::vector<uint32> offers;
     if (carryQuest)
         offers.push_back(carryQuest);
     offers.insert(offers.end(), hub.quests.begin(), hub.quests.end());
-    for (uint32 id : offers)
+    auto takes = [&]()
     {
-        Quest const* quest = sObjectMgr->GetQuestTemplate(id);
-        Routes::QuestRoute const* q = QuestById(id);
-        if (!quest || !q || skip.count(id) || bot->GetQuestStatus(id) != QUEST_STATUS_NONE ||
-            !bot->CanTakeQuest(quest, false) || !bot->CanAddQuest(quest, false) || !MayAccept(bot, quest))
-            continue;
-        consider(q->givers, id, JOB_GIVER);
-        if (found && id == carryQuest)
-            return true;
-    }
+        for (uint32 id : offers)
+        {
+            Quest const* quest = sObjectMgr->GetQuestTemplate(id);
+            Routes::QuestRoute const* q = QuestById(id);
+            if (!quest || !q || skip.count(id) || bot->GetQuestStatus(id) != QUEST_STATUS_NONE ||
+                !bot->CanTakeQuest(quest, false) || !bot->CanAddQuest(quest, false) || !MayAccept(bot, quest))
+                continue;
+            consider(q->givers, id, JOB_GIVER);
+            if (found && id == carryQuest)
+                return;
+        }
+    };
+    takes();
     if (found)
         return true;
-    // 3. The nearest unfinished objective of a routed quest in the log.
-    for (uint8 slot = 0; slot < MAX_QUEST_LOG_SIZE; ++slot)
-    {
-        uint32 const id = bot->GetQuestSlotQuestId(slot);
-        Quest const* quest = id ? sObjectMgr->GetQuestTemplate(id) : nullptr;
-        Routes::QuestRoute const* q = id ? QuestById(id) : nullptr;
-        if (!quest || !q || skip.count(id) || !Routes::RoutedKind(q->kind) ||
-            bot->GetQuestStatus(id) != QUEST_STATUS_INCOMPLETE)
-            continue;
-        auto const statusIt = bot->getQuestStatusMap().find(id);
-        if (statusIt == bot->getQuestStatusMap().end())
-            continue;
-        QuestStatusData const& status = statusIt->second;
-        for (int i = 0; i < QUEST_OBJECTIVES_COUNT; ++i)
-            if (quest->RequiredNpcOrGo[i] > 0 && status.CreatureOrGOCount[i] < quest->RequiredNpcOrGoCount[i])
-                consider(q->spots[i], id, i);
-        for (int i = 0; i < QUEST_ITEM_OBJECTIVES_COUNT; ++i)
-            if (quest->RequiredItemId[i] && status.ItemCount[i] < quest->RequiredItemCount[i])
-                consider(q->spots[QUEST_OBJECTIVES_COUNT + i], id, QUEST_OBJECTIVES_COUNT + i);
-    }
+    // 3. The nearest unfinished objective in reach.
+    objectives();
+    if (found)
+        return true;
+    // 4. Nothing in reach (fix round 1, review I1): the nearest ender, giver of this hub or objective of a routed
+    // quest in the log at any distance on this map, so a deliver quest whose ender is in the next town still gets
+    // handed in and a bot back from town still finds its hub's givers.
+    best = std::numeric_limits<float>::max();
+    handIns();
+    takes();
+    objectives();
     return found;
 }
 
@@ -531,6 +555,13 @@ Routes::NextChoice RouteMgr::Decide(Player* bot) const
         HubWork const work = WorkAt(bot, *hub);
         if (!work.remaining && hub->id != route.hubId)
             continue;
+        if (hub->id == route.hubId)
+        {
+            // Doable quests it has no job for (skipped, a full log, nothing on this map) do not hold it on its hub
+            // (fix round 1, review I1): PickNextHub moves it on instead of an IDLE <-> FOLLOW_ROUTE loop.
+            Job job;
+            in.currentJobLeft = NextJob(bot, *hub, route.carryQuest, botAI->lowPriorityQuest, job);
+        }
         in.options.push_back({hub, work.doableNow, work.remaining, work.done, 0, bot->GetExactDist2d(hub->x, hub->y)});
     }
     return Routes::PickNextHub(in);

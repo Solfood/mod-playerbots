@@ -181,15 +181,18 @@ bool RouteCommand::Handle(ChatHandler* handler, char const* args)
             Routes::Hub const* hub = routes.HubById(info.route.hubId);
             RouteMgr::HubWork const work = hub ? routes.WorkAt(bot, *hub) : RouteMgr::HubWork();
             auto const* follow = std::get_if<NewRpgInfo::FollowRoute>(&info.data);
+            // job=1: NextJob finds a job for it at that hub (what Decide's stay rule checks, fix round 1).
+            RouteMgr::Job job;
+            bool const jobLeft = hub && routes.NextJob(bot, *hub, info.route.carryQuest, botAI->lowPriorityQuest, job);
             handler->PSendSysMessage(
                 "ROUTEBOT name={} guid={} routed={} level={} rpg={} hub={} hubdist={} arrived={} quest={} objective={} "
-                "done={} remaining={} doable={} rewarded={} style={} headto={} chain={} carry={}",
+                "done={} remaining={} doable={} rewarded={} style={} headto={} chain={} carry={} job={}",
                 bot->GetName(), bot->GetGUID().GetCounter(), routes.Routed(bot) ? 1 : 0, bot->GetLevel(),
                 info.StatusName(), info.route.hubId, hub ? uint32(bot->GetExactDist2d(hub->x, hub->y)) : 0,
                 follow && follow->arrived ? 1 : 0, follow ? follow->questId : 0, follow ? follow->objective : 0,
                 work.done, work.remaining, work.doableNow, botAI->rpgStatistic.questRewarded,
                 Routes::StyleName(static_cast<Routes::Style>(info.route.style)), info.route.headToZone,
-                info.route.chainHub, info.route.carryQuest);
+                info.route.chainHub, info.route.carryQuest, jobLeft ? 1 : 0);
             return true;
         }
         if (sub == "decide")

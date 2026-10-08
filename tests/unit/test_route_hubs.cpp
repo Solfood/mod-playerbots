@@ -107,6 +107,16 @@ int main()
     c = PickNextHub(in);
     CHECK_TRUE(c.kind == Next::Stay && c.hubId == 1);
     in.style = Style::Steady;
+    // Fix round 1 (review I1): doable quests the bot has no job for (far ender, skipped, full log) do not hold it:
+    // with no job left at the current hub it moves on, and with nowhere to go it does not stay (no idle/route loop).
+    in.options = {Option(deathknell, 2, 3, 6, 9, 10), Option(calvin, 1, 2, 0, 0, 480)};
+    in.currentJobLeft = false;
+    c = PickNextHub(in);
+    CHECK_TRUE(c.kind == Next::Hub && c.hubId == 2);
+    in.options = {Option(deathknell, 2, 3, 6, 9, 10)};
+    CHECK_TRUE(PickNextHub(in).kind != Next::Stay);
+    in.currentJobLeft = true;
+    CHECK_TRUE(PickNextHub(in).kind == Next::Stay);
 
     // Next hub: lowest band first, then nearest; far hubs (> 2,000 yd) last.
     in.botLevel = 8;

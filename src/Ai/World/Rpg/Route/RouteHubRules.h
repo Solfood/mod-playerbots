@@ -286,6 +286,10 @@ struct NextInput
     uint32_t headToZone = 0;  // the bridge's head_to (0 = none)
     uint32_t chainHub = 0;    // the hub that gives a follow-up it just unlocked (0 = none)
     uint32_t softCap = Settings{}.hubSoftCap;
+    // RouteMgr::NextJob found a job for the bot at its current hub. Without one the current hub counts as done (fix
+    // round 1, review I1): its doable quests may be out of reach (a far ender), skipped or blocked by a full log, and
+    // staying would loop IDLE -> FOLLOW_ROUTE -> IDLE with questing suppressed.
+    bool currentJobLeft = true;
     Style style = Style::Steady;
     std::vector<HubOption> options;  // the hubs of its path on its map that are not outlevelled
 };
@@ -300,7 +304,7 @@ inline NextChoice PickNextHubElsewhere(NextInput const& in);
 inline NextChoice PickNextHub(NextInput const& in)
 {
     for (HubOption const& o : in.options)
-        if (o.hub->id == in.currentHub && o.doableNow > 0 && Fits(in.botLevel, *o.hub))
+        if (o.hub->id == in.currentHub && in.currentJobLeft && o.doableNow > 0 && Fits(in.botLevel, *o.hub))
         {
             uint32_t const total = o.done + o.remaining;
             if (!total || o.done * 100 < total * LeaveHubAtPercent(in.style))
