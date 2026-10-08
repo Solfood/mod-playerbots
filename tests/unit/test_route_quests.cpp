@@ -137,6 +137,13 @@ int main()
         std::istringstream crlf("skip_hub 12\r\nquest_kind 6395 cast_on_target\r\n");
         FixList const c = ParseFixList(crlf);
         CHECK_TRUE(c.errors.empty() && c.skipAreas.count(12) == 1 && c.kinds.at(6395) == QuestKind::CastOnTarget);
+        // A second order line for the same faction and map is an error (one chain per key), the first one stays.
+        std::istringstream twice("order horde 0 154 159\norder horde 0 380 378\norder horde 1 380 378\n");
+        FixList const t = ParseFixList(twice);
+        CHECK_EQ(1u, static_cast<uint32_t>(t.errors.size()));
+        CHECK_EQ(std::string("line 2: a second order for horde map 0 (one order line per faction and map)"), t.errors[0]);
+        CHECK_EQ(159u, t.order.at({TEAM_HORDE_ID, 0})[1]);
+        CHECK_EQ(2u, static_cast<uint32_t>(t.order.size()));
         std::istringstream empty("");
         CHECK_TRUE(ParseFixList(empty).errors.empty());
         std::istringstream comments("# only\n   \n  # comments\n");

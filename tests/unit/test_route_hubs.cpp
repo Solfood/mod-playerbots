@@ -62,12 +62,15 @@ int main()
     std::vector<GiverSpot> chain = {{0, 0, 0, 0, {1}}, {0, 140, 0, 0, {2}}, {0, 280, 0, 0, {3}}};
     CHECK_EQ(1u, static_cast<uint32_t>(ClusterGivers(chain, 150.0f).size()));
 
-    // Levels: lowest MinLevel, median and highest quest level (Brill: 6/9/16 shape).
+    // Levels: the first level that may take one of its quests (max(MinLevel, level - 1), the accept rule), median and
+    // highest quest level (Brill: 6/9/16 shape).
     LevelSpan const span = HubLevels({{6, 4}, {8, 5}, {9, 6}, {12, 8}, {16, 10}});
-    CHECK_EQ(4, static_cast<int>(span.minLevel));
+    CHECK_EQ(5, static_cast<int>(span.minLevel));
     CHECK_EQ(9, static_cast<int>(span.level));
     CHECK_EQ(16, static_cast<int>(span.maxLevel));
     CHECK_EQ(7, static_cast<int>(HubLevels({{6, 1}, {8, 1}}).level));  // even count: the lower middle pair average
+    // Tarren Mill shape (review I1): breadcrumbs with MinLevel 13 but level 23, the first takeable quest level 22.
+    CHECK_EQ(21, static_cast<int>(HubLevels({{23, 13}, {22, 17}}).minLevel));
 
     Hub const deathknell = MakeHub(1, 85, 1850, 1616, 1, 4, 5);
     Hub const calvin = MakeHub(2, 85, 2166, 1245, 3, 5, 7);
@@ -181,6 +184,14 @@ int main()
     CHECK_EQ(11u, westfall[0]);
     CHECK_EQ(13u, westfall[1]);
     CHECK_EQ(12u, westfall[2]);
+
+    // The dumped path ends where routing ends: a catch-up more than DECIDE_LEVELS_AHEAD levels above the bot (RouteMgr's
+    // Decide never offers it, the bot falls back to the random roll), e.g. Eversong 20 -> Hellfire 55.
+    Hub const eversong = MakeHub(21, 3430, 0, 0, 1, 20, 20);
+    Hub const hellfire = MakeHub(22, 3483, 900, 0, 55, 61, 70);
+    std::vector<uint32_t> const ends = SimulatePath({&eversong, &hellfire}, 0, 0);
+    CHECK_EQ(1u, static_cast<uint32_t>(ends.size()));
+    CHECK_EQ(21u, ends[0]);
 
     // head_to: on the path and in reach, out of range, not on the path.
     std::vector<Hub const*> const onMap = {&deathknell, &calvin, &brill, &sepulcher};

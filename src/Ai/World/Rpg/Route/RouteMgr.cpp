@@ -255,13 +255,15 @@ void RouteMgr::Build()
             Routes::Hub hub;
             hub.team = team;
             hub.map = c.map;
-            std::vector<std::pair<int, int>> levels;
+            std::vector<std::pair<int, int>> levels, routedLevels;
             for (std::size_t s : c.spots)
                 for (uint32 id : spots[s].quests)
                     if (std::find(hub.quests.begin(), hub.quests.end(), id) == hub.quests.end())
                     {
                         hub.quests.push_back(id);
                         levels.push_back({_quests[id].level, _quests[id].minLevel});
+                        if (Routes::RoutedKind(_quests[id].kind))
+                            routedLevels.push_back(levels.back());
                     }
             if (hub.quests.size() < MIN_HUB_QUESTS)
                 continue;
@@ -278,17 +280,25 @@ void RouteMgr::Build()
                 areas.push_back(area);
             }
             hub.area = Routes::MostCommon(areas);
-            if (_fix.skipAreas.count(hub.area))
-                continue;
             AreaTableEntry const* area = sAreaTableStore.LookupEntry(hub.area);
+            if (_fix.skipAreas.count(hub.area))
+            {
+                // Logged so a skip_hub on a generic area shows what else it drops (review M2).
+                LOG_INFO("playerbots", "Quest routes: fix list skips the {} hub {} (area {}) with {} quests at {},{} map {}",
+                         team == Routes::TEAM_HORDE_ID ? "horde" : "alliance",
+                         area ? area->area_name[0] : "?", hub.area, hub.quests.size(), int32(c.x), int32(c.y), c.map);
+                continue;
+            }
             hub.zone = area && area->zone ? area->zone : hub.area;  // as Map::GetZoneId
             hub.name = area ? std::string(area->area_name[0]) : "area " + std::to_string(hub.area);
             hub.x = c.x;
             hub.y = c.y;
             hub.z = c.z;
             std::sort(hub.quests.begin(), hub.quests.end());
+            // Median and highest over all its quests; the first takeable level over the quests a routed bot may take
+            // (review I1).
             Routes::LevelSpan const span = Routes::HubLevels(levels);
-            hub.minLevel = span.minLevel;
+            hub.minLevel = routedLevels.empty() ? span.minLevel : Routes::HubLevels(routedLevels).minLevel;
             hub.level = span.level;
             hub.maxLevel = span.maxLevel;
             hub.id = static_cast<uint32>(_hubs.size()) + 1;
@@ -306,8 +316,10 @@ void RouteMgr::Build()
                                         { return x.team == teamMap.first && x.map == teamMap.second && x.area == area; });
             if (h == _hubs.end())
             {
-                LOG_ERROR("playerbots", "Quest routes fix list: no {} hub in area {} on map {}",
-                          teamMap.first == Routes::TEAM_HORDE_ID ? "horde" : "alliance", area, teamMap.second);
+                // Counted in fix_errors so the r01 check sees it (review M3).
+                _fix.errors.push_back("order: no " + std::string(teamMap.first == Routes::TEAM_HORDE_ID ? "horde" : "alliance") +
+                                      " hub in area " + std::to_string(area) + " on map " + std::to_string(teamMap.second));
+                LOG_ERROR("playerbots", "Quest routes fix list {}", _fix.errors.back());
                 continue;
             }
             h->after = previous;

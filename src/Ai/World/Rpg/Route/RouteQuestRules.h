@@ -293,6 +293,8 @@ inline FixList ParseFixList(std::istream& in)
                 bad("order <alliance|horde> <map> <area> <area> ...");
             else if (areas.size() < 2)
                 bad("order needs at least two areas");
+            else if (fix.order.count({teamId, map}))
+                bad("a second order for " + words[1] + " map " + words[2] + " (one order line per faction and map)");
             else
                 fix.order[{teamId, map}] = areas;
         }

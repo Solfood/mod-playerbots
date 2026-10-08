@@ -129,7 +129,9 @@ struct LevelSpan
     uint8_t minLevel = 0, level = 0, maxLevel = 0;
 };
 
-// (quest level, quest MinLevel) of every quest of a hub.
+// (quest level, quest MinLevel) of every quest of a hub. minLevel is the first level at which one of them is takeable
+// (MayAccept: MinLevel reached and the quest at most ROUTE_QUEST_LEVELS_ABOVE above the bot), so a hub "fits" a bot
+// only when it has work the bot may take.
 inline LevelSpan HubLevels(std::vector<std::pair<int, int>> const& levelAndMin)
 {
     LevelSpan span;
@@ -140,7 +142,9 @@ inline LevelSpan HubLevels(std::vector<std::pair<int, int>> const& levelAndMin)
     for (auto const& [level, min] : levelAndMin)
     {
         levels.push_back(level);
-        minLevel = std::min(minLevel, std::max(1, min));
+        // The first level the accept rule lets this quest in: its MinLevel, and at most ROUTE_QUEST_LEVELS_ABOVE
+        // below its level (review I1: a level-23 breadcrumb with MinLevel 13 is not work for a level-15 bot).
+        minLevel = std::min(minLevel, std::max({1, min, level - ROUTE_QUEST_LEVELS_ABOVE}));
     }
     std::sort(levels.begin(), levels.end());
     std::size_t const n = levels.size();
@@ -368,7 +372,8 @@ inline NextChoice PickNextHubElsewhere(NextInput const& in)
 
 // The path `.playerbots routes dump` prints: a bot that starts at (startX, startY) at level 1, does every hub fully
 // and reaches each hub's median level, choosing like PickNextHub: the hubs it fits in HubOrderKey order, else the
-// lowest MinLevel ahead (catch-up). Hubs it outlevels on the way
+// lowest MinLevel ahead (catch-up), and only up to DECIDE_LEVELS_AHEAD levels above it. The level jumps to each
+// hub's median: an approximation, so the path is a regression baseline, not a zone guide. Hubs it outlevels on the way
 // are left out. Paths are per (team, map) and never cross maps (preflight D8): an empty path means "no hub fits" and
 // PickNextHub then answers None, so the bot falls back to the old random roll.
 inline std::vector<uint32_t> SimulatePath(std::vector<Hub const*> const& hubs, float startX, float startY)
@@ -415,7 +420,9 @@ inline std::vector<uint32_t> SimulatePath(std::vector<Hub const*> const& hubs, f
                 }
             }
         }
-        if (best == hubs.size())
+        // Routing ends where RouteMgr's Decide stops offering hubs: a catch-up more than DECIDE_LEVELS_AHEAD levels
+        // up (the bot falls back to the random roll there).
+        if (best == hubs.size() && ahead != hubs.size() && hubs[ahead]->minLevel <= level + DECIDE_LEVELS_AHEAD)
             best = ahead;
         if (best == hubs.size())
             break;
