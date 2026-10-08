@@ -273,6 +273,9 @@ enum class Next : uint8_t
     None      // no hub: the old random roll
 };
 
+// A bot holds a hub seat only while its route keeps it on a hub or sends it to one (fix round 1, review I1).
+inline bool HoldsSeat(Next kind) { return kind == Next::Stay || kind == Next::Hub; }
+
 struct NextChoice
 {
     Next kind = Next::None;
@@ -353,10 +356,13 @@ inline NextChoice PickNextHubElsewhere(NextInput const& in)
         if (o.hub->id != in.currentHub && worth(o) && !blocked(o))
             fit.push_back(&o);
     std::sort(fit.begin(), fit.end(), [&key](HubOption const* a, HubOption const* b) { return key(a) < key(b); });
-    // An accepted head_to is never ignored (preflight C2): when no fitting hub lies in the zone, catch up toward its
-    // lowest hub with work left. A fix-list order still wins (a blocked hub is not a target).
-    if (in.headToZone && (fit.empty() || fit.front()->hub->zone != in.headToZone))
-        if (HubOption const* target = lowest([&in](HubOption const& o) { return o.hub->zone == in.headToZone; }))
+    // head_to (fix round 1, ruling I2 amending preflight C2): a fitting hub in the zone comes first (the sort above).
+    // While the zone cannot be done yet the bot keeps questing at a fitting hub elsewhere; only when nothing fits does
+    // it catch up toward the zone's lowest hub above its level (spec §4: grind only below the hub's level). A fix-list
+    // order still wins (a blocked hub is not a target).
+    if (in.headToZone && fit.empty())
+        if (HubOption const* target = lowest([&in](HubOption const& o)
+                                             { return o.hub->zone == in.headToZone && o.hub->minLevel > in.botLevel; }))
             return {Next::CatchUp, target->hub->id};
     if (!fit.empty())
     {

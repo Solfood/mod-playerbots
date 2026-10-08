@@ -1191,7 +1191,7 @@ bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> candidateSta
 {
     // Guildmaster bridge focus: the matching statuses weigh rpgFocusMultiplier times more. A weight of 0 stays 0
     // (focus never turns on an activity the config turned off). Both loops below must use the same weight.
-    RouteMgr const& routes = RouteMgr::instance();
+    RouteMgr& routes = RouteMgr::instance();
     bool const routed = routes.Routed(bot);  // false with routes off and no seam: the roll as before
     // A routed bot's style shifts the weights (steady: the route x3; curious: route, wander, gather x2; easygoing:
     // rest x3, grind x2). Unrouted: x1, as before.
@@ -1212,7 +1212,13 @@ bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> candidateSta
     // of its path), DO_QUEST rolls as before (spec §4 step 3).
     RouteMgr::Choice route;
     if (std::find(candidateStatus.begin(), candidateStatus.end(), RPG_FOLLOW_ROUTE) != candidateStatus.end())
+    {
         route = routes.Choose(bot);
+        // Its route keeps it on no hub (nothing left, a catch-up, a full hub): its seat goes now, whatever the roll
+        // picks (fix round 1, review I1: else the seat stays until logout and the hub looks full to others).
+        if (!Routes::HoldsSeat(route.next.kind))
+            routes.Unseat(bot->GetGUID().GetCounter());
+    }
     // A class stop, a hub, a catch-up or a full hub to wait out: the route is its questing now.
     bool const routeAvailable = route.Any();
     std::vector<NewRpgStatus> availableStatus;
@@ -1371,9 +1377,11 @@ bool NewRpgBaseAction::ChangeToRouteChoice(RouteMgr::Choice const& choice)
     RouteMgr& routes = RouteMgr::instance();
     NewRpgInfo& info = botAI->rpgInfo;
     uint32 const guid = bot->GetGUID().GetCounter();
+    if (!Routes::HoldsSeat(choice.next.kind))
+        routes.Unseat(guid);  // only a stay or a hub to go to holds a seat (fix round 1, review I1)
     if (choice.classStop)
     {
-        // A class quest first (spec §4); its hub seat, if any, is kept.
+        // A class quest first (spec §4); a seat it holds for its next hub is kept.
         Routes::Spawn const& giver = choice.stop.giver;
         info.ChangeToClassQuest(choice.stop.questId, WorldPosition(giver.map, giver.x, giver.y, giver.z));
         return true;
@@ -1409,7 +1417,6 @@ bool NewRpgBaseAction::ChangeToRouteChoice(RouteMgr::Choice const& choice)
             // and the grind target keep it there) and choose again when that ends. No grind spot: wander, which
             // fights what the grind target finds (preflight D16: never idle and re-decide every tick). Honest world,
             // worn gear: no trip to a grind spot (as RPG_GO_GRIND), it wanders.
-            routes.Unseat(guid);
             WorldPosition const pos = TownErrands::PlaySafe(botAI, bot) ? WorldPosition() : SelectRandomGrindPos(bot);
             if (pos != WorldPosition())
                 info.ChangeToGoGrind(pos);
@@ -1418,7 +1425,6 @@ bool NewRpgBaseAction::ChangeToRouteChoice(RouteMgr::Choice const& choice)
             return true;
         }
         default:
-            routes.Unseat(guid);
             return false;
     }
 }

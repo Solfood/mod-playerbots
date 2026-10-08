@@ -23,8 +23,10 @@ bool NewRpgFollowRouteAction::Execute(Event /*event*/)
     if (!data)
         return false;
     RouteMgr& routes = RouteMgr::instance();
+    uint32 const guid = bot->GetGUID().GetCounter();
     if (!routes.Routed(bot))
     {
+        routes.Unseat(guid);  // fix round 1 (review M1): no route, no seat
         info.ChangeToIdle();
         return true;
     }
@@ -56,7 +58,7 @@ bool NewRpgFollowRouteAction::Execute(Event /*event*/)
     Routes::Hub const* hub = routes.HubById(data->hubId);
     if (!hub || bot->GetMapId() != hub->map)
     {
-        routes.Unseat(bot->GetGUID().GetCounter());
+        routes.Unseat(guid);
         info.ChangeToIdle();
         return true;
     }
@@ -87,6 +89,7 @@ bool NewRpgFollowRouteAction::Execute(Event /*event*/)
     RouteMgr::Job job;
     if (!routes.NextJob(bot, *hub, info.route.carryQuest, botAI->lowPriorityQuest, job))
     {
+        routes.Unseat(guid);  // the hub ran dry: its seat goes now (fix round 1, review I1)
         info.ChangeToIdle();  // nothing left here: the next roll picks the next hub
         return true;
     }

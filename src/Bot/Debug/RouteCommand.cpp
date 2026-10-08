@@ -85,7 +85,7 @@ bool RouteCommand::Handle(ChatHandler* handler, char const* args)
     if (words.empty())
     {
         handler->PSendSysMessage("ROUTEERR usage: routes stats | dump <alliance|horde> <start> | kind <quest> | "
-                                 "hubinfo <hub id> | on|off|bot|decide|log|zones|classstop|forget <name> | go <name> <hub id> | "
+                                 "hubinfo <hub id> | on|off|bot|decide|log|zones|classstop|classgo|forget <name> | go <name> <hub id> | "
                                  "headto <name> <zone> | style <name> <steady|curious|easygoing> | seats <hub id> <n> | "
                                  "chains [n]");
         return false;
@@ -206,7 +206,7 @@ bool RouteCommand::Handle(ChatHandler* handler, char const* args)
     }
     if (words.size() > 1 && (sub == "on" || sub == "off" || sub == "bot" || sub == "decide" || sub == "log" ||
                              sub == "go" || sub == "headto" || sub == "style" || sub == "zones" ||
-                             sub == "classstop" || sub == "forget"))
+                             sub == "classstop" || sub == "classgo" || sub == "forget"))
     {
         Player* bot = FindBot(handler, words[1]);
         if (!bot)
@@ -235,14 +235,14 @@ bool RouteCommand::Handle(ChatHandler* handler, char const* args)
             bool const jobLeft = hub && routes.NextJob(bot, *hub, info.route.carryQuest, botAI->lowPriorityQuest, job);
             handler->PSendSysMessage(
                 "ROUTEBOT name={} guid={} routed={} level={} rpg={} hub={} hubdist={} arrived={} quest={} objective={} "
-                "done={} remaining={} doable={} rewarded={} style={} headto={} chain={} carry={} job={} zone={} seat={}",
+                "done={} remaining={} doable={} rewarded={} style={} headto={} chain={} carry={} job={} zone={} seat={} class={}",
                 bot->GetName(), bot->GetGUID().GetCounter(), routes.Routed(bot) ? 1 : 0, bot->GetLevel(),
                 info.StatusName(), info.route.hubId, hub ? uint32(bot->GetExactDist2d(hub->x, hub->y)) : 0,
                 follow && follow->arrived ? 1 : 0, follow ? follow->questId : 0, follow ? follow->objective : 0,
                 work.done, work.remaining, work.doableNow, botAI->rpgStatistic.questRewarded,
                 Routes::StyleName(routes.StyleOf(bot)), info.route.headToZone,
                 info.route.chainHub, info.route.carryQuest, jobLeft ? 1 : 0, bot->GetZoneId(),
-                routes.SeatOf(bot->GetGUID().GetCounter()));
+                routes.SeatOf(bot->GetGUID().GetCounter()), follow ? follow->classQuest : 0);
             return true;
         }
         if (sub == "decide")
@@ -315,24 +315,39 @@ bool RouteCommand::Handle(ChatHandler* handler, char const* args)
         }
         if (sub == "zones")
         {
-            std::map<uint32, uint32> hubs;
+            std::map<uint32, uint32> hubs, first;  // zone -> hub count, its first hub id (hub=)
             for (Routes::Hub const* hub : routes.PathFor(bot->GetTeamId(), bot->GetMapId()))
-                ++hubs[hub->zone];
+                if (!hubs[hub->zone]++)
+                    first[hub->zone] = hub->id;
             for (auto const& [zone, count] : hubs)
             {
                 AreaTableEntry const* area = sAreaTableStore.LookupEntry(zone);
-                handler->PSendSysMessage("ROUTEZONE zone={} hubs={} fits={} name={}", zone, count,
+                handler->PSendSysMessage("ROUTEZONE zone={} hubs={} hub={} fits={} name={}", zone, count, first[zone],
                                          routes.HeadToProblem(bot, zone).empty() ? 1 : 0,
                                          area ? area->area_name[0] : "?");
             }
+            return true;
+        }
+        if (sub == "classgo")
+        {
+            // Test seam: go for the class quest `classstop` names now (as the roll would between hubs).
+            Routes::ClassStop stop;
+            if (!routes.Routed(bot) || !routes.ClassStopFor(bot, botAI->lowPriorityQuest, stop))
+            {
+                handler->PSendSysMessage("ROUTEERR {} is not routed or has no class quest to take", bot->GetName());
+                return false;
+            }
+            info.ChangeToClassQuest(stop.questId, WorldPosition(stop.giver.map, stop.giver.x, stop.giver.y, stop.giver.z));
+            handler->PSendSysMessage("ROUTEOK {} rpg=FOLLOW_ROUTE class_quest={}", bot->GetName(), stop.questId);
             return true;
         }
         if (sub == "classstop")
         {
             Routes::ClassStop stop;
             if (routes.ClassStopFor(bot, botAI->lowPriorityQuest, stop))
-                handler->PSendSysMessage("ROUTECLASS name={} quest={} at={},{}", bot->GetName(), stop.questId,
-                                         int32(stop.giver.x), int32(stop.giver.y));
+                handler->PSendSysMessage("ROUTECLASS name={} quest={} at={},{} dist={}", bot->GetName(), stop.questId,
+                                         int32(stop.giver.x), int32(stop.giver.y),
+                                         uint32(bot->GetExactDist2d(stop.giver.x, stop.giver.y)));
             else
                 handler->PSendSysMessage("ROUTECLASS name={} quest=0", bot->GetName());
             return true;

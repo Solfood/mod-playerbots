@@ -1,6 +1,7 @@
 // tests/unit/test_route_hubs.cpp
 #include "../../src/Ai/World/Rpg/Route/RouteHubRules.h"
 #include "check.h"
+#include <cstdio>
 #include <cmath>
 #include <string>
 #include <vector>
@@ -160,16 +161,45 @@ int main()
     in.headToZone = 0;
     in.options[3].hub = &sepulcher;
 
-    // An accepted head_to is never ignored (preflight C2): the zone's hub does not fit yet (Sepulcher MinLevel 8, bot 6,
-    // HeadToProblem accepts it), so the bot catches up toward it instead of taking Brill.
-    in.botLevel = 6;
+    // head_to choice cases (fix round 1, ruling I2 amending preflight C2). Shared case table: the app's routes test
+    // (Task 13) mirrors these. Sepulcher (zone 130) has MinLevel 8; HeadToProblem accepts it from level 6.
+    struct HeadToCase
+    {
+        char const* what;
+        int botLevel;
+        uint32_t brillDoable, sepulcherDoable;
+        Next kind;
+        uint32_t hubId;
+    };
+    HeadToCase const headToCases[] = {
+        // (a) the head_to zone cannot be done yet and another hub fits: that hub, the bot keeps questing.
+        {"too high, Brill fits", 6, 5, 0, Next::Hub, 3},
+        // (b) the head_to zone cannot be done yet and nothing else fits: catch up toward the head_to hub.
+        {"too high, nothing fits", 6, 0, 0, Next::CatchUp, 5},
+        // (c) the head_to zone fits now: its hub first (after the current hub runs dry, tested above).
+        {"fits now", 8, 5, 3, Next::Hub, 5},
+        // (d) the head_to hub is not above the bot but has nothing doable, nothing else fits: no catch-up toward it
+        // (only a hub with MinLevel above the bot is a catch-up target), and nothing ahead: none.
+        {"not doable, not above", 8, 0, 0, Next::None, 0},
+    };
     in.headToZone = 130;
-    in.options = {Option(brill, 5, 9, 0, 3, 950), Option(sepulcher, 0, 12, 0, 0, 1700)};
-    CHECK_EQ(std::string(""), HeadToProblem("Nori", 6, 130, {&brill, &sepulcher}));
-    c = PickNextHub(in);
-    CHECK_TRUE(c.kind == Next::CatchUp && c.hubId == 5);
+    for (HeadToCase const& hc : headToCases)
+    {
+        in.botLevel = hc.botLevel;
+        in.options = {Option(brill, hc.brillDoable, 9, 0, 3, 950), Option(sepulcher, hc.sepulcherDoable, 12, 0, 0, 1700)};
+        CHECK_EQ(std::string(""), HeadToProblem("Nori", hc.botLevel, 130, {&brill, &sepulcher}));
+        c = PickNextHub(in);
+        if (!(c.kind == hc.kind && c.hubId == hc.hubId))
+            std::printf("head_to case '%s': kind %d hub %u\n", hc.what, static_cast<int>(c.kind), c.hubId);
+        CHECK_TRUE(c.kind == hc.kind && c.hubId == hc.hubId);
+    }
     in.headToZone = 0;
     in.botLevel = 8;
+
+    // A bot holds a hub seat only while its route keeps it on a hub or sends it to one (fix round 1, review I1): a
+    // catch-up, a full hub to wait out or nothing left frees it.
+    CHECK_TRUE(HoldsSeat(Next::Stay) && HoldsSeat(Next::Hub));
+    CHECK_TRUE(!HoldsSeat(Next::CatchUp) && !HoldsSeat(Next::Wait) && !HoldsSeat(Next::None));
 
     // Catch up: nothing fits yet, the lowest hub ahead is named; nothing left at all: none.
     in.botLevel = 3;
