@@ -9,6 +9,7 @@
 #include "BuiltInConfig.h"
 #include "DBCStores.h"
 #include "DatabaseEnv.h"
+#include "GridTerrainData.h"
 #include "Log.h"
 #include "MapMgr.h"
 #include "ObjectMgr.h"
@@ -92,6 +93,14 @@ void RouteMgr::Build()
             objectItems.insert((*r)[0].Get<uint32>());
         while (r->NextRow());
 
+    // quest_template_addon.SpecialFlags as stored: the core ORs CAST (with KILL and SPEAKTO) into every quest that has
+    // a creature or object objective when it loads quests, so Quest::HasSpecialFlag(CAST) is true for plain kill quests.
+    std::unordered_map<uint32, uint32> storedSpecialFlags;
+    if (QueryResult r = WorldDatabase.Query("SELECT ID, SpecialFlags FROM quest_template_addon WHERE SpecialFlags <> 0"))
+        do
+            storedSpecialFlags[(*r)[0].Get<uint32>()] = (*r)[1].Get<uint32>();
+        while (r->NextRow());
+
     // Where every creature and game object stands, continents only (instances are not on a route).
     SpawnMap creatures, objects;
     for (auto const& [spawnId, data] : sObjectMgr->GetAllCreatureData())
@@ -118,13 +127,16 @@ void RouteMgr::Build()
         Routes::QuestFacts f;
         f.infoType = quest->GetType();
         f.suggestedPlayers = quest->GetSuggestedPlayers();
-        // quest_template.Flags EXPLORATION (0x04) counts as the exploration/event special flag (Task 2 review), so an
-        // exploration quest is never routed as kill or deliver.
+        // The cast bit comes from the stored flags (see above). Exploration/event: the stored or core-set special flag
+        // (the core sets it for area-trigger and scripted exploration quests) or quest_template.Flags EXPLORATION (0x04,
+        // Task 2 review), so an exploration quest is never routed as kill or deliver. (SpecialFlags 0x04 is AUTO_ACCEPT.)
+        auto const stored = storedSpecialFlags.find(id);
+        uint32 const storedFlags = stored == storedSpecialFlags.end() ? 0 : stored->second;
         f.specialFlags =
             ((quest->HasSpecialFlag(QUEST_SPECIAL_FLAGS_EXPLORATION_OR_EVENT) || quest->HasFlag(QUEST_FLAGS_EXPLORATION))
                  ? Routes::SPECIAL_EXPLORATION_OR_EVENT
                  : 0) |
-            (quest->HasSpecialFlag(QUEST_SPECIAL_FLAGS_CAST) ? Routes::SPECIAL_CAST : 0);
+            ((storedFlags & QUEST_SPECIAL_FLAGS_CAST) ? Routes::SPECIAL_CAST : 0);
         f.flags = quest->GetFlags();
         f.repeatable = quest->IsRepeatable();
         f.seasonal = quest->IsSeasonal();
@@ -253,11 +265,18 @@ void RouteMgr::Build()
                     }
             if (hub.quests.size() < MIN_HUB_QUESTS)
                 continue;
-            // Named after the most common area among its spots (preflight D7): one giver inside an inn or a house
-            // does not rename the town.
+            // Named after the most common area among its spots (preflight D7), read from the terrain (ADT) and not
+            // from buildings: Brill's givers mostly stand inside Gallows' End Tavern, which would name the town.
             std::vector<uint32> areas;
+            Map* const base = sMapMgr->CreateBaseMap(c.map);
             for (std::size_t s : c.spots)
-                areas.push_back(sMapMgr->GetAreaId(PHASEMASK_NORMAL, c.map, spots[s].x, spots[s].y, spots[s].z));
+            {
+                GridTerrainData* const terrain = base ? base->GetGridTerrainData(spots[s].x, spots[s].y) : nullptr;
+                uint32 area = terrain ? terrain->getArea(spots[s].x, spots[s].y) : 0;
+                if (!area)
+                    area = sMapMgr->GetAreaId(PHASEMASK_NORMAL, c.map, spots[s].x, spots[s].y, spots[s].z);
+                areas.push_back(area);
+            }
             hub.area = Routes::MostCommon(areas);
             if (_fix.skipAreas.count(hub.area))
                 continue;
