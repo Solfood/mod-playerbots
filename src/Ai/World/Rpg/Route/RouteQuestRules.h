@@ -167,8 +167,8 @@ inline bool TeamFromName(std::string const& name, uint8_t& out)
     return true;
 }
 
-// data/quest_routes_fixes.conf, applied after the generated routes (spec §3 part 1). Hubs are named by the area id
-// of their first giver (the hub's name is that area's name).
+// data/quest_routes_fixes.conf, applied after the generated routes (spec §3 part 1). Hubs are named by the most
+// common area id among their givers (the hub's name is that area's name).
 struct FixList
 {
     std::set<uint32_t> skipAreas;                                          // skip_hub <area>

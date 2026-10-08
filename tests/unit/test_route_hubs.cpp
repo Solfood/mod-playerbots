@@ -228,5 +228,11 @@ int main()
     CHECK_EQ(2u, book.MaxSeats());
     book.Unseat(999);  // never seated: nothing happens
     CHECK_EQ(2u, book.Seated());
+
+    // A hub is named after the most common area among its giver spots; a tie goes to the one seen first (preflight D7).
+    CHECK_EQ(8u, MostCommon(std::vector<uint32_t>{3, 8, 8}));
+    CHECK_EQ(5u, MostCommon(std::vector<uint32_t>{5, 7, 7, 5, 9}));
+    CHECK_EQ(4u, MostCommon(std::vector<uint32_t>{4}));
+    CHECK_EQ(0u, MostCommon(std::vector<uint32_t>{}));
     return UnitFailures();
 }

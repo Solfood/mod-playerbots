@@ -11,6 +11,7 @@
 #include "PerfMonitor.h"
 #include "PlayerbotMgr.h"
 #include "RandomPlayerbotMgr.h"
+#include "RouteCommand.h"
 #include "ScriptMgr.h"
 
 using namespace Acore::ChatCommands;
@@ -39,6 +40,7 @@ public:
             {"pmon", HandlePerfMonCommand, SEC_GAMEMASTER, Console::Yes},
             {"rndbot", HandleRandomPlayerbotCommand, SEC_GAMEMASTER, Console::Yes},
             {"econ", HandleEconomyCommand, SEC_GAMEMASTER, Console::Yes},
+            {"routes", HandleRoutesCommand, SEC_GAMEMASTER, Console::Yes},
             {"debug", playerbotsDebugCommandTable},
             {"account", playerbotsAccountCommandTable},
         };
@@ -63,6 +65,11 @@ public:
     static bool HandleEconomyCommand(ChatHandler* handler, char const* args)
     {
         return EconomyCommand::Handle(handler, args);
+    }
+
+    static bool HandleRoutesCommand(ChatHandler* handler, char const* args)
+    {
+        return RouteCommand::Handle(handler, args);
     }
 
     static bool HandleGuildTaskCommand(ChatHandler* handler, char const* args)

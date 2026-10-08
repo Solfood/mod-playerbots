@@ -151,6 +151,24 @@ inline LevelSpan HubLevels(std::vector<std::pair<int, int>> const& levelAndMin)
     return span;
 }
 
+// The most common value (0 when empty); a tie goes to the value seen first. RouteMgr names a hub after the most
+// common area among its giver spots, so one giver inside an inn does not rename the town (preflight D7).
+inline uint32_t MostCommon(std::vector<uint32_t> const& values)
+{
+    uint32_t best = 0;
+    std::size_t bestCount = 0;
+    std::unordered_map<uint32_t, std::size_t> counts;
+    for (uint32_t v : values)
+        ++counts[v];
+    for (uint32_t v : values)  // in input order, so the first value with the top count wins a tie
+        if (counts[v] > bestCount)
+        {
+            best = v;
+            bestCount = counts[v];
+        }
+    return best;
+}
+
 // Decision 4: a hub is outlevelled when the bot is 3+ levels above its median quest level; it fits when its lowest
 // MinLevel is at or below the bot and it is not outlevelled. Levels are compared in bands of LEVEL_BAND.
 constexpr int OUTLEVEL_MARGIN = 3;

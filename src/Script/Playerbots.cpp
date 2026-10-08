@@ -27,6 +27,7 @@
 #include "PlayerbotWorldThreadProcessor.h"
 #include "RaisingMgr.h"
 #include "RandomPlayerbotMgr.h"
+#include "RouteMgr.h"
 #include "ScriptMgr.h"
 #include "ServerScript.h"
 #include "SessionScript.h"
@@ -543,6 +544,13 @@ public:
 
         LOG_INFO("server.loading", "Loading gather node index...");
         GatherNodeMgr::instance().Load();
+
+        // Quest routes (guildmaster): built only when they are on; with them off nothing is built at startup.
+        if (sPlayerbotAIConfig.questRoutes.enabled)
+        {
+            LOG_INFO("server.loading", "Building quest routes...");
+            RouteMgr::instance().Build();
+        }
 
         LOG_INFO("server.loading", "Playerbots World Thread Processor initialized");
     }
