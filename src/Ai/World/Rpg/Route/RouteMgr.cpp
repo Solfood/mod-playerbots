@@ -19,9 +19,11 @@
 #include "Playerbots.h"
 #include "QuestDef.h"
 #include "RandomPlayerbotMgr.h"
+#include "RouteSurvivalRules.h"
 #include "Timer.h"
 #include "World.h"
 #include <algorithm>
+#include <ctime>
 #include <fstream>
 #include <limits>
 #include <string>
@@ -469,9 +471,10 @@ RouteMgr::HubWork RouteMgr::WorkAt(Player* bot, Routes::Hub const& hub) const
 }
 
 bool RouteMgr::NextJob(Player* bot, Routes::Hub const& hub, uint32 carryQuest, std::unordered_set<uint32> const& skip,
-                       Job& job) const
+                       bool retreating, Job& job) const
 {
-    float best = JOB_REACH_YARDS;
+    float best = retreating ? Routes::RETREAT_REACH_YARDS : JOB_REACH_YARDS;  // retreating: earn near where it is
+    int const botLevel = static_cast<int>(bot->GetLevel());
     bool found = false;
     auto consider = [&](std::vector<Routes::Spawn> const& spawns, uint32 questId, int32 objective)
     {
@@ -510,7 +513,8 @@ bool RouteMgr::NextJob(Player* bot, Routes::Hub const& hub, uint32 carryQuest, s
             Quest const* quest = id ? sObjectMgr->GetQuestTemplate(id) : nullptr;
             Routes::QuestRoute const* q = id ? QuestById(id) : nullptr;
             if (!quest || !q || skip.count(id) || !Routes::RoutedKind(q->kind) ||
-                bot->GetQuestStatus(id) != QUEST_STATUS_INCOMPLETE)
+                bot->GetQuestStatus(id) != QUEST_STATUS_INCOMPLETE ||
+                (retreating && !Routes::RetreatQuestOk(q->level, botLevel)))
                 continue;
             auto const statusIt = bot->getQuestStatusMap().find(id);
             if (statusIt == bot->getQuestStatusMap().end())
@@ -540,7 +544,8 @@ bool RouteMgr::NextJob(Player* bot, Routes::Hub const& hub, uint32 carryQuest, s
             Quest const* quest = sObjectMgr->GetQuestTemplate(id);
             Routes::QuestRoute const* q = QuestById(id);
             if (!quest || !q || skip.count(id) || bot->GetQuestStatus(id) != QUEST_STATUS_NONE ||
-                !bot->CanTakeQuest(quest, false) || !bot->CanAddQuest(quest, false) || !MayAccept(bot, quest))
+                !bot->CanTakeQuest(quest, false) || !bot->CanAddQuest(quest, false) || !MayAccept(bot, quest) ||
+                (retreating && !Routes::RetreatQuestOk(q->level, botLevel)))
                 continue;
             consider(q->givers, id, JOB_GIVER);
             if (found && id == carryQuest)
@@ -554,6 +559,9 @@ bool RouteMgr::NextJob(Player* bot, Routes::Hub const& hub, uint32 carryQuest, s
     objectives();
     if (found)
         return true;
+    // Retreating (spec §6): nothing near, nothing at all; it earns another way near town.
+    if (retreating)
+        return false;
     // 4. Nothing in reach (fix round 1, review I1): the nearest ender, giver of this hub or objective of a routed
     // quest in the log at any distance on this map, so a deliver quest whose ender is in the next town still gets
     // handed in and a bot back from town still finds its hub's givers.
@@ -587,7 +595,7 @@ Routes::NextChoice RouteMgr::Decide(Player* bot) const
             // Doable quests it has no job for (skipped, a full log, nothing on this map) do not hold it on its hub
             // (fix round 1, review I1): PickNextHub moves it on instead of an IDLE <-> FOLLOW_ROUTE loop.
             Job job;
-            in.currentJobLeft = NextJob(bot, *hub, route.carryQuest, botAI->lowPriorityQuest, job);
+            in.currentJobLeft = NextJob(bot, *hub, route.carryQuest, botAI->lowPriorityQuest, route.retreating, job);
         }
         in.options.push_back(
             {hub, work.doableNow, work.remaining, work.done, Seats(hub->id), bot->GetExactDist2d(hub->x, hub->y)});
@@ -705,7 +713,26 @@ RouteMgr::Choice RouteMgr::Choose(Player* bot) const
         return choice;
     SettleHeadTo(bot);
     choice.next = Decide(bot);
-    if (choice.next.kind != Routes::Next::Stay)
+    bool const retreating = botAI->rpgInfo.route.retreating;
+    if (choice.next.kind != Routes::Next::Stay && !retreating)
         choice.classStop = ClassStopFor(bot, botAI->lowPriorityQuest, choice.stop);
+    // Retreating (spec §6, preflight C4): it earns near town, so its route may only keep it on the hub it works.
+    if (!Routes::RouteChoiceAllowed(retreating, choice.next.kind == Routes::Next::Stay, choice.classStop))
+        return Choice();
     return choice;
+}
+
+uint32 RouteMgr::DeathsLastHour(Player* bot) const
+{
+    PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
+    uint32 const now = static_cast<uint32>(std::time(nullptr));
+    return botAI ? Routes::DeathsSince(botAI->rpgInfo.route.deaths, Routes::HourAgo(now)) : 0;
+}
+
+bool RouteMgr::Struggling(Player* bot) const
+{
+    PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
+    return botAI && Routed(bot) &&
+           Routes::Struggling(botAI->rpgInfo.route.retreating, DeathsLastHour(bot),
+                              sPlayerbotAIConfig.questRoutes.strugglingDeathsPerHour);
 }

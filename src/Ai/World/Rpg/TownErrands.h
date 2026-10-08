@@ -60,6 +60,8 @@ public:
     static bool CanAffordRepair(PlayerbotAI* botAI, Player* bot);
     // Repair bill of the main hand, off hand and ranged slots (before reputation discount).
     static uint32 WeaponRepairCost(Player* bot);
+    // The main-hand weapon is at durability 0 (quest routes, spec §6 retreat and earn).
+    static bool WeaponBroken(Player* bot);
     // What a vendor pays for the items `sell vendor` sells (vendor and auction house usage).
     static uint32 JunkValue(PlayerbotAI* botAI, Player* bot);
     // Worn-out gear (below AiPlayerbot.FixedPopulation.PlaySafeBelowDurability): no gathering or grind trips,

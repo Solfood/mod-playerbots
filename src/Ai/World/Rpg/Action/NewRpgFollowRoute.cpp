@@ -87,7 +87,7 @@ bool NewRpgFollowRouteAction::Execute(Event /*event*/)
     }
 
     RouteMgr::Job job;
-    if (!routes.NextJob(bot, *hub, info.route.carryQuest, botAI->lowPriorityQuest, job))
+    if (!routes.NextJob(bot, *hub, info.route.carryQuest, botAI->lowPriorityQuest, info.route.retreating, job))
     {
         routes.Unseat(guid);  // the hub ran dry: its seat goes now (fix round 1, review I1)
         info.ChangeToIdle();  // nothing left here: the next roll picks the next hub

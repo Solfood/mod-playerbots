@@ -34,6 +34,7 @@
 #include "Random.h"
 #include "RandomPlayerbotMgr.h"
 #include "RouteMgr.h"
+#include "RouteSurvivalRules.h"
 #include "SharedDefines.h"
 #include "StatsWeightCalculator.h"
 #include "Timer.h"
@@ -1377,6 +1378,12 @@ bool NewRpgBaseAction::ChangeToRouteChoice(RouteMgr::Choice const& choice)
     RouteMgr& routes = RouteMgr::instance();
     NewRpgInfo& info = botAI->rpgInfo;
     uint32 const guid = bot->GetGUID().GetCounter();
+    // Retreating (spec §6, preflight C4): only "stay on the hub it works"; never a walk to a new hub or a class stop.
+    if (!Routes::RouteChoiceAllowed(info.route.retreating, choice.next.kind == Routes::Next::Stay, choice.classStop))
+    {
+        routes.Unseat(guid);
+        return false;
+    }
     if (!Routes::HoldsSeat(choice.next.kind))
         routes.Unseat(guid);  // only a stay or a hub to go to holds a seat (fix round 1, review I1)
     if (choice.classStop)

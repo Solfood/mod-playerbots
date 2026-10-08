@@ -17,8 +17,11 @@
 #include "Playerbots.h"
 #include "RandomPlayerbotMgr.h"
 #include "RouteMgr.h"
+#include "RouteSurvivalRules.h"
+#include "TownErrands.h"
 #include <algorithm>
 #include <cstdlib>
+#include <ctime>
 #include <iterator>
 #include <map>
 #include <sstream>
@@ -206,7 +209,8 @@ bool RouteCommand::Handle(ChatHandler* handler, char const* args)
     }
     if (words.size() > 1 && (sub == "on" || sub == "off" || sub == "bot" || sub == "decide" || sub == "log" ||
                              sub == "go" || sub == "headto" || sub == "style" || sub == "zones" ||
-                             sub == "classstop" || sub == "classgo" || sub == "forget"))
+                             sub == "classstop" || sub == "classgo" || sub == "forget" || sub == "survive" ||
+                             sub == "deaths"))
     {
         Player* bot = FindBot(handler, words[1]);
         if (!bot)
@@ -219,6 +223,8 @@ bool RouteCommand::Handle(ChatHandler* handler, char const* args)
             if (sub == "off")
             {
                 routes.Unseat(bot->GetGUID().GetCounter());  // preflight D13: off frees its seat
+                info.route.retreating = false;  // and its survival state (Task 7)
+                info.route.deaths.clear();
                 if (info.GetStatus() == RPG_FOLLOW_ROUTE)
                     info.ChangeToIdle();
             }
@@ -232,7 +238,8 @@ bool RouteCommand::Handle(ChatHandler* handler, char const* args)
             auto const* follow = std::get_if<NewRpgInfo::FollowRoute>(&info.data);
             // job=1: NextJob finds a job for it at that hub (what Decide's stay rule checks, fix round 1).
             RouteMgr::Job job;
-            bool const jobLeft = hub && routes.NextJob(bot, *hub, info.route.carryQuest, botAI->lowPriorityQuest, job);
+            bool const jobLeft = hub && routes.NextJob(bot, *hub, info.route.carryQuest, botAI->lowPriorityQuest,
+                                                       info.route.retreating, job);
             handler->PSendSysMessage(
                 "ROUTEBOT name={} guid={} routed={} level={} rpg={} hub={} hubdist={} arrived={} quest={} objective={} "
                 "done={} remaining={} doable={} rewarded={} style={} headto={} chain={} carry={} job={} zone={} seat={} class={}",
@@ -339,6 +346,36 @@ bool RouteCommand::Handle(ChatHandler* handler, char const* args)
             }
             info.ChangeToClassQuest(stop.questId, WorldPosition(stop.giver.map, stop.giver.x, stop.giver.y, stop.giver.z));
             handler->PSendSysMessage("ROUTEOK {} rpg=FOLLOW_ROUTE class_quest={}", bot->GetName(), stop.questId);
+            return true;
+        }
+        if (sub == "survive")
+        {
+            // Spec §6 survival state. fight_cap: the highest mob level it starts a fight with (255: no cap).
+            Routes::Settings const& rs = sPlayerbotAIConfig.questRoutes;
+            uint32 const level = bot->GetLevel();
+            uint32 const cap = level >= rs.safeFightUntilLevel ? 255 : level + rs.safeFightLevelGap;
+            handler->PSendSysMessage(
+                "ROUTESURVIVE name={} routed={} retreating={} struggling={} deaths1h={} weapon_cost={} money={} junk={} "
+                "durability={} fight_cap={}",
+                bot->GetName(), routes.Routed(bot) ? 1 : 0, info.route.retreating ? 1 : 0,
+                routes.Struggling(bot) ? 1 : 0, routes.DeathsLastHour(bot), TownErrands::WeaponRepairCost(bot),
+                bot->GetMoney(), TownErrands::JunkValue(botAI, bot),
+                uint32(botAI->GetAiObjectContext()->GetValue<uint8>("durability")->Get()), cap);
+            return true;
+        }
+        if (sub == "deaths" && words.size() > 2)
+        {
+            // Test seam: n deaths now, or forget them all.
+            if (words[2] == "clear")
+                info.route.deaths.clear();
+            else
+            {
+                uint32 const n = std::min<uint32>(Routes::MAX_DEATHS_KEPT,
+                                                  static_cast<uint32>(std::strtoul(words[2].c_str(), nullptr, 10)));
+                for (uint32 i = 0; i < n; ++i)
+                    Routes::NoteDeath(info.route.deaths, static_cast<uint32>(std::time(nullptr)));
+            }
+            handler->PSendSysMessage("ROUTEOK {} deaths1h={}", bot->GetName(), routes.DeathsLastHour(bot));
             return true;
         }
         if (sub == "classstop")

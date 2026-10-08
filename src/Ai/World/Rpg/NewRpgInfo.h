@@ -118,6 +118,8 @@ struct NewRpgInfo
         uint32 headToZone{0};   // the bridge's head_to (0 = none)
         uint32 chainHub{0};     // the hub that gives a follow-up it unlocked (Task 6)
         uint32 carryQuest{0};   // that follow-up: its first job there
+        bool retreating{false};       // retreat and earn (spec §6, Task 7)
+        std::deque<uint32> deaths;    // unix seconds of its deaths in the last hour (Routes::NoteDeath)
     };
     RouteState route;
     WorldPosition abandonedTrip;  // where the last town trip given up was going (the next repair trip avoids it)

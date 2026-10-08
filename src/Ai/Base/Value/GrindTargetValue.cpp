@@ -8,6 +8,8 @@
 #include "NewRpgInfo.h"
 #include "Playerbots.h"
 #include "ReputationMgr.h"
+#include "RouteMgr.h"
+#include "RouteSurvivalRules.h"
 #include "ServerFacade.h"
 #include "SharedDefines.h"
 #include "TownErrands.h"
@@ -61,6 +63,12 @@ Unit* GrindTargetValue::FindTargetForGrinding(uint32 assistCount)
     std::unordered_map<uint32, bool> needForQuestMap;
     // Honest world, worn-out gear: only mobs at or below the bot's level until it can repair.
     bool const playSafe = TownErrands::PlaySafe(botAI, bot);
+    // Quest routes (spec §6): a young routed bot starts no fight with a mob more than SafeFightLevelGap levels above
+    // it, and a retreating one none above its own level. Attackers were returned above: it always defends itself.
+    // Unrouted bots (QuestRoutes = 0 and no seam): routed is false and nothing changes.
+    bool const routed = RouteMgr::instance().Routed(bot);
+    bool const retreating = routed && botAI->rpgInfo.route.retreating;
+    Routes::Settings const& routeRules = sPlayerbotAIConfig.questRoutes;
 
     for (ObjectGuid const guid : targets)
     {
@@ -103,6 +111,12 @@ Unit* GrindTargetValue::FindTargetForGrinding(uint32 assistCount)
             continue;
 
         if (playSafe && unit->GetLevel() > bot->GetLevel() && !unit->GetGUID().IsPlayer())
+            continue;
+
+        if (routed && !unit->GetGUID().IsPlayer() &&
+            (!Routes::FightAllowed(bot->GetLevel(), unit->GetLevel(), routeRules.safeFightUntilLevel,
+                                   routeRules.safeFightLevelGap) ||
+             (retreating && unit->GetLevel() > bot->GetLevel())))
             continue;
 
         if (Creature* creature = unit->ToCreature())

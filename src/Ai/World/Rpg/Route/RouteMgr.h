@@ -112,8 +112,10 @@ public:
     // this hub gives (the carried follow-up first), then the nearest unfinished objective of a routed quest in the log.
     // With nothing in JOB_REACH_YARDS, the nearest of those at any distance on its map (fix round 1). Quests in `skip`
     // (the bot's own per-session low-priority list) are passed over. False: nothing left.
+    // Retreating (spec §6, Task 7): it earns near where it is, so only jobs within Routes::RETREAT_REACH_YARDS, quests to
+    // take or work at or below its level, and no any-distance fallback.
     bool NextJob(Player* bot, Routes::Hub const& hub, uint32 carryQuest, std::unordered_set<uint32> const& skip,
-                 Job& job) const;
+                 bool retreating, Job& job) const;
     Routes::NextChoice Decide(Player* bot) const;  // spec §4 steps 1-3 for this bot now
 
     // Hub seats (decision 14). Freed at logout, at a map change and by the `routes off` seam.
@@ -148,6 +150,10 @@ public:
         bool Any() const { return classStop || next.kind != Routes::Next::None; }
     };
     Choice Choose(Player* bot) const;
+    // Survival (spec §6, Task 7; routed bots only): deaths in the last hour, and the struggling flag (retreating, or
+    // StrugglingDeathsPerHour deaths in the last hour).
+    uint32 DeathsLastHour(Player* bot) const;
+    bool Struggling(Player* bot) const;
 
 private:
     std::atomic<bool> _built{false};

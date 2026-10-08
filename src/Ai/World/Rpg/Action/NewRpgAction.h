@@ -64,6 +64,9 @@ protected:
     // Honest world, every few seconds whatever the status: give up a town trip that takes too long, leave for
     // town before the gear breaks, and stop risky play on worn-out gear. True if it changed the status.
     bool CheckWornGearAndTownTrip(NewRpgStatus status);
+    // Quest routes, spec §6 retreat and earn (routed bots only): starts and ends the retreat. True if it changed the
+    // status.
+    bool UpdateRetreat();
 
     const uint32 wearCheckInterval = 5 * IN_MILLISECONDS;
     // static NewRpgStatusTransitionProb transitionMat;

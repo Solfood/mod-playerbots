@@ -28,6 +28,7 @@
 #include "PlayerbotAI.h"
 #include "PlayerbotTextMgr.h"
 #include "ProfessionPicker.h"
+#include "RouteSurvivalRules.h"
 #include "Playerbots.h"
 #include "QuestDef.h"
 #include "Random.h"
@@ -263,6 +264,38 @@ bool StartRpgDoQuestAction::Execute(Event event)
     return false;
 }
 
+// Quest routes, spec §6 retreat and earn: with a broken weapon (or gear below PlaySafeBelowDurability) and no means to
+// pay the weapon repair, the bot sells junk and earns near town; once it holds the repair plus RetreatReserveCopper it
+// goes to a repairer and resumes its route. Honest world: nothing is granted. True if it changed the status.
+bool NewRpgStatusUpdateAction::UpdateRetreat()
+{
+    NewRpgInfo& info = botAI->rpgInfo;
+    uint32 const weaponCost = TownErrands::WeaponRepairCost(bot);
+    if (info.route.retreating)
+    {
+        if (!Routes::RetreatDone(bot->GetMoney(), weaponCost, sPlayerbotAIConfig.questRoutes.retreatReserveCopper))
+            return false;
+        info.route.retreating = false;
+        FixedPopulation::Count(EconomyCounter::RetreatsEnded);
+        info.lastErrandMs = 0;  // repair now: the errand goes to a repairer
+        return GoRunErrands(true);
+    }
+    bool const broken = TownErrands::WeaponBroken(bot);
+    bool const afford = uint64(bot->GetMoney()) + TownErrands::JunkValue(botAI, bot) >= weaponCost;
+    if (!Routes::ShouldRetreat(broken, AI_VALUE(uint8, "durability"), sPlayerbotAIConfig.fixedPopulationSafeBelow,
+                               afford))
+        return false;
+    info.route.retreating = true;
+    FixedPopulation::Count(EconomyCounter::RetreatsStarted);
+    LOG_DEBUG("playerbots", "[New RPG] Bot {} retreats to earn its weapon repair ({} copper, has {})", bot->GetName(),
+              weaponCost, bot->GetMoney());
+    info.lastErrandMs = 0;  // sell junk first: TownErrands::Needed asks for a vendor while retreating
+    if (GoRunErrands())
+        return true;
+    info.ChangeToIdle();
+    return true;
+}
+
 bool NewRpgStatusUpdateAction::CheckWornGearAndTownTrip(NewRpgStatus status)
 {
     if (!sPlayerbotAIConfig.fixedPopulation || !sRandomPlayerbotMgr.IsRandomBot(bot))
@@ -272,6 +305,10 @@ bool NewRpgStatusUpdateAction::CheckWornGearAndTownTrip(NewRpgStatus status)
     if (info.lastWearCheckMs && GetMSTimeDiffToNow(info.lastWearCheckMs) < wearCheckInterval)
         return false;
     info.lastWearCheckMs = getMSTime();
+
+    // Quest routes: retreat and earn (routed bots only; unrouted bots never get here).
+    if (RouteMgr::instance().Routed(bot) && UpdateRetreat())
+        return true;
 
     // A town trip that never arrives (bad path, dying on the way) is given up; the errand cooldown starts.
     if (status == RPG_GO_CAMP)
@@ -334,6 +371,11 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
             // Honest world: what the bot needs from town comes before a random new activity.
             if (GoRunErrands())
                 return true;
+            // Retreating (quest routes, spec §6): earn near town. Quests at or below its level on its own hub (the
+            // route keeps it only there), mobs at or below its level (the fight rule), townsfolk to sell to; no
+            // trips away.
+            if (RouteMgr::instance().Routed(bot) && info.route.retreating)
+                return RandomChangeStatus({RPG_FOLLOW_ROUTE, RPG_WANDER_RANDOM, RPG_WANDER_NPC, RPG_REST});
             std::vector<NewRpgStatus> candidates = {RPG_GO_CAMP,       RPG_GO_GRIND, RPG_WANDER_RANDOM,
                                                     RPG_WANDER_NPC,    RPG_DO_QUEST, RPG_TRAVEL_FLIGHT,
                                                     RPG_REST,          RPG_OUTDOOR_PVP, RPG_DO_GATHER};

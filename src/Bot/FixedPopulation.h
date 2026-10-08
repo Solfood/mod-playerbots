@@ -45,6 +45,9 @@ enum class EconomyCounter : uint8
     MailsCollected,
     SpiritHealerResurrections,
     TownTripsAbandoned,
+    BotDeaths,        // every random bot's death (quest routes, Task 7: counted for everyone, changes no bot)
+    RetreatsStarted,  // quest routes: retreat and earn (spec §6)
+    RetreatsEnded,
     Count
 };
 

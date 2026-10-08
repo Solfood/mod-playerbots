@@ -18,6 +18,7 @@
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
 #include "RandomPlayerbotMgr.h"
+#include "RouteMgr.h"
 #include "Timer.h"
 #include "TravelMgr.h"
 #include "WorldPacket.h"
@@ -61,6 +62,15 @@ uint8 TownErrands::Needed(PlayerbotAI* botAI, Player* bot)
 
     if (CollectableMailCount(bot))
         errands |= TOWN_ERRAND_MAIL;
+
+    // Quest routes (spec §6, routed bots only: only they ever retreat). A retreating bot sells its junk toward the
+    // weapon repair; a broken weapon it can pay for is repaired even while the rest of its gear is above
+    // RepairBelowDurability (else the retreat would end and the weapon stay broken).
+    if (botAI->rpgInfo.route.retreating && JunkValue(botAI, bot) > 0)
+        errands |= TOWN_ERRAND_SELL;
+    if (!(errands & TOWN_ERRAND_REPAIR) && WeaponBroken(bot) && RouteMgr::instance().Routed(bot) &&
+        CanAffordRepair(botAI, bot))
+        errands |= TOWN_ERRAND_REPAIR;
 
     return errands;
 }
@@ -224,6 +234,12 @@ uint32 TownErrands::WeaponRepairCost(Player* bot)
         if (Item* item = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slot))
             cost += RepairCostValue::ItemCost(item);
     return cost;
+}
+
+bool TownErrands::WeaponBroken(Player* bot)
+{
+    Item const* weapon = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_MAINHAND);
+    return weapon && weapon->GetUInt32Value(ITEM_FIELD_MAXDURABILITY) && !weapon->GetUInt32Value(ITEM_FIELD_DURABILITY);
 }
 
 uint32 TownErrands::JunkValue(PlayerbotAI* botAI, Player* bot)

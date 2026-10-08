@@ -13,6 +13,7 @@
 #include "BuiltInConfig.h"
 #include "DBUpdater.h"
 #include "DatabaseEnv.h"
+#include "FixedPopulation.h"
 #include "PlayerbotsDatabase.h"
 #include <mysqld_error.h>
 #include "AllMapScript.h"
@@ -28,11 +29,13 @@
 #include "RaisingMgr.h"
 #include "RandomPlayerbotMgr.h"
 #include "RouteMgr.h"
+#include "RouteSurvivalRules.h"
 #include "ScriptMgr.h"
 #include "ServerScript.h"
 #include "SessionScript.h"
 #include "WorldScript.h"
 #include "cmath"
+#include <ctime>
 
 class PlayerbotsDatabaseScript : public DatabaseScript
 {
@@ -195,11 +198,19 @@ public:
         RouteMgr::instance().Unseat(player->GetGUID().GetCounter());
     }
 
-    // Map thread. Honest world: a recent death at 45+ makes a bot a raisings candidate.
+    // Map thread. Honest world: a recent death at 45+ makes a bot a raisings candidate. Every random bot's death is
+    // counted (bot_deaths, the quest-route measurements: counting changes no bot); a routed bot remembers it for its
+    // struggling flag (spec §6).
     void OnPlayerJustDied(Player* player) override
     {
-        if (GET_PLAYERBOT_AI(player))
-            sRaisingMgr.NoteDeath(player);
+        PlayerbotAI* botAI = GET_PLAYERBOT_AI(player);
+        if (!botAI)
+            return;
+        sRaisingMgr.NoteDeath(player);
+        if (sRandomPlayerbotMgr.IsRandomBot(player))
+            FixedPopulation::Count(EconomyCounter::BotDeaths);
+        if (RouteMgr::instance().Routed(player))
+            Routes::NoteDeath(botAI->rpgInfo.route.deaths, static_cast<uint32>(std::time(nullptr)));
     }
 
     void OnPlayerCreatureKillCredit(Player* player, Creature* killed) override
