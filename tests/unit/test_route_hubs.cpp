@@ -43,6 +43,21 @@ int main()
     CHECK_EQ(1897.0f, std::round(clusters[0].x));  // (1850 + 1880 + 1960) / 3
     CHECK_EQ(2u, static_cast<uint32_t>(clusters[1].spots.size()));
     CHECK_EQ(1u, clusters[2].map);
+    // Canonical order (review M1): the same givers in any input order give the same hubs, the same centres and the
+    // same first spot (Task 4 names a hub after it).
+    std::vector<GiverSpot> shuffled = {spots[4], spots[5], spots[2], spots[0], spots[3], spots[1]};
+    std::vector<Cluster> const again = ClusterGivers(shuffled, 150.0f);
+    CHECK_EQ(clusters.size(), again.size());
+    for (std::size_t i = 0; i < clusters.size() && i < again.size(); ++i)
+    {
+        CHECK_EQ(clusters[i].map, again[i].map);
+        CHECK_EQ(clusters[i].x, again[i].x);
+        CHECK_EQ(clusters[i].y, again[i].y);
+        CHECK_EQ(clusters[i].z, again[i].z);
+        CHECK_EQ(clusters[i].spots.size(), again[i].spots.size());
+        for (std::size_t k = 0; k < clusters[i].spots.size() && k < again[i].spots.size(); ++k)
+            CHECK_TRUE(spots[clusters[i].spots[k]].quests == shuffled[again[i].spots[k]].quests);
+    }
     // Single link: a chain of givers 140 yd apart is one hub even though its ends are 280 yd apart.
     std::vector<GiverSpot> chain = {{0, 0, 0, 0, {1}}, {0, 140, 0, 0, {2}}, {0, 280, 0, 0, {3}}};
     CHECK_EQ(1u, static_cast<uint32_t>(ClusterGivers(chain, 150.0f).size()));
@@ -80,6 +95,14 @@ int main()
     in.options[0] = Option(deathknell, 1, 2, 7, 9, 10);
     c = PickNextHub(in);
     CHECK_TRUE(c.kind == Next::Hub && c.hubId == 2);
+    // ... but never leaves doable work for nowhere (review I1): at 7 of 9 with no other hub that fits, it stays;
+    // with the only other fitting hub full, it stays too.
+    in.options = {Option(deathknell, 1, 2, 7, 9, 10)};
+    c = PickNextHub(in);
+    CHECK_TRUE(c.kind == Next::Stay && c.hubId == 1);
+    in.options = {Option(deathknell, 1, 2, 7, 9, 10), Option(calvin, 1, 2, 0, 15, 480)};
+    c = PickNextHub(in);
+    CHECK_TRUE(c.kind == Next::Stay && c.hubId == 1);
     in.style = Style::Steady;
 
     // Next hub: lowest band first, then nearest; far hubs (> 2,000 yd) last.

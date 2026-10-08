@@ -41,11 +41,17 @@ struct Cluster
 {
     uint32_t map = 0;
     float x = 0, y = 0, z = 0;          // the average of its spots
-    std::vector<std::size_t> spots;     // indexes into the input, in input order
+    std::vector<std::size_t> spots;     // indexes into the input, in SpotLess order (front = the canonical first)
 };
 
 // Single-link clustering (research 17 §3): two spots on the same map within `radius` yards (2D) are in the same hub.
-// Clusters come out in the order of their first spot, so the same input gives the same hubs.
+// The order is canonical (review M1): a cluster's spots are sorted by SpotLess, the clusters by their first spot, and
+// centres are summed in that order, so the same givers in any input order give the same hubs, ids, names and centres.
+inline bool SpotLess(GiverSpot const& a, GiverSpot const& b)
+{
+    return std::tie(a.map, a.x, a.y, a.z, a.quests) < std::tie(b.map, b.x, b.y, b.z, b.quests);
+}
+
 inline std::vector<Cluster> ClusterGivers(std::vector<GiverSpot> const& spots, float radius)
 {
     std::vector<std::size_t> parent(spots.size());
@@ -83,6 +89,11 @@ inline std::vector<Cluster> ClusterGivers(std::vector<GiverSpot> const& spots, f
         }
         out[index[root]].spots.push_back(i);
     }
+    auto const less = [&spots](std::size_t a, std::size_t b) { return SpotLess(spots[a], spots[b]); };
+    for (Cluster& c : out)
+        std::sort(c.spots.begin(), c.spots.end(), less);
+    std::sort(out.begin(), out.end(),
+              [&less](Cluster const& a, Cluster const& b) { return less(a.spots.front(), b.spots.front()); });
     for (Cluster& c : out)
     {
         for (std::size_t s : c.spots)
@@ -260,16 +271,28 @@ struct NextInput
 // Spec §4 steps 1-3: stay while the current hub has doable work (a curious bot leaves at 75 %); else head_to, then a
 // chain follow-up, then the lowest band nearest; a full hub gives way to one of about the same level; nothing fits
 // yet: catch up on the lowest hub ahead; nothing at all: None.
+inline NextChoice PickNextHubElsewhere(NextInput const& in);
+
+// A bot past its leave percentage (a curious one) still stays while its current hub has doable work unless another
+// hub can take it now (review I1): it never drops doable quests to wait, catch up or random-roll.
 inline NextChoice PickNextHub(NextInput const& in)
 {
-    auto worth = [&in](HubOption const& o) { return o.doableNow > 0 && Fits(in.botLevel, *o.hub); };
     for (HubOption const& o : in.options)
-        if (o.hub->id == in.currentHub && worth(o))
+        if (o.hub->id == in.currentHub && o.doableNow > 0 && Fits(in.botLevel, *o.hub))
         {
             uint32_t const total = o.done + o.remaining;
             if (!total || o.done * 100 < total * LeaveHubAtPercent(in.style))
                 return {Next::Stay, o.hub->id};
+            NextChoice const elsewhere = PickNextHubElsewhere(in);
+            return elsewhere.kind == Next::Hub ? elsewhere : NextChoice{Next::Stay, o.hub->id};
         }
+    return PickNextHubElsewhere(in);
+}
+
+// PickNextHub without the stay rule: where the bot would go if it left its current hub now.
+inline NextChoice PickNextHubElsewhere(NextInput const& in)
+{
+    auto worth = [&in](HubOption const& o) { return o.doableNow > 0 && Fits(in.botLevel, *o.hub); };
     auto blocked = [&in](HubOption const& o)
     {
         if (!o.hub->after)
@@ -395,7 +418,11 @@ inline std::string HeadToProblem(std::string const& name, int botLevel, uint32_t
            std::to_string(hi) + ")";
 }
 
-// Hub seats (decision 14): who is bound for or working which hub. Map threads read and write it: one short lock.
+// Hub seats (decision 14): who is bound for or working which hub. Every call takes one short lock, so the book itself
+// is safe from any thread. The soft cap is NOT enforced here: the caller reads Seats() (via PickNextHub) and then
+// calls Seat() in two steps. That is race-free only because every bot that can contend for a hub is on the same
+// continent map and its AI runs in OnPlayerAfterUpdate, on that map's single update thread, which reads then seats
+// within one call (review M2). Seating from another thread (the console, a second map) can overshoot the cap.
 class SeatBook
 {
 public:
