@@ -10,6 +10,8 @@
 #define PLAYERBOTS_ROUTEQUESTRULES_H
 
 #include <array>
+#include <cmath>
+#include <cstdlib>
 #include <cstddef>
 #include <cstdint>
 #include <istream>
@@ -106,7 +108,10 @@ inline QuestKind ClassifyQuest(QuestFacts const& f)
     {
         if (!target)
             continue;
-        if (f.specialFlags & SPECIAL_CAST)
+        // A creature plus a start item is "use the item on it" even without the cast flag (9303 Inoculation).
+        if (target > 0 && f.startItem)
+            kind = Harder(kind, QuestKind::UseItemOnTarget);
+        else if (f.specialFlags & SPECIAL_CAST)
             kind = Harder(kind, f.startItem ? QuestKind::UseItemOnTarget : QuestKind::CastOnTarget);
         else
             kind = Harder(kind, target < 0 ? QuestKind::UseObject : QuestKind::Kill);
@@ -126,14 +131,14 @@ inline QuestKind ClassifyQuest(QuestFacts const& f)
 }
 
 // A routed bot takes a quest only if its route can do it (decision 5): a routed kind, at most this many levels above
-// the bot (the old rule allowed 3), not grey (the bot more than `greyDiff` levels above it, the core's
+// the bot (the old rule allowed 3), not grey (a negative diff means no cutoff, as in the core; the bot more than `greyDiff` levels above it, the core's
 // CONFIG_QUEST_LOW_LEVEL_HIDE_DIFF), not dropped by the safety net, not skipped by the fix list.
 constexpr int ROUTE_QUEST_LEVELS_ABOVE = 1;
 
 inline bool MayAccept(QuestKind kind, int questLevel, int botLevel, int greyDiff, bool dropped, bool skipped)
 {
     return RoutedKind(kind) && !dropped && !skipped && questLevel <= botLevel + ROUTE_QUEST_LEVELS_ABOVE &&
-           botLevel <= questLevel + greyDiff;
+           (greyDiff < 0 || botLevel <= questLevel + greyDiff);
 }
 
 struct Point
@@ -175,24 +180,69 @@ struct FixList
     std::vector<std::string> errors;                                       // "line N: ..." (that line is ignored)
 };
 
+// Strict numbers for the fix list: digits only (no sign), in range, the whole token consumed.
+inline bool ParseUint(std::string const& token, uint32_t& out)
+{
+    if (token.empty() || token.size() > 10)
+        return false;
+    uint64_t value = 0;
+    for (char c : token)
+    {
+        if (c < '0' || c > '9')
+            return false;
+        value = value * 10 + static_cast<uint64_t>(c - '0');
+    }
+    if (value > UINT32_MAX)
+        return false;
+    out = static_cast<uint32_t>(value);
+    return true;
+}
+
+inline bool ParseCoord(std::string const& token, float& out)
+{
+    if (token.empty())
+        return false;
+    char* end = nullptr;
+    float const value = std::strtof(token.c_str(), &end);
+    if (*end != '\0' || !std::isfinite(value))
+        return false;
+    out = value;
+    return true;
+}
+
 inline FixList ParseFixList(std::istream& in)
 {
     FixList fix;
     std::string line;
     for (int no = 1; std::getline(in, line); ++no)
     {
+        if (no == 1 && line.compare(0, 3, "\xEF\xBB\xBF") == 0)  // UTF-8 byte order mark
+            line.erase(0, 3);
         std::string::size_type const hash = line.find('#');
         if (hash != std::string::npos)
             line.erase(hash);
-        std::istringstream words(line);
-        std::string verb;
-        if (!(words >> verb))
+        std::istringstream stream(line);
+        std::vector<std::string> words;
+        for (std::string word; stream >> word;)
+            words.push_back(word);
+        if (words.empty())
             continue;
+        std::string const& verb = words[0];
         auto bad = [&](std::string const& why) { fix.errors.push_back("line " + std::to_string(no) + ": " + why); };
+        // Numbers words[from .. from+count) into out; the line must have exactly that many words from `from` on.
+        auto numbers = [&](std::size_t from, std::size_t count, uint32_t* out)
+        {
+            if (words.size() != from + count)
+                return false;
+            for (std::size_t i = 0; i < count; ++i)
+                if (!ParseUint(words[from + i], out[i]))
+                    return false;
+            return true;
+        };
         if (verb == "skip_hub")
         {
             uint32_t area = 0;
-            if (words >> area)
+            if (numbers(1, 1, &area))
                 fix.skipAreas.insert(area);
             else
                 bad("skip_hub <area id>");
@@ -200,7 +250,7 @@ inline FixList ParseFixList(std::istream& in)
         else if (verb == "skip_quest")
         {
             uint32_t quest = 0;
-            if (words >> quest)
+            if (numbers(1, 1, &quest))
                 fix.skipQuests.insert(quest);
             else
                 bad("skip_quest <quest id>");
@@ -208,47 +258,52 @@ inline FixList ParseFixList(std::istream& in)
         else if (verb == "quest_kind")
         {
             uint32_t quest = 0;
-            std::string name;
             QuestKind kind = QuestKind::Unsupported;
-            if (words >> quest >> name && KindFromName(name, kind))
+            if (words.size() == 3 && ParseUint(words[1], quest) && KindFromName(words[2], kind))
                 fix.kinds[quest] = kind;
             else
                 bad("quest_kind <quest id> <kind>");
         }
         else if (verb == "quest_spell")
         {
-            uint32_t quest = 0;
-            SpellTarget target;
-            if (words >> quest >> target.spell >> target.target)
-                fix.spells[quest] = target;
+            uint32_t v[3] = {0, 0, 0};
+            if (numbers(1, 3, v))
+                fix.spells[v[0]] = SpellTarget{v[1], v[2]};
             else
                 bad("quest_spell <quest id> <spell id> <target entry>");
         }
         else if (verb == "order")
         {
-            std::string team;
             uint8_t teamId = 0;
             uint32_t map = 0;
-            if (!(words >> team >> map) || !TeamFromName(team, teamId))
+            if (words.size() < 3 || !TeamFromName(words[1], teamId) || !ParseUint(words[2], map))
             {
                 bad("order <alliance|horde> <map> <area> <area> ...");
                 continue;
             }
             std::vector<uint32_t> areas;
-            uint32_t area = 0;
-            while (words >> area)
+            bool ok = true;
+            for (std::size_t i = 3; i < words.size() && ok; ++i)
+            {
+                uint32_t area = 0;
+                ok = ParseUint(words[i], area);
                 areas.push_back(area);
-            if (areas.size() < 2)
+            }
+            if (!ok)
+                bad("order <alliance|horde> <map> <area> <area> ...");
+            else if (areas.size() < 2)
                 bad("order needs at least two areas");
             else
                 fix.order[{teamId, map}] = areas;
         }
         else if (verb == "waypoint")
         {
-            uint32_t from = 0, to = 0;
+            uint32_t v[3] = {0, 0, 0};
             Point p;
-            if (words >> from >> to >> p.map >> p.x >> p.y >> p.z)
-                fix.waypoints[{from, to}].push_back(p);
+            if (words.size() == 7 && ParseUint(words[1], v[0]) && ParseUint(words[2], v[1]) &&
+                ParseUint(words[3], p.map) && ParseCoord(words[4], p.x) && ParseCoord(words[5], p.y) &&
+                ParseCoord(words[6], p.z))
+                fix.waypoints[{v[0], v[1]}].push_back(p);
             else
                 bad("waypoint <from area> <to area> <map> <x> <y> <z>");
         }

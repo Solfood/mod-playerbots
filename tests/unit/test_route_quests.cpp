@@ -111,5 +111,37 @@ int main()
     CHECK_EQ(3u, static_cast<uint32_t>(fix.errors.size()));  // short order, bad kind, unknown entry
     CHECK_EQ(std::string("line 9: order needs at least two areas"), fix.errors[0]);
     CHECK_EQ(std::string("line 11: unknown entry 'dance'"), fix.errors[2]);
+    // A creature plus a start item but no cast flag: use the item on it (9303 Inoculation), not a plain kill.
+    QuestFacts inoculation = Kill(16198);
+    inoculation.startItem = 22000;
+    CHECK_EQ(std::string("use_item_on_target"), std::string(KindName(ClassifyQuest(inoculation))));
+    CHECK_EQ(std::string("kill"), std::string(KindName(ClassifyQuest(Kill(16198)))));
+    // A negative grey diff means no cutoff.
+    CHECK_TRUE(MayAccept(QuestKind::Kill, 1, 60, -1, false, false));
+
+    // Malformed fix-list lines are rejected whole, with a message; CRLF, empty and comment-only input are fine.
+    {
+        std::istringstream bad(
+            "skip_hub -1\n"
+            "skip_hub 12abc\n"
+            "order horde 0 154 159 abc 85\n"
+            "skip_quest 4294967296\n"
+            "quest_kind 5 kill extra\n"
+            "waypoint 1 2 0 1.5x 2 3\n"
+            "skip_quest 7 8\n");
+        FixList const f = ParseFixList(bad);
+        CHECK_EQ(7u, static_cast<uint32_t>(f.errors.size()));
+        CHECK_TRUE(f.skipAreas.empty() && f.skipQuests.empty() && f.order.empty() && f.kinds.empty() &&
+                   f.waypoints.empty());
+        CHECK_EQ(std::string("line 3: order <alliance|horde> <map> <area> <area> ..."), f.errors[2]);
+        std::istringstream crlf("skip_hub 12\r\nquest_kind 6395 cast_on_target\r\n");
+        FixList const c = ParseFixList(crlf);
+        CHECK_TRUE(c.errors.empty() && c.skipAreas.count(12) == 1 && c.kinds.at(6395) == QuestKind::CastOnTarget);
+        std::istringstream empty("");
+        CHECK_TRUE(ParseFixList(empty).errors.empty());
+        std::istringstream comments("# only\n   \n  # comments\n");
+        FixList const m = ParseFixList(comments);
+        CHECK_TRUE(m.errors.empty() && m.skipAreas.empty());
+    }
     return UnitFailures();
 }
