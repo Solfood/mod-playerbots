@@ -16,6 +16,7 @@
 #include "ObjectGuid.h"
 #include "ObjectMgr.h"
 #include "QuestDef.h"
+#include "RouteSafetyRules.h"
 #include "Strategy.h"
 #include "Timer.h"
 #include "TravelMgr.h"
@@ -120,6 +121,7 @@ struct NewRpgInfo
         uint32 carryQuest{0};   // that follow-up: its first job there
         bool retreating{false};       // retreat and earn (spec §6, Task 7)
         std::deque<uint32> deaths;    // unix seconds of its deaths in the last hour (Routes::NoteDeath)
+        std::unordered_map<uint32, Routes::QuestWatch> watch;  // the safety net's clock per quest it worked (Task 8)
     };
     RouteState route;
     WorldPosition abandonedTrip;  // where the last town trip given up was going (the next repair trip avoids it)

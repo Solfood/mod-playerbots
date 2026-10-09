@@ -57,6 +57,10 @@ protected:
     bool AcceptQuest(Quest const* quest, ObjectGuid guid);
     bool TurnInQuest(Quest const* quest, ObjectGuid guid);
     bool OrganizeQuestLog();
+    // Takes a quest out of the log through the normal client packet (the core removes its items and progress); the
+    // one abandon path of the RPG actions (OrganizeQuestLog and the routes safety net, preflight D14).
+    void AbandonQuest(uint32 questId);
+    void AbandonQuestSlot(uint16 slot);
 
 protected:
     bool GetQuestPOIPosAndObjectiveIdx(uint32 questId, std::vector<POIInfo>& poiInfo, bool toComplete = false);

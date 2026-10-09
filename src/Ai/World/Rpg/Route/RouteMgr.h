@@ -154,8 +154,23 @@ public:
     // StrugglingDeathsPerHour deaths in the last hour).
     uint32 DeathsLastHour(Player* bot) const;
     bool Struggling(Player* bot) const;
+    // The safety net's dropped quests (spec §6, Task 8: playerbots_dropped_quests), loaded once in Build(). A dropped
+    // quest is never taken again by that bot (MayAccept) and does not count as work on a hub (WorkAt).
+    struct DropCount
+    {
+        uint32 quest = 0, drops = 0, lastAt = 0;
+    };
+    bool Dropped(uint32 guid, uint32 quest) const;
+    void Drop(Player* bot, uint32 quest);    // records it (memory + table); the caller removes it from the log
+    void Undrop(uint32 guid, uint32 quest);  // test seam
+    std::vector<uint32> DroppedBy(uint32 guid) const;
+    std::vector<DropCount> DropCounts() const;
+    uint32 DroppedTotal() const;
+    // The sum of the bot's objective counts (creatures/objects and items) on a quest in its log (0 when not in it).
+    static uint32 Progress(Player* bot, uint32 questId);
 
 private:
+    void LoadDropped();
     std::atomic<bool> _built{false};
     uint32 _buildMs = 0;
     uint32 _routedKinds = 0;
@@ -170,6 +185,9 @@ private:
     mutable std::mutex _testLock;
     std::unordered_set<uint32> _testRouted;
     std::atomic<uint32> _testCount{0};
+    mutable std::mutex _dropLock;
+    std::unordered_map<uint32, std::unordered_set<uint32>> _dropped;  // bot guid -> quests it dropped
+    std::unordered_map<uint32, DropCount> _dropCounts;                // quest -> drops by all bots
 };
 
 #endif

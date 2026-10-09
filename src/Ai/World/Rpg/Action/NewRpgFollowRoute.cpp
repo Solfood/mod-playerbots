@@ -6,10 +6,13 @@
 
 #include "NewRpgFollowRoute.h"
 
+#include "FixedPopulation.h"
 #include "NewRpgInfo.h"
 #include "Player.h"
+#include "PlayerbotAIConfig.h"
 #include "PlayerbotAI.h"
 #include "RouteMgr.h"
+#include "RouteSafetyRules.h"
 #include "Timer.h"
 
 bool NewRpgFollowRouteAction::Execute(Event /*event*/)
@@ -100,6 +103,8 @@ bool NewRpgFollowRouteAction::Execute(Event /*event*/)
         data->jobSinceMs = getMSTime();
     }
     data->target = job.where;
+    if (WatchJob(*data, job))
+        return true;
     float const distance = bot->GetExactDist2d(job.where.GetPositionX(), job.where.GetPositionY());
 
     if (job.objective < 0)
@@ -120,4 +125,40 @@ bool NewRpgFollowRouteAction::Execute(Event /*event*/)
         return MoveFarTo(job.where) || MoveRandomNear(NUDGE_YARDS);
     // At the objective: the grind strategy fights and loots what the quest needs.
     return MoveRandomNear(ROAM_YARDS);
+}
+
+bool NewRpgFollowRouteAction::WatchJob(NewRpgInfo::FollowRoute& data, RouteMgr::Job const& job)
+{
+    // The safety net (spec §6): only this action's ticks count as work, walking to the job included, so a target it
+    // never reaches (also one NextJob's any-distance fallback picked, Task 5 carry) stalls like an objective that
+    // never moves. Dead time does not count; a longer gap between ticks counts as Routes::MAX_TICK_MS at most.
+    uint32 const now = getMSTime();
+    uint32 const elapsed = data.lastTickMs ? getMSTimeDiff(data.lastTickMs, now) : 0;
+    data.lastTickMs = now;
+    NewRpgInfo& info = botAI->rpgInfo;
+    if (bot->IsAlive())
+    {
+        Routes::QuestWatch& watch = info.route.watch[job.questId];
+        RouteMgr& routes = RouteMgr::instance();
+        Routes::WatchTick(watch, RouteMgr::Progress(bot, job.questId), elapsed);
+        if (Routes::ShouldDrop(watch, routes.KindOf(job.questId), sPlayerbotAIConfig.questRoutes.questStallMinutes))
+        {
+            info.route.watch.erase(job.questId);
+            data.questId = 0;
+            if (Routes::OnStall(bot->FindQuestSlot(job.questId) < MAX_QUEST_LOG_SIZE) == Routes::StallAction::Drop)
+            {
+                AbandonQuest(job.questId);
+                routes.Drop(bot, job.questId);
+                FixedPopulation::Count(EconomyCounter::RouteDrops);
+            }
+            else
+                botAI->lowPriorityQuest.insert(job.questId);  // a giver it never reaches: not again this session
+            info.ChangeToIdle();
+            return true;
+        }
+    }
+    if (info.route.watch.size() > MAX_WATCHED)  // forget the clocks of quests no longer in the log
+        for (auto it = info.route.watch.begin(); it != info.route.watch.end();)
+            it = bot->FindQuestSlot(it->first) < MAX_QUEST_LOG_SIZE ? std::next(it) : info.route.watch.erase(it);
+    return false;
 }

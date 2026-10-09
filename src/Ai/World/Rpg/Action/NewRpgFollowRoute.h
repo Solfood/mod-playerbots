@@ -7,7 +7,7 @@
 #ifndef PLAYERBOTS_NEWRPGFOLLOWROUTE_H
 #define PLAYERBOTS_NEWRPGFOLLOWROUTE_H
 
-#include "NewRpgBaseAction.h"
+#include "NewRpgBaseAction.h"  // NewRpgInfo.h, RouteMgr.h
 
 // RPG_FOLLOW_ROUTE (guildmaster quest routes): walk to the hub RouteMgr::Decide chose, then work it: hand in finished
 // quests, take the quests a route can do, go to the nearest unfinished objective's spawn and let the grind strategy
@@ -26,6 +26,11 @@ private:
     static constexpr float ROAM_YARDS = 15.0f;       // roaming at an objective so the grind target finds its mobs
     static constexpr uint32 GIVER_WAIT_MS = 3 * IN_MILLISECONDS;
     static constexpr uint32 JOB_STUCK_MS = 90 * IN_MILLISECONDS;  // a giver or ender that never answers is skipped
+    static constexpr std::size_t MAX_WATCHED = 32;  // more safety-net clocks than this: forget those not in the log
+
+    // The safety net's clock on the current job (spec §6, Task 8). True: the job stalled and was given up (the bot
+    // goes IDLE).
+    bool WatchJob(NewRpgInfo::FollowRoute& data, RouteMgr::Job const& job);
 };
 
 #endif

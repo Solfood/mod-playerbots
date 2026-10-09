@@ -17,6 +17,7 @@
 #include "Player.h"
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
+#include "PlayerbotsDatabase.h"
 #include "QuestDef.h"
 #include "RandomPlayerbotMgr.h"
 #include "RouteSurvivalRules.h"
@@ -378,6 +379,7 @@ void RouteMgr::Build()
                     _classStops.push_back({id, q.classMask, team, g});
     }
 
+    LoadDropped();
     _buildMs = GetMSTimeDiffToNow(started);
     LOG_INFO("playerbots", ">> Quest routes: {} hubs, {} quests ({} of a routed kind), {} class quest givers, {} fix "
              "list errors, {} kill quests on a friendly creature left unsupported, in {} ms", _hubs.size(),
@@ -423,7 +425,8 @@ bool RouteMgr::MayAccept(Player* bot, Quest const* quest) const
 {
     uint32 const id = quest->GetQuestId();
     return Routes::MayAccept(KindOf(id), bot->GetQuestLevel(quest), bot->GetLevel(),
-                             static_cast<int>(sWorld->getIntConfig(CONFIG_QUEST_LOW_LEVEL_HIDE_DIFF)), false,
+                             static_cast<int>(sWorld->getIntConfig(CONFIG_QUEST_LOW_LEVEL_HIDE_DIFF)),
+                             Dropped(bot->GetGUID().GetCounter(), id),
                              _fix.skipQuests.count(id) > 0);
 }
 
@@ -453,6 +456,8 @@ RouteMgr::HubWork RouteMgr::WorkAt(Player* bot, Routes::Hub const& hub) const
         Quest const* quest = sObjectMgr->GetQuestTemplate(id);
         Routes::QuestRoute const* q = QuestById(id);
         if (!quest || !q || !Routes::RoutedKind(q->kind) || _fix.skipQuests.count(id))
+            continue;
+        if (Dropped(bot->GetGUID().GetCounter(), id))
             continue;
         if (!bot->SatisfyQuestRace(quest, false) || !bot->SatisfyQuestClass(quest, false))
             continue;
@@ -735,4 +740,101 @@ bool RouteMgr::Struggling(Player* bot) const
     return botAI && Routed(bot) &&
            Routes::Struggling(botAI->rpgInfo.route.retreating, DeathsLastHour(bot),
                               sPlayerbotAIConfig.questRoutes.strugglingDeathsPerHour);
+}
+
+void RouteMgr::LoadDropped()
+{
+    std::lock_guard<std::mutex> guard(_dropLock);
+    if (QueryResult r = PlayerbotsDatabase.Query("SELECT bot, quest, dropped_at FROM playerbots_dropped_quests"))
+        do
+        {
+            uint32 const bot = (*r)[0].Get<uint32>(), quest = (*r)[1].Get<uint32>(), at = (*r)[2].Get<uint32>();
+            _dropped[bot].insert(quest);
+            DropCount& c = _dropCounts[quest];
+            c.quest = quest;
+            ++c.drops;
+            c.lastAt = std::max(c.lastAt, at);
+        } while (r->NextRow());
+}
+
+bool RouteMgr::Dropped(uint32 guid, uint32 quest) const
+{
+    std::lock_guard<std::mutex> guard(_dropLock);
+    auto const it = _dropped.find(guid);
+    return it != _dropped.end() && it->second.count(quest);
+}
+
+void RouteMgr::Drop(Player* bot, uint32 quest)
+{
+    uint32 const guid = bot->GetGUID().GetCounter();
+    uint32 const now = static_cast<uint32>(std::time(nullptr));
+    {
+        std::lock_guard<std::mutex> guard(_dropLock);
+        if (!_dropped[guid].insert(quest).second)
+            return;
+        DropCount& c = _dropCounts[quest];
+        c.quest = quest;
+        ++c.drops;
+        c.lastAt = now;
+    }
+    PlayerbotsDatabase.Execute("INSERT IGNORE INTO playerbots_dropped_quests (bot, quest, dropped_at) VALUES ({}, {}, {})",
+                               guid, quest, now);
+}
+
+void RouteMgr::Undrop(uint32 guid, uint32 quest)
+{
+    {
+        std::lock_guard<std::mutex> guard(_dropLock);
+        auto const it = _dropped.find(guid);
+        if (it == _dropped.end() || !it->second.erase(quest))
+            return;
+        if (it->second.empty())
+            _dropped.erase(it);
+        if (DropCount& c = _dropCounts[quest]; c.drops && !--c.drops)
+            _dropCounts.erase(quest);
+    }
+    PlayerbotsDatabase.Execute("DELETE FROM playerbots_dropped_quests WHERE bot = {} AND quest = {}", guid, quest);
+}
+
+std::vector<uint32> RouteMgr::DroppedBy(uint32 guid) const
+{
+    std::lock_guard<std::mutex> guard(_dropLock);
+    auto const it = _dropped.find(guid);
+    std::vector<uint32> out;
+    if (it != _dropped.end())
+        out.assign(it->second.begin(), it->second.end());
+    std::sort(out.begin(), out.end());
+    return out;
+}
+
+std::vector<RouteMgr::DropCount> RouteMgr::DropCounts() const
+{
+    std::lock_guard<std::mutex> guard(_dropLock);
+    std::vector<DropCount> out;
+    out.reserve(_dropCounts.size());
+    for (auto const& [quest, c] : _dropCounts)
+        out.push_back(c);
+    return out;
+}
+
+uint32 RouteMgr::DroppedTotal() const
+{
+    std::lock_guard<std::mutex> guard(_dropLock);
+    uint32 n = 0;
+    for (auto const& [guid, quests] : _dropped)
+        n += static_cast<uint32>(quests.size());
+    return n;
+}
+
+uint32 RouteMgr::Progress(Player* bot, uint32 questId)
+{
+    auto const it = bot->getQuestStatusMap().find(questId);
+    if (it == bot->getQuestStatusMap().end())
+        return 0;
+    uint32 sum = 0;
+    for (int i = 0; i < QUEST_OBJECTIVES_COUNT; ++i)
+        sum += it->second.CreatureOrGOCount[i];
+    for (int i = 0; i < QUEST_ITEM_OBJECTIVES_COUNT; ++i)
+        sum += it->second.ItemCount[i];
+    return sum;
 }

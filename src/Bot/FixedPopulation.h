@@ -48,6 +48,7 @@ enum class EconomyCounter : uint8
     BotDeaths,        // every random bot's death (quest routes, Task 7: counted for everyone, changes no bot)
     RetreatsStarted,  // quest routes: retreat and earn (spec §6)
     RetreatsEnded,
+    RouteDrops,       // quest routes safety net: quests dropped after a stall (spec §6, Task 8)
     Count
 };
 

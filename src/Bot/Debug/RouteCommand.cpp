@@ -90,7 +90,8 @@ bool RouteCommand::Handle(ChatHandler* handler, char const* args)
         handler->PSendSysMessage("ROUTEERR usage: routes stats | dump <alliance|horde> <start> | kind <quest> | "
                                  "hubinfo <hub id> | on|off|bot|decide|log|zones|classstop|classgo|forget <name> | go <name> <hub id> | "
                                  "headto <name> <zone> | style <name> <steady|curious|easygoing> | seats <hub id> <n> | "
-                                 "chains [n]");
+                                 "chains [n] | survive <name> | deaths <name> <n|clear> | dropped <name> | "
+                                 "stall <name> <quest> <seconds> | drop|undrop|may <name> <quest>");
         return false;
     }
     RouteMgr& routes = RouteMgr::instance();
@@ -100,12 +101,12 @@ bool RouteCommand::Handle(ChatHandler* handler, char const* args)
     if (sub == "stats")
     {
         handler->PSendSysMessage("ROUTESTAT on={} built={} hubs={} quests={} routed_kinds={} class_stops={} "
-                                 "build_ms={} fix_errors={} test_routed={} friendly_kills={} seated={} maxseat={}",
+                                 "build_ms={} fix_errors={} test_routed={} friendly_kills={} seated={} maxseat={} dropped={}",
                                  sPlayerbotAIConfig.questRoutes.enabled ? 1 : 0, routes.Built() ? 1 : 0,
                                  routes.Hubs().size(), routes.QuestCount(), routes.RoutedKinds(),
                                  routes.ClassStops().size(), routes.BuildMs(), routes.Fixes().errors.size(),
                                  routes.TestRoutedCount(), routes.FriendlyKillCount(), routes.Seated(),
-                                 routes.MaxSeats());
+                                 routes.MaxSeats(), routes.DroppedTotal());
         return true;
     }
     if (sub == "dump" && words.size() > 2)
@@ -210,7 +211,8 @@ bool RouteCommand::Handle(ChatHandler* handler, char const* args)
     if (words.size() > 1 && (sub == "on" || sub == "off" || sub == "bot" || sub == "decide" || sub == "log" ||
                              sub == "go" || sub == "headto" || sub == "style" || sub == "zones" ||
                              sub == "classstop" || sub == "classgo" || sub == "forget" || sub == "survive" ||
-                             sub == "deaths"))
+                             sub == "deaths" || sub == "stall" || sub == "dropped" || sub == "drop" ||
+                             sub == "undrop" || sub == "may"))
     {
         Player* bot = FindBot(handler, words[1]);
         if (!bot)
@@ -225,6 +227,7 @@ bool RouteCommand::Handle(ChatHandler* handler, char const* args)
                 routes.Unseat(bot->GetGUID().GetCounter());  // preflight D13: off frees its seat
                 info.route.retreating = false;  // and its survival state (Task 7)
                 info.route.deaths.clear();
+                info.route.watch.clear();  // and its safety-net clocks (Task 8; its dropped quests stay)
                 if (info.GetStatus() == RPG_FOLLOW_ROUTE)
                     info.ChangeToIdle();
             }
@@ -250,6 +253,48 @@ bool RouteCommand::Handle(ChatHandler* handler, char const* args)
                 Routes::StyleName(routes.StyleOf(bot)), info.route.headToZone,
                 info.route.chainHub, info.route.carryQuest, jobLeft ? 1 : 0, bot->GetZoneId(),
                 routes.SeatOf(bot->GetGUID().GetCounter()), follow ? follow->classQuest : 0);
+            for (auto const& [quest, w] : info.route.watch)
+                handler->PSendSysMessage("ROUTEWATCH name={} quest={} progress={} active_s={}", bot->GetName(), quest,
+                                         w.progress, w.activeMs / IN_MILLISECONDS);
+            return true;
+        }
+        if (sub == "stall" && words.size() > 3)
+        {
+            // Test seam: pretend the bot has worked this quest for <seconds> without progress.
+            uint32 const quest = static_cast<uint32>(std::strtoul(words[2].c_str(), nullptr, 10));
+            Routes::QuestWatch& w = info.route.watch[quest];
+            w.progress = RouteMgr::Progress(bot, quest);
+            w.activeMs = static_cast<uint32>(std::strtoul(words[3].c_str(), nullptr, 10)) * IN_MILLISECONDS;
+            handler->PSendSysMessage("ROUTEOK {} quest={} active_s={}", bot->GetName(), quest,
+                                     w.activeMs / IN_MILLISECONDS);
+            return true;
+        }
+        if (sub == "dropped")
+        {
+            std::string list;
+            for (uint32 quest : routes.DroppedBy(bot->GetGUID().GetCounter()))
+                list += (list.empty() ? "" : ",") + std::to_string(quest);
+            handler->PSendSysMessage("ROUTEDROPPED name={} quests={}", bot->GetName(), list.empty() ? "-" : list);
+            return true;
+        }
+        if (sub == "drop" && words.size() > 2)
+        {
+            // Test seam: record a drop without a stall (the bridge's quest_drops check). Undo with `undrop`.
+            routes.Drop(bot, static_cast<uint32>(std::strtoul(words[2].c_str(), nullptr, 10)));
+            handler->PSendSysMessage("ROUTEOK {} dropped {}", bot->GetName(), words[2]);
+            return true;
+        }
+        if (sub == "undrop" && words.size() > 2)
+        {
+            routes.Undrop(bot->GetGUID().GetCounter(), static_cast<uint32>(std::strtoul(words[2].c_str(), nullptr, 10)));
+            handler->PSendSysMessage("ROUTEOK {} undropped {}", bot->GetName(), words[2]);
+            return true;
+        }
+        if (sub == "may" && words.size() > 2)
+        {
+            uint32 const quest = static_cast<uint32>(std::strtoul(words[2].c_str(), nullptr, 10));
+            Quest const* q = sObjectMgr->GetQuestTemplate(quest);
+            handler->PSendSysMessage("ROUTEMAY quest={} may={}", quest, q && routes.MayAccept(bot, q) ? 1 : 0);
             return true;
         }
         if (sub == "decide")
