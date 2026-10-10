@@ -28,9 +28,13 @@ private:
     static constexpr uint32 JOB_STUCK_MS = 90 * IN_MILLISECONDS;  // a giver or ender that never answers is skipped
     static constexpr std::size_t MAX_WATCHED = 32;  // more safety-net clocks than this: forget those not in the log
 
+    static constexpr uint32 HUB_WALK_LEGS = 64;  // hub-walk guard keys: hub id * 64 + waypoint leg
+
     // The safety net's clock on the current job (spec §6, Task 8). True: the job stalled and was given up (the bot
     // goes IDLE).
-    bool WatchJob(NewRpgInfo::FollowRoute& data, RouteMgr::Job const& job);
+    bool WatchJob(NewRpgInfo::FollowRoute& data, RouteMgr::Job const& job, float distance, uint32 elapsed);
+    // The hub-walk guard on the way to `hub` (fix round 1). True: it gave the hub up (the bot goes IDLE).
+    bool HubWalkStalled(NewRpgInfo::FollowRoute& data, Routes::Hub const& hub, float distance, uint32 elapsed);
 };
 
 #endif

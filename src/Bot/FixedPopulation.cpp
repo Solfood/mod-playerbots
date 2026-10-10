@@ -21,7 +21,7 @@ constexpr std::array<char const*, static_cast<std::size_t>(FixedPopulationGuard:
 constexpr std::array<char const*, static_cast<std::size_t>(EconomyCounter::Count)> COUNTER_NAMES = {
     "training_spells",    "training_skipped", "training_copper", "mounts_bought", "tools_bought",
     "professions_picked", "errands_started",  "mails_collected", "spirit_healer",
-    "town_trips_abandoned", "bot_deaths",      "retreats_started", "retreats_ended", "route_drops"};
+    "town_trips_abandoned", "bot_deaths",      "retreats_started", "retreats_ended", "route_drops", "hub_walks_given_up"};
 }  // namespace
 
 bool FixedPopulation::Blocks(FixedPopulationGuard guard)

@@ -100,7 +100,8 @@ struct NewRpgInfo
         int32 objective{0};          // RouteMgr::Job::objective of the current job
         WorldPosition target{};
         uint32 jobSinceMs{0};        // when the current job started
-        uint32 lastTickMs{0};        // the action's last tick (the safety net's clock, Task 8)
+        uint32 lastTickMs{0};        // the action's last tick (the safety net's clock, Task 8; 0 = none yet)
+        Routes::HubWalk hubWalk{};   // the hub-walk guard on the way to the hub (fix round 1)
     };
     struct Idle
     {
@@ -122,6 +123,7 @@ struct NewRpgInfo
         bool retreating{false};       // retreat and earn (spec §6, Task 7)
         std::deque<uint32> deaths;    // unix seconds of its deaths in the last hour (Routes::NoteDeath)
         std::unordered_map<uint32, Routes::QuestWatch> watch;  // the safety net's clock per quest it worked (Task 8)
+        std::unordered_set<uint32> skipHubs;  // hubs it never got closer to (hub-walk guard): not again this session
     };
     RouteState route;
     WorldPosition abandonedTrip;  // where the last town trip given up was going (the next repair trip avoids it)

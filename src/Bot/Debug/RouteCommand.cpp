@@ -228,6 +228,7 @@ bool RouteCommand::Handle(ChatHandler* handler, char const* args)
                 info.route.retreating = false;  // and its survival state (Task 7)
                 info.route.deaths.clear();
                 info.route.watch.clear();  // and its safety-net clocks (Task 8; its dropped quests stay)
+                info.route.skipHubs.clear();  // and the hubs the hub-walk guard gave up
                 if (info.GetStatus() == RPG_FOLLOW_ROUTE)
                     info.ChangeToIdle();
             }

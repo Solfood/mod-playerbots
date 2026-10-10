@@ -592,6 +592,8 @@ Routes::NextChoice RouteMgr::Decide(Player* bot) const
         // Hubs it outlevelled, and hubs far above it, cannot be chosen: skip the work count for them.
         if (Routes::Outlevelled(in.botLevel, *hub) || hub->minLevel > in.botLevel + Routes::DECIDE_LEVELS_AHEAD)
             continue;
+        if (route.skipHubs.count(hub->id))
+            continue;  // a hub it never got closer to (hub-walk guard): not again this session
         HubWork const work = WorkAt(bot, *hub);
         if (!work.remaining && hub->id != route.hubId)
             continue;

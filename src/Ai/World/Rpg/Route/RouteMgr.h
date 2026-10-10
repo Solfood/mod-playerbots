@@ -10,6 +10,7 @@
 #include "Define.h"
 #include "RouteHubRules.h"
 #include "RouteQuestRules.h"
+#include "RouteSafetyRules.h"
 #include "TravelMgr.h"  // WorldPosition (RouteMgr::Job)
 #include <array>
 #include <atomic>
@@ -99,8 +100,8 @@ public:
         uint32 questId = 0;
         int32 objective = 0;   // JOB_ENDER, JOB_GIVER, or the objective index 0-9 (items from 4)
     };
-    static constexpr int32 JOB_ENDER = -1;
-    static constexpr int32 JOB_GIVER = -2;
+    static constexpr int32 JOB_ENDER = Routes::JOB_ENDER;
+    static constexpr int32 JOB_GIVER = Routes::JOB_GIVER;
     static constexpr float JOB_REACH_YARDS = 1500.0f;  // as far as DO_QUEST looks for a quest's area
     // A bot told to stay on its hub counts as arrived when it is this close to the hub's centre (preflight C1: "stay"
     // means the hub still has work, not that the bot is there; farther away it walks back first).

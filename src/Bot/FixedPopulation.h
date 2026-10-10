@@ -49,6 +49,7 @@ enum class EconomyCounter : uint8
     RetreatsStarted,  // quest routes: retreat and earn (spec §6)
     RetreatsEnded,
     RouteDrops,       // quest routes safety net: quests dropped after a stall (spec §6, Task 8)
+    HubWalksGivenUp,  // quest routes: hubs given up after HUB_WALK_STALL_MINUTES without getting closer
     Count
 };
 
