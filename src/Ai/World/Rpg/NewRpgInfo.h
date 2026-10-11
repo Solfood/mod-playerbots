@@ -16,6 +16,7 @@
 #include "ObjectGuid.h"
 #include "ObjectMgr.h"
 #include "QuestDef.h"
+#include "GuideStepRules.h"
 #include "RouteSafetyRules.h"
 #include "Strategy.h"
 #include "Timer.h"
@@ -126,6 +127,36 @@ struct NewRpgInfo
         std::unordered_set<uint32> skipHubs;  // hubs it never got closer to (hub-walk guard): not again this session
     };
     RouteState route;
+    // Guildmaster guides (GuideMgr, Plan 5c): kept across an AI reset, lost at logout except the place, which
+    // playerbots_guide_progress keeps.
+    struct GuideState
+    {
+        bool placed{false};          // its place was loaded or chosen this session
+        bool paused{false};          // no guide this session: none for it, finished, or no way to its next step
+        char const* pauseWhy{""};
+        int guide{-1};               // index into GuideMgr::AllGuides()
+        uint32 seq{0};               // its place: the first step not yet passed
+        int savedGuide{-1};          // the place last saved
+        uint32 savedSeq{0};
+        uint32 lastSaveMs{0};
+        uint32 crowdedAtMs{0};       // when its step was last found full (0 = never): gather or grind for a while
+        uint32 crossings{0};         // crossings looked up this session (at most GuideMgr::MAX_CROSSINGS)
+        std::unordered_set<uint32> skip;  // step keys skipped this session (stalled)
+        // The step it works now (kept across FOLLOW_GUIDE <-> TRAVEL_FLIGHT, GO_GRIND, IDLE).
+        struct Step
+        {
+            bool started{false};
+            uint32 key{0};
+            uint32 workedMs{0};          // FOLLOW_GUIDE ticks on this step (RideTimedOut)
+            uint32 teleportsAtStart{0};  // stuckTeleports when it started (TeleportStalled)
+            uint32 flightTries{0};
+            uint32 atNpcMs{0};           // when it reached a giver, ender, innkeeper or flight master that never answers
+            Routes::HubWalk walk{};      // travel: no closer for HUB_WALK_STALL_MINUTES = stalled
+            float transportX{0}, transportY{0};  // RIDE: where its boat was last tick
+            uint32 dockedMs{0};          // RIDE: how long the boat has stood still at the destination
+        } step;
+    };
+    GuideState guide;
     WorldPosition abandonedTrip;  // where the last town trip given up was going (the next repair trip avoids it)
 
     // Guildmaster bridge focus (0 none, 1 questing, 2 grinding, 3 pvp, 4 gathering, 5 resting; the bridge's

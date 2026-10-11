@@ -7,6 +7,7 @@
 #include "BattleGroundTactics.h"
 #include "Chat.h"
 #include "EconomyCommand.h"
+#include "GuideCommand.h"
 #include "GuildTaskMgr.h"
 #include "PerfMonitor.h"
 #include "PlayerbotMgr.h"
@@ -41,6 +42,7 @@ public:
             {"rndbot", HandleRandomPlayerbotCommand, SEC_GAMEMASTER, Console::Yes},
             {"econ", HandleEconomyCommand, SEC_GAMEMASTER, Console::Yes},
             {"routes", HandleRoutesCommand, SEC_GAMEMASTER, Console::Yes},
+            {"guides", HandleGuidesCommand, SEC_GAMEMASTER, Console::Yes},
             {"debug", playerbotsDebugCommandTable},
             {"account", playerbotsAccountCommandTable},
         };
@@ -71,6 +73,8 @@ public:
     {
         return RouteCommand::Handle(handler, args);
     }
+
+    static bool HandleGuidesCommand(ChatHandler* handler, char const* args) { return GuideCommand::Handle(handler, args); }
 
     static bool HandleGuildTaskCommand(ChatHandler* handler, char const* args)
     {

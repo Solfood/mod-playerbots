@@ -19,6 +19,7 @@
 #include "AllMapScript.h"
 #include "GatherNodeMgr.h"
 #include "GlobalScript.h"
+#include "GuideMgr.h"
 #include "GuildTaskMgr.h"
 #include "PlayerScript.h"
 #include "PlayerbotAIConfig.h"
@@ -181,6 +182,7 @@ public:
     void OnPlayerBeforeLogout(Player* player) override
     {
         RouteMgr::instance().Unseat(player->GetGUID().GetCounter());  // quest routes: its hub seat (cheap when off)
+        GuideMgr::instance().OnLogout(player);  // guides: its seat, and its place saved now (cheap when off)
         if (PlayerbotMgr* playerbotMgr = GET_PLAYERBOT_MGR(player))
         {
             PlayerbotAI* botAI = PlayerbotsMgr::instance().GetPlayerbotAI(player);
@@ -196,6 +198,7 @@ public:
     void OnPlayerMapChanged(Player* player) override
     {
         RouteMgr::instance().Unseat(player->GetGUID().GetCounter());
+        GuideMgr::instance().Unseat(player->GetGUID().GetCounter());  // guides: seats are per step on one map
     }
 
     // Map thread. Honest world: a recent death at 45+ makes a bot a raisings candidate. Every random bot's death is
@@ -569,6 +572,13 @@ public:
         {
             LOG_INFO("server.loading", "Building quest routes...");
             RouteMgr::instance().Build();
+        }
+
+        // Guides (guildmaster Plan 5c): loaded only when they are on; with them off nothing is loaded at startup.
+        if (sPlayerbotAIConfig.guideBots.enabled)
+        {
+            LOG_INFO("server.loading", "Loading guide routes...");
+            GuideMgr::instance().Build();
         }
 
         LOG_INFO("server.loading", "Playerbots World Thread Processor initialized");

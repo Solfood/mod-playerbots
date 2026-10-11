@@ -50,6 +50,12 @@ enum class EconomyCounter : uint8
     RetreatsEnded,
     RouteDrops,       // quest routes safety net: quests dropped after a stall (spec §6, Task 8)
     HubWalksGivenUp,  // quest routes: hubs given up after HUB_WALK_STALL_MINUTES without getting closer
+    GuideStepsDone,     // guides (Plan 5c): steps a bot passed as done (rewarded, in the log, grey, arrived)
+    GuideStepsBlocked,  // steps passed as blocked (no giver, a quest skill, a missing prerequisite, never taken)
+    GuideStepsStalled,  // steps skipped for the session after a stall
+    GuideStepsCrowded,  // times a bot found its step full and nothing free ahead
+    GuidesPaused,       // guides paused for a session (none for the bot, finished, no way to its next step)
+    GuideRidesFailed,   // boats, zeppelins and portals that never took a bot there in RideMinutes
     Count
 };
 
