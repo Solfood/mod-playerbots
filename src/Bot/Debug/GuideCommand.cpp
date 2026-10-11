@@ -20,6 +20,7 @@
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
 #include "RandomPlayerbotMgr.h"
+#include "RouteMgr.h"
 
 namespace
 {
@@ -164,9 +165,13 @@ bool GuideCommand::Handle(ChatHandler* handler, char const* args)
         // on: end what it is doing now, so the IDLE hook sends it to its guide on its next tick (a GO_GRIND or a
         // DO_QUEST can last half an hour). Only this test seam does this; a switched-on world waits for IDLE.
         if (sub == "on" && guides.Guided(bot) && info.GetStatus() != RPG_FOLLOW_GUIDE)
+        {
+            RouteMgr::instance().Unseat(guid);  // FOLLOW_ROUTE's seat (ChangeToIdle does not free it)
             info.ChangeToIdle();
+        }
         if (sub == "off")
         {
+            // A test seam: with AiPlayerbot.GuideBots = 1 the bot stays guided and is placed afresh from its level.
             guides.Unseat(guid);
             guides.Forget(guid);  // its saved place stays in the table, but not in memory: a later seam starts afresh
             info.guide = NewRpgInfo::GuideState{};
@@ -176,10 +181,11 @@ bool GuideCommand::Handle(ChatHandler* handler, char const* args)
         handler->PSendSysMessage("GUIDEOK {} guided={}", bot->GetName(), guides.Guided(bot) ? 1 : 0);
         return true;
     }
-    if ((sub == "reload" || sub == "set") && !guides.Guided(bot))
+    if ((sub == "reload" || sub == "set") && !guides.Enrolled(bot))
     {
-        // never write progress rows or counters for a bot that is not guided
-        handler->PSendSysMessage("GUIDEERR {} is not guided (use guides on {} first)", bot->GetName(), bot->GetName());
+        // never write progress rows or counters for a bot that is not enrolled (a paused one may be set: it unpauses)
+        handler->PSendSysMessage("GUIDEERR {} is not enrolled in guides (use guides on {} first)", bot->GetName(),
+                                 bot->GetName());
         return false;
     }
     if (sub == "reload")

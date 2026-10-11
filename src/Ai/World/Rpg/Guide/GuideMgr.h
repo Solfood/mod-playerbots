@@ -53,6 +53,9 @@ public:
     // The bot follows a guide: loaded, the switch is on and it is a population bot (or the `guides on` seam names
     // it), and its guide is not paused this session. Every guide hook checks this first.
     bool Guided(Player* bot) const;
+    // Enrolled: loaded, and the switch or the `guides on` seam names it; paused or not (Guided = Enrolled and not
+    // paused). `guides set` / `reload` need this, so a paused test bot can be set to a new place.
+    bool Enrolled(Player* bot) const;
     void SetTestGuided(uint32 guid, bool on);
     uint32 TestGuidedCount() const { return _testCount.load(std::memory_order_relaxed); }
 

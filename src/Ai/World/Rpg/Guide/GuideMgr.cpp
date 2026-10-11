@@ -216,7 +216,9 @@ GuideStepInfo GuideMgr::Resolve(Guides::Step& s)
                 in.blocked = "needs a quest skill bots lack (Plan 5b)";
                 break;
             }
-            spawnsOf(s.ids);
+            // The database's spots for this objective first (the mobs that drop its item or that it kills); the
+            // guide's mob ids only when the database has none (fix round 1: the guides list mobs loosely, e.g. the
+            // Duskbats on "get 6 Scavenger Paw").
             std::vector<WorldPosition>& all = _questSpots[s.quest];
             if (Routes::QuestRoute const* route = routes.QuestById(s.quest))
             {
@@ -225,10 +227,12 @@ GuideStepInfo GuideMgr::Resolve(Guides::Step& s)
                         for (Routes::Spawn const& sp : spots)
                             all.push_back(WorldPosition(sp.map, sp.x, sp.y, sp.z));
                 int32 const slot = ObjectiveSlot(q, s.objective);
-                if (in.points.empty() && slot >= 0)
+                if (slot >= 0)
                     for (Routes::Spawn const& sp : route->spots[slot])
                         in.points.push_back(WorldPosition(sp.map, sp.x, sp.y, sp.z));
             }
+            if (in.points.empty())
+                spawnsOf(s.ids);
             if (in.points.empty())
                 in.points = all;
             if (in.points.empty())
@@ -275,17 +279,21 @@ GuideStepInfo GuideMgr::Resolve(Guides::Step& s)
     return in;
 }
 
-bool GuideMgr::Guided(Player* bot) const
+bool GuideMgr::Enrolled(Player* bot) const
 {
     if (!bot || !Built())
         return false;
-    bool on = sPlayerbotAIConfig.guideBots.enabled && sRandomPlayerbotMgr.IsRandomBot(bot);
-    if (!on && TestGuidedCount())
-    {
-        std::lock_guard<std::mutex> guard(_testLock);
-        on = _testGuided.count(bot->GetGUID().GetCounter()) > 0;
-    }
-    if (!on)
+    if (sPlayerbotAIConfig.guideBots.enabled && sRandomPlayerbotMgr.IsRandomBot(bot))
+        return true;
+    if (!TestGuidedCount())
+        return false;
+    std::lock_guard<std::mutex> guard(_testLock);
+    return _testGuided.count(bot->GetGUID().GetCounter()) > 0;
+}
+
+bool GuideMgr::Guided(Player* bot) const
+{
+    if (!Enrolled(bot))
         return false;
     PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
     return botAI && !botAI->rpgInfo.guide.paused;
