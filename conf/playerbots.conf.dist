@@ -872,6 +872,24 @@ AiPlayerbot.QuestRoutes.StrugglingDeathsPerHour = 5
 AiPlayerbot.QuestRoutes.QuestStallMinutes = 20
 AiPlayerbot.QuestRoutes.HubRadius = 150
 
+# Levelling guides (guildmaster Plan 5c). With GuideBots = 1, population bots level by following Zygor 3.3.5
+# levelling guides step by step. The route files (alliance.tsv, horde.tsv) are not part of this module:
+# guildmaster's server/tools/deploy-guides.sh copies them to data/guides/. Off (0) means bots behave exactly as before.
+# Guided bots still use AiPlayerbot.QuestRoutes.QuestStallMinutes and the survival settings.
+# Dir: where the route files are ("" = <source>/modules/mod-playerbots/data/guides).
+# StepSoftCap: bots working one objective step at once; more go to a later step.
+# StepLookahead: how many steps ahead a bot may look for a free one.
+# CrowdWaitMinutes: gather or grind this long when every step near it is full.
+# RideMinutes: a boat, zeppelin or portal not arrived by then pauses the bot's guide.
+# Changing these needs a worldserver restart.
+# Defaults: 0, "", 6, 8, 10, 25
+AiPlayerbot.GuideBots = 0
+AiPlayerbot.GuideBots.Dir = ""
+AiPlayerbot.GuideBots.StepSoftCap = 6
+AiPlayerbot.GuideBots.StepLookahead = 8
+AiPlayerbot.GuideBots.CrowdWaitMinutes = 10
+AiPlayerbot.GuideBots.RideMinutes = 25
+
 # Death knight "raisings" (only with FixedPopulation = 1). None at launch. Once a bot of a faction reaches
 # UnlockLevel, every WaveIntervalHours that faction raises bots that died within RecentDeathHours at
 # MinCandidateLevel or higher: the original character retires (kept in the database) and a level-55

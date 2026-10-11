@@ -57,3 +57,6 @@ local.properties
 .agents/plans/**
 .claude/settings.local.json
 tests/unit/bin/
+
+# guildmaster guide routes: deployed from the private guildmaster repo, never committed here (Zygor content)
+data/guides/

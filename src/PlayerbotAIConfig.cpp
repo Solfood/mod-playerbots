@@ -697,6 +697,12 @@ bool PlayerbotAIConfig::Initialize()
         sConfigMgr->GetOption<uint32>("AiPlayerbot.QuestRoutes.StrugglingDeathsPerHour", 5);
     questRoutes.questStallMinutes = sConfigMgr->GetOption<uint32>("AiPlayerbot.QuestRoutes.QuestStallMinutes", 20);
     questRoutes.hubRadius = sConfigMgr->GetOption<float>("AiPlayerbot.QuestRoutes.HubRadius", 150.0f);
+    guideBots.enabled = sConfigMgr->GetOption<bool>("AiPlayerbot.GuideBots", false);
+    guideBots.dir = sConfigMgr->GetOption<std::string>("AiPlayerbot.GuideBots.Dir", "");
+    guideBots.stepSoftCap = sConfigMgr->GetOption<uint32>("AiPlayerbot.GuideBots.StepSoftCap", 6);
+    guideBots.lookahead = sConfigMgr->GetOption<uint32>("AiPlayerbot.GuideBots.StepLookahead", 8);
+    guideBots.crowdWaitMinutes = sConfigMgr->GetOption<uint32>("AiPlayerbot.GuideBots.CrowdWaitMinutes", 10);
+    guideBots.rideMinutes = sConfigMgr->GetOption<uint32>("AiPlayerbot.GuideBots.RideMinutes", 25);
     professionPickMinLevel = sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.ProfessionMinLevel", 5);
     professionPickMaxLevel = sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.ProfessionMaxLevel", 10);
     if (professionPickMaxLevel < professionPickMinLevel)

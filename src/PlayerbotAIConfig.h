@@ -9,6 +9,7 @@
 
 #include "DBCEnums.h"
 #include "RouteSettings.h"
+#include "GuideSettings.h"
 #include "SharedDefines.h"
 #include <algorithm>
 #include <map>
@@ -370,6 +371,7 @@ public:
     uint32 fixedPopulationSafeBelow;
     uint32 fixedPopulationTownTripTimeout;
     Routes::Settings questRoutes;  // guildmaster quest routes (AiPlayerbot.QuestRoutes.*), off by default
+    Guides::Settings guideBots;  // AiPlayerbot.GuideBots.* (guildmaster Plan 5c)
     uint32 professionPickMinLevel;
     uint32 professionPickMaxLevel;
     float spiritHealerGraveRadius;
