@@ -161,6 +161,10 @@ bool GuideCommand::Handle(ChatHandler* handler, char const* args)
     if (sub == "on" || sub == "off")
     {
         guides.SetTestGuided(guid, sub == "on");
+        // on: end what it is doing now, so the IDLE hook sends it to its guide on its next tick (a GO_GRIND or a
+        // DO_QUEST can last half an hour). Only this test seam does this; a switched-on world waits for IDLE.
+        if (sub == "on" && guides.Guided(bot) && info.GetStatus() != RPG_FOLLOW_GUIDE)
+            info.ChangeToIdle();
         if (sub == "off")
         {
             guides.Unseat(guid);
