@@ -8,6 +8,7 @@
 #include "BroadcastHelper.h"
 #include "ChatHelper.h"
 #include "Event.h"
+#include "GuideMgr.h"
 #include "GuildMgr.h"
 #include "GuildTaskMgr.h"
 #include "ItemUsageValue.h"
@@ -448,7 +449,10 @@ bool StoreLootAction::Execute(Event event)
         if (!proto)
             continue;
 
-        if (!IsRealPlayer(botAI->GetMaster()) && AI_VALUE(uint8, "bag space") > 80)
+        // Guides (Plan 5c): a guided bot always takes an item its quests still need, however full its bags are
+        // (else a bot with bags over 80 % full never starts a stack of quest items, and its guide's item step stalls).
+        bool const guideQuestItem = GuideMgr::instance().Guided(bot) && bot->HasQuestForItem(itemid);
+        if (!guideQuestItem && !IsRealPlayer(botAI->GetMaster()) && AI_VALUE(uint8, "bag space") > 80)
         {
             uint32 maxStack = proto->GetMaxStackSize();
             if (maxStack == 1)
