@@ -19,6 +19,7 @@
 #include "Playerbots.h"
 #include "RandomPlayerbotMgr.h"
 #include "RouteMgr.h"
+#include "Survival.h"
 #include "Timer.h"
 #include "TravelMgr.h"
 #include "WorldPacket.h"
@@ -68,7 +69,7 @@ uint8 TownErrands::Needed(PlayerbotAI* botAI, Player* bot)
     // RepairBelowDurability (else the retreat would end and the weapon stay broken).
     if (botAI->rpgInfo.route.retreating && JunkValue(botAI, bot) > 0)
         errands |= TOWN_ERRAND_SELL;
-    if (!(errands & TOWN_ERRAND_REPAIR) && WeaponBroken(bot) && RouteMgr::instance().Routed(bot) &&
+    if (!(errands & TOWN_ERRAND_REPAIR) && WeaponBroken(bot) && SurvivalRulesOn(bot) &&
         CanAffordRepair(botAI, bot))
         errands |= TOWN_ERRAND_REPAIR;
 

@@ -10,6 +10,7 @@
 #include "DBCStores.h"
 #include "DatabaseEnv.h"
 #include "GridTerrainData.h"
+#include "GuideMgr.h"
 #include "Log.h"
 #include "MapMgr.h"
 #include "NewRpgInfo.h"
@@ -21,6 +22,7 @@
 #include "QuestDef.h"
 #include "RandomPlayerbotMgr.h"
 #include "RouteSurvivalRules.h"
+#include "Survival.h"
 #include "Timer.h"
 #include "World.h"
 #include <algorithm>
@@ -391,6 +393,8 @@ bool RouteMgr::Routed(Player* bot) const
 {
     if (!bot || !Built())
         return false;
+    if (GuideMgr::instance().Guided(bot))
+        return false;  // guides win over routes (Plan 5c decision 11)
     if (sPlayerbotAIConfig.questRoutes.enabled && sRandomPlayerbotMgr.IsRandomBot(bot))
         return true;
     if (!TestRoutedCount())
@@ -739,7 +743,7 @@ uint32 RouteMgr::DeathsLastHour(Player* bot) const
 bool RouteMgr::Struggling(Player* bot) const
 {
     PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
-    return botAI && Routed(bot) &&
+    return botAI && SurvivalRulesOn(bot) &&
            Routes::Struggling(botAI->rpgInfo.route.retreating, DeathsLastHour(bot),
                               sPlayerbotAIConfig.questRoutes.strugglingDeathsPerHour);
 }

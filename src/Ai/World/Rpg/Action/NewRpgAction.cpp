@@ -13,6 +13,7 @@
 #include "FixedPopulation.h"
 #include "GameObject.h"
 #include "GossipDef.h"
+#include "GuideMgr.h"
 #include "IVMapMgr.h"
 #include "MotionMaster.h"
 #include "MoveSpline.h"
@@ -34,6 +35,7 @@
 #include "Random.h"
 #include "RouteMgr.h"
 #include "SharedDefines.h"
+#include "Survival.h"
 #include "Timer.h"
 #include "TownErrands.h"
 #include "TravelMgr.h"
@@ -306,8 +308,8 @@ bool NewRpgStatusUpdateAction::CheckWornGearAndTownTrip(NewRpgStatus status)
         return false;
     info.lastWearCheckMs = getMSTime();
 
-    // Quest routes: retreat and earn (routed bots only; unrouted bots never get here).
-    if (RouteMgr::instance().Routed(bot) && UpdateRetreat())
+    // Quest routes: retreat and earn (routed or guided bots only, Plan 5c; any other bot never gets here).
+    if (SurvivalRulesOn(bot) && UpdateRetreat())
         return true;
 
     // A town trip that never arrives (bad path, dying on the way) is given up; the errand cooldown starts.
@@ -371,6 +373,11 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
             // Honest world: what the bot needs from town comes before a random new activity.
             if (GoRunErrands())
                 return true;
+            // Guides (Plan 5c): a guided bot follows its guide; no roll. Its focus may send it grinding, to world PvP
+            // or gathering instead, and a full step sends it gathering or grinding for a while. Errands (repair,
+            // sell, train) came first just above.
+            if (GuideMgr::instance().Guided(bot))
+                return ChangeToGuideChoice();
             // Retreating (quest routes, spec §6): earn near town. Quests at or below its level on its own hub (the
             // route keeps it only there), mobs at or below its level (the fight rule), townsfolk to sell to; no
             // trips away.
@@ -486,6 +493,16 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
         {
             // FOLLOW_ROUTE -> IDLE now and then, so a routed bot still rests, sells and wanders.
             if (info.HasStatusPersisted(statusFollowRouteDuration))
+            {
+                info.ChangeToIdle();
+                return true;
+            }
+            break;
+        }
+        case RPG_FOLLOW_GUIDE:
+        {
+            // FOLLOW_GUIDE -> IDLE now and then, so errands and a changed focus are looked at again.
+            if (info.HasStatusPersisted(statusFollowGuideDuration))
             {
                 info.ChangeToIdle();
                 return true;

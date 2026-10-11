@@ -21,6 +21,7 @@
 #include "GlobalScript.h"
 #include "GuideMgr.h"
 #include "GuildTaskMgr.h"
+#include "Survival.h"
 #include "PlayerScript.h"
 #include "PlayerbotAIConfig.h"
 #include "PlayerbotCommandScript.h"
@@ -212,7 +213,7 @@ public:
         sRaisingMgr.NoteDeath(player);
         if (sRandomPlayerbotMgr.IsRandomBot(player))
             FixedPopulation::Count(EconomyCounter::BotDeaths);
-        if (RouteMgr::instance().Routed(player))
+        if (SurvivalRulesOn(player))  // routed or guided (Plan 5c)
             Routes::NoteDeath(botAI->rpgInfo.route.deaths, static_cast<uint32>(std::time(nullptr)));
     }
 

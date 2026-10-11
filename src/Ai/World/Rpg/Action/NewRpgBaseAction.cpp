@@ -13,6 +13,8 @@
 #include "GatherNodeMgr.h"
 #include "GossipDef.h"
 #include "GridTerrainData.h"
+#include "GuideMgr.h"
+#include "GuideStepRules.h"
 #include "IVMapMgr.h"
 #include "NewRpgInfo.h"
 #include "NewRpgStrategy.h"
@@ -570,11 +572,14 @@ uint32 NewRpgBaseAction::BestRewardIndex(Quest const* quest)
     }
 }
 
-// Quest routes: a routed bot takes only quests its route can do (RouteMgr::MayAccept); any other bot as before.
+// Quest routes: a routed bot takes only quests its route can do (RouteMgr::MayAccept). Guides (Plan 5c): a guided bot
+// takes only its guide's next quests (GuideMgr::MayAccept). Any other bot as before.
 bool NewRpgBaseAction::WouldAccept(Quest const* quest)
 {
     if (!IsQuestWorthDoing(quest) || !IsQuestCapableDoing(quest))
         return false;
+    if (GuideMgr::instance().Guided(bot))
+        return GuideMgr::instance().MayAccept(bot, quest);
     RouteMgr const& routes = RouteMgr::instance();
     return !routes.Routed(bot) || routes.MayAccept(bot, quest);
 }
@@ -1333,6 +1338,9 @@ bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> candidateSta
         }
         case RPG_FOLLOW_ROUTE:
             return ChangeToRouteChoice(route);
+        case RPG_FOLLOW_GUIDE:  // never rolled (guided bots skip the roll); keeps the switch complete
+            botAI->rpgInfo.ChangeToFollowGuide();
+            return true;
         case RPG_IDLE:
         {
             botAI->rpgInfo.ChangeToIdle();
@@ -1362,6 +1370,47 @@ bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> candidateSta
 bool NewRpgBaseAction::ChangeToRouteChoice()
 {
     return ChangeToRouteChoice(RouteMgr::instance().Choose(bot));
+}
+
+bool NewRpgBaseAction::GoGrindNear()
+{
+    WorldPosition const pos = SelectRandomGrindPos(bot);
+    if (pos == WorldPosition())
+        return false;
+    botAI->rpgInfo.ChangeToGoGrind(pos);
+    return true;
+}
+
+bool NewRpgBaseAction::ChangeToGuideChoice()
+{
+    NewRpgInfo& info = botAI->rpgInfo;
+    bool const crowded =
+        info.guide.crowdedAtMs &&
+        GetMSTimeDiffToNow(info.guide.crowdedAtMs) < sPlayerbotAIConfig.guideBots.crowdWaitMinutes * MINUTE * IN_MILLISECONDS;
+    switch (crowded ? Guides::Activity::Gather : Guides::ActivityFor(info.focus))
+    {
+        case Guides::Activity::Gather:
+            if (CheckRpgStatusAvailable(RPG_DO_GATHER))
+            {
+                info.ChangeToDoGather();
+                return true;
+            }
+            if (crowded && GoGrindNear())
+                return true;
+            break;
+        case Guides::Activity::Grind:
+            if (GoGrindNear())
+                return true;
+            break;
+        case Guides::Activity::Pvp:
+            if (CheckRpgStatusAvailable(RPG_OUTDOOR_PVP))
+                return RandomChangeStatus({RPG_OUTDOOR_PVP});
+            break;
+        case Guides::Activity::Guide:
+            break;
+    }
+    info.ChangeToFollowGuide();
+    return true;
 }
 
 bool NewRpgBaseAction::ChangeToRouteChoice(RouteMgr::Choice const& choice)
@@ -1499,6 +1548,8 @@ bool NewRpgBaseAction::CheckRpgStatusAvailable(NewRpgStatus status)
         case RPG_FOLLOW_ROUTE:
             // RandomChangeStatus works the choice out once per roll itself; this is for any other caller.
             return RouteMgr::instance().Choose(bot).Any();  // Choose checks Routed first
+        case RPG_FOLLOW_GUIDE:
+            return GuideMgr::instance().Guided(bot);
         case RPG_OUTDOOR_PVP:
         {
             if (!bot->IsPvP())

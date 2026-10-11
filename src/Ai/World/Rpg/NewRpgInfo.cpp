@@ -98,6 +98,12 @@ void NewRpgInfo::ChangeToClassQuest(uint32 questId, WorldPosition giver)
     data = follow;
 }
 
+void NewRpgInfo::ChangeToFollowGuide()
+{
+    startT = getMSTime();
+    data = FollowGuide{};
+}
+
 bool NewRpgInfo::CanChangeTo(NewRpgStatus)
 {
     return true;
@@ -130,6 +136,7 @@ NewRpgStatus NewRpgInfo::StatusFromString(std::string const& name)
     if (name == "outdoor pvp")    return RPG_OUTDOOR_PVP;
     if (name == "do gather")      return RPG_DO_GATHER;
     if (name == "follow route")   return RPG_FOLLOW_ROUTE;
+    if (name == "follow guide")   return RPG_FOLLOW_GUIDE;
     return RPG_STATUS_END;
 }
 
@@ -148,6 +155,7 @@ NewRpgStatus NewRpgInfo::GetStatus()
         if constexpr (std::is_same_v<T, OutdoorPvP>) return RPG_OUTDOOR_PVP;
         if constexpr (std::is_same_v<T, DoGather>) return RPG_DO_GATHER;
         if constexpr (std::is_same_v<T, FollowRoute>) return RPG_FOLLOW_ROUTE;
+        if constexpr (std::is_same_v<T, FollowGuide>) return RPG_FOLLOW_GUIDE;
         return RPG_IDLE;
     }, data);
 }
@@ -235,6 +243,11 @@ std::string NewRpgInfo::ToString()
             out << "\nhub: " << arg.hubId << (arg.arrived ? " (arrived)" : "");
             out << "\nquest: " << arg.questId << " objective: " << arg.objective;
             out << "\nclassQuest: " << arg.classQuest;
+        }
+        else if constexpr (std::is_same_v<T, FollowGuide>)
+        {
+            out << "FOLLOW_GUIDE";
+            out << "\nguide: " << guide.guide << " seq: " << guide.seq;
         }
         else
             out << "UNKNOWN";

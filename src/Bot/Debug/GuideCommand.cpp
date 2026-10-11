@@ -164,12 +164,19 @@ bool GuideCommand::Handle(ChatHandler* handler, char const* args)
         if (sub == "off")
         {
             guides.Unseat(guid);
-            info.guide = NewRpgInfo::GuideState{};  // its saved place stays in the table
-            if (false)  // Task 7: info.GetStatus() == RPG_FOLLOW_GUIDE
+            guides.Forget(guid);  // its saved place stays in the table, but not in memory: a later seam starts afresh
+            info.guide = NewRpgInfo::GuideState{};
+            if (info.GetStatus() == RPG_FOLLOW_GUIDE)
                 info.ChangeToIdle();
         }
         handler->PSendSysMessage("GUIDEOK {} guided={}", bot->GetName(), guides.Guided(bot) ? 1 : 0);
         return true;
+    }
+    if ((sub == "reload" || sub == "set") && !guides.Guided(bot))
+    {
+        // never write progress rows or counters for a bot that is not guided
+        handler->PSendSysMessage("GUIDEERR {} is not guided (use guides on {} first)", bot->GetName(), bot->GetName());
+        return false;
     }
     if (sub == "reload")
     {

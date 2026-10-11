@@ -104,6 +104,12 @@ struct NewRpgInfo
         uint32 lastTickMs{0};        // the action's last tick (the safety net's clock, Task 8; 0 = none yet)
         Routes::HubWalk hubWalk{};   // the hub-walk guard on the way to the hub (fix round 1)
     };
+    // RPG_FOLLOW_GUIDE (guildmaster guides, GuideMgr, Plan 5c). The step it works is in `guide.step` (kept while it
+    // flies, grinds or goes IDLE in between); this is the action's clock only.
+    struct FollowGuide
+    {
+        uint32 lastTickMs{0};  // the action's last tick (the safety net's clock; 0 = none yet)
+    };
     struct Idle
     {
     };
@@ -205,7 +211,8 @@ struct NewRpgInfo
         TravelFlight,
         OutdoorPvP,
         DoGather,
-        FollowRoute
+        FollowRoute,
+        FollowGuide
     >;
     RpgData data;
 
@@ -225,6 +232,7 @@ struct NewRpgInfo
     void ChangeToFollowRoute(uint32 hubId, uint32 fromArea = 0, bool arrived = false);
     // FOLLOW_ROUTE to a class quest's giver (spec §4: class quests first); its hub binding is kept.
     void ChangeToClassQuest(uint32 questId, WorldPosition giver);
+    void ChangeToFollowGuide();
     bool CanChangeTo(NewRpgStatus status);
     void Reset();
     void SetMoveFarTo(WorldPosition pos);

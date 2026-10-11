@@ -81,6 +81,11 @@ protected:
     // (RouteMgr::Choose, preflight D15) and passes it; the no-argument form works it out itself.
     bool ChangeToRouteChoice(RouteMgr::Choice const& choice);
     bool ChangeToRouteChoice();
+    // Guides (Plan 5c): what a guided bot does from IDLE: its guide, or what its focus asks (nudges are always
+    // obeyed), or gathering / grinding while its step is crowded.
+    bool ChangeToGuideChoice();
+    // GO_GRIND to a spot near it (under-levelled, a ding step, a grinding focus); false = no spot found.
+    bool GoGrindNear();
 
 protected:
     /* FOR MOVE FAR */

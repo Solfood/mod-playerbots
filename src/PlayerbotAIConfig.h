@@ -77,7 +77,9 @@ enum NewRpgStatus : int
     RPG_DO_GATHER = 9,
     // Follow a quest route hub to hub (guildmaster quest routes; only when AiPlayerbot.QuestRoutes = 1 or a test seam)
     RPG_FOLLOW_ROUTE = 10,
-    RPG_STATUS_END = 11
+    // Follow a levelling guide step by step (guildmaster guides; only when AiPlayerbot.GuideBots = 1 or a test seam)
+    RPG_FOLLOW_GUIDE = 11,
+    RPG_STATUS_END = 12
 };
 
 #define MAX_SPECNO 20

@@ -246,6 +246,7 @@ public:
         creators["outdoor pvp status"] = &TriggerContext::outdoor_pvp_status;
         creators["do gather status"] = &TriggerContext::do_gather_status;
         creators["follow route status"] = &TriggerContext::follow_route_status;
+        creators["follow guide status"] = &TriggerContext::follow_guide_status;
         creators["can self resurrect"] = &TriggerContext::can_self_resurrect;
         creators["can fish"] = &TriggerContext::can_fish;
         creators["can use fishing bobber"] = &TriggerContext::can_use_fishing_bobber;
@@ -463,6 +464,7 @@ private:
     static Trigger* outdoor_pvp_status(PlayerbotAI* botAI) { return new NewRpgStatusTrigger(botAI, RPG_OUTDOOR_PVP); }
     static Trigger* do_gather_status(PlayerbotAI* botAI) { return new NewRpgStatusTrigger(botAI, RPG_DO_GATHER); }
     static Trigger* follow_route_status(PlayerbotAI* botAI) { return new NewRpgStatusTrigger(botAI, RPG_FOLLOW_ROUTE); }
+    static Trigger* follow_guide_status(PlayerbotAI* botAI) { return new NewRpgStatusTrigger(botAI, RPG_FOLLOW_GUIDE); }
     static Trigger* can_self_resurrect(PlayerbotAI* ai) { return new SelfResurrectTrigger(ai); }
     static Trigger* can_fish(PlayerbotAI* ai) { return new CanFishTrigger(ai); }
     static Trigger* can_use_fishing_bobber(PlayerbotAI* ai) { return new CanUseFishingBobberTrigger(ai); }

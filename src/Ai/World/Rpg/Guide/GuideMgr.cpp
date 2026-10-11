@@ -596,6 +596,12 @@ void GuideMgr::OnLogout(Player* bot)
         Save(bot, true);
 }
 
+void GuideMgr::Forget(uint32 guid)
+{
+    std::lock_guard<std::mutex> guard(_savedLock);
+    _saved.erase(guid);
+}
+
 bool GuideMgr::MayAccept(Player* bot, Quest const* quest) const
 {
     PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);

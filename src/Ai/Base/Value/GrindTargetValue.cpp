@@ -11,6 +11,7 @@
 #include "RouteMgr.h"
 #include "RouteSurvivalRules.h"
 #include "ServerFacade.h"
+#include "Survival.h"
 #include "SharedDefines.h"
 #include "TownErrands.h"
 
@@ -66,7 +67,7 @@ Unit* GrindTargetValue::FindTargetForGrinding(uint32 assistCount)
     // Quest routes (spec §6): a young routed bot starts no fight with a mob more than SafeFightLevelGap levels above
     // it, and a retreating one none above its own level. Attackers were returned above: it always defends itself.
     // Unrouted bots (QuestRoutes = 0 and no seam): routed is false and nothing changes.
-    bool const routed = RouteMgr::instance().Routed(bot);
+    bool const routed = SurvivalRulesOn(bot);  // routed or guided (Plan 5c)
     bool const retreating = routed && botAI->rpgInfo.route.retreating;
     Routes::Settings const& routeRules = sPlayerbotAIConfig.questRoutes;
 

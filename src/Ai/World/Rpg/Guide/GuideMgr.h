@@ -73,6 +73,7 @@ public:
     void Pause(Player* bot, char const* why);
     void Save(Player* bot, bool now);
     void OnLogout(Player* bot);
+    void Forget(uint32 guid);  // drops its in-memory saved place (`guides off`: the caller deletes the row)
     bool MayAccept(Player* bot, Quest const* quest) const;
     std::vector<WorldPosition> const& QuestSpots(uint32 quest) const;  // every objective spot (TURNIN not complete)
 
