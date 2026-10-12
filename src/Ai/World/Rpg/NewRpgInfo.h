@@ -153,13 +153,14 @@ struct NewRpgInfo
         {
             bool started{false};
             uint32 key{0};
-            uint32 workedMs{0};          // FOLLOW_GUIDE ticks on this step (RideTimedOut)
+            uint32 workedMs{0};          // FOLLOW_GUIDE ticks on this step
             uint32 teleportsAtStart{0};  // stuckTeleports when it started (TeleportStalled)
             uint32 flightTries{0};
             uint32 atNpcMs{0};           // when it reached a giver, ender, innkeeper or flight master; RIDE: stepped on a deck
             Routes::HubWalk walk{};      // travel: no closer for HUB_WALK_STALL_MINUTES = stalled
             float transportX{0}, transportY{0};  // RIDE: where its boat was last tick
-            uint32 dockedMs{0};          // RIDE: how long the boat has stood still at the destination
+            uint32 dockedMs{0};          // RIDE: how long the boat has stood still
+            uint32 rideMs{0};            // RIDE: FOLLOW_GUIDE ticks at the dock or aboard (RideTimedOut)
         } step;
     };
     GuideState guide;

@@ -267,11 +267,12 @@ bool NewRpgFollowGuideAction::TalkTo(GuideMgr::Work const& w, Guides::Step const
 }
 
 bool NewRpgFollowGuideAction::Ride(GuideMgr::Work const& w, Guides::Step const& step, GuideStepInfo const& in,
-                                   uint32 /*elapsed*/)
+                                   uint32 elapsed)
 {
     GuideMgr& guides = GuideMgr::instance();
     NewRpgInfo::GuideState::Step& s = botAI->rpgInfo.guide.step;
-    if (Guides::RideTimedOut(s.workedMs, sPlayerbotAIConfig.guideBots.rideMinutes))
+    // The ride clock runs only at the dock and aboard; the walk there has the hub-walk guard (WalkTo).
+    if (Guides::RideTimedOut(s.rideMs, sPlayerbotAIConfig.guideBots.rideMinutes))
     {
         FixedPopulation::Count(EconomyCounter::GuideRidesFailed);
         guides.Pause(bot, "a boat, zeppelin or portal never took it there");
@@ -281,6 +282,7 @@ bool NewRpgFollowGuideAction::Ride(GuideMgr::Work const& w, Guides::Step const& 
     WorldPosition const dock = GuideMgr::Ground(bot, GuideMgr::Nearest(bot, in.points));
     if (Transport* t = bot->GetTransport())
     {
+        s.rideMs += elapsed;
         // Aboard: wait. Once the boat has stood still for DOCKED_MS, walk off: toward the next step in the destination
         // zone; back onto the dock when this boat came back to where it boarded without reaching it (the wrong boat).
         // PlayerbotAI leaves the transport when the bot is off its deck.
@@ -314,7 +316,8 @@ bool NewRpgFollowGuideAction::Ride(GuideMgr::Work const& w, Guides::Step const& 
     if (s.atNpcMs && GetMSTimeDiffToNow(s.atNpcMs) < BOARDING_MS)
         return ForceToWait(IN_MILLISECONDS);  // stepping onto a deck: let it finish (atNpcMs = when it stepped)
     if (bot->GetExactDist2d(dock.GetPositionX(), dock.GetPositionY()) > DOCK_YARDS)
-        return MoveFarTo(dock) || MoveRandomNear(NUDGE_YARDS);
+        return WalkTo(w, dock, elapsed);
+    s.rideMs += elapsed;
     if (step.kind == Guides::StepKind::Portal)
     {
         // an orb or a portal you click (a spell-caster object), as a player would
