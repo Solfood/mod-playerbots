@@ -224,6 +224,24 @@ inline Activity ActivityFor(uint8_t focus)
     }
 }
 
+// The crowd wait (Plan 5c Task 9): a bot whose step was full gathers or grinds until `waitMs` have passed since it
+// was found full (`crowdedAtMs`, 0 = never). `sinceMs` is the time since then.
+inline bool CrowdWaiting(uint32_t crowdedAtMs, uint32_t sinceMs, uint32_t waitMs)
+{
+    return crowdedAtMs != 0 && sinceMs < waitMs;
+}
+
+// What a guided bot does at IDLE when its activity (gather, grind, pvp) is not open to it. In a crowd wait it wanders
+// (a timed status that ends in IDLE again) and does not go back to its guide: the full step would send it straight
+// back to IDLE, a FOLLOW_GUIDE <-> IDLE flip every tick (Task 9 fix round 1).
+enum class Fallback : uint8_t
+{
+    FollowGuide = 0,
+    Wander,
+};
+
+inline Fallback GuideFallback(bool crowdWaiting) { return crowdWaiting ? Fallback::Wander : Fallback::FollowGuide; }
+
 // The 90 s stuck teleport fired twice while the bot worked one step: skip the step this session (decision 14).
 constexpr uint32_t STALL_TELEPORTS = 2;
 inline bool TeleportStalled(uint32_t teleportsAtStart, uint32_t teleportsNow)

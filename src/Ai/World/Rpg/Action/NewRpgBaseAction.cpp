@@ -1385,8 +1385,8 @@ bool NewRpgBaseAction::ChangeToGuideChoice()
 {
     NewRpgInfo& info = botAI->rpgInfo;
     bool const crowded =
-        info.guide.crowdedAtMs &&
-        GetMSTimeDiffToNow(info.guide.crowdedAtMs) < sPlayerbotAIConfig.guideBots.crowdWaitMinutes * MINUTE * IN_MILLISECONDS;
+        Guides::CrowdWaiting(info.guide.crowdedAtMs, GetMSTimeDiffToNow(info.guide.crowdedAtMs),
+                             sPlayerbotAIConfig.guideBots.crowdWaitMinutes * MINUTE * IN_MILLISECONDS);
     switch (crowded ? Guides::Activity::Gather : Guides::ActivityFor(info.focus))
     {
         case Guides::Activity::Gather:
@@ -1409,7 +1409,11 @@ bool NewRpgBaseAction::ChangeToGuideChoice()
         case Guides::Activity::Guide:
             break;
     }
-    info.ChangeToFollowGuide();
+    // crowded, and no node to gather and no grind spot: wander for a while instead of going back to the full step
+    if (Guides::GuideFallback(crowded) == Guides::Fallback::Wander)
+        info.ChangeToWanderRandom();
+    else
+        info.ChangeToFollowGuide();
     return true;
 }
 

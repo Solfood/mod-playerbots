@@ -63,9 +63,14 @@ bool NewRpgFollowGuideAction::Execute(Event /*event*/)
             return true;
         case Guides::Pick::Crowded:  // its step is full and nothing near is free: gather or grind for a while
             guides.Unseat(guid);
-            FixedPopulation::Count(EconomyCounter::GuideStepsCrowded);
-            info.guide.crowdedAtMs = getMSTime();
-            info.ChangeToIdle();  // IDLE -> ChangeToGuideChoice: gather if it can, else grind near
+            // one count and one clock per crowd wait: a bot already waiting keeps its start time
+            if (!Guides::CrowdWaiting(info.guide.crowdedAtMs, GetMSTimeDiffToNow(info.guide.crowdedAtMs),
+                                      sPlayerbotAIConfig.guideBots.crowdWaitMinutes * MINUTE * IN_MILLISECONDS))
+            {
+                FixedPopulation::Count(EconomyCounter::GuideStepsCrowded);
+                info.guide.crowdedAtMs = getMSTime();
+            }
+            info.ChangeToIdle();  // IDLE -> ChangeToGuideChoice: gather if it can, else grind near, else wander
             return true;
         case Guides::Pick::End:      // paused, or more to judge next tick
             if (!guides.Guided(bot))

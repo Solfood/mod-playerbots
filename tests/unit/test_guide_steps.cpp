@@ -171,5 +171,13 @@ int main()
     CHECK_EQ(0u, a.stillMs);
     CHECK_TRUE(!ApproachTick(a, 94.0f, 59999, 60000));
     CHECK_TRUE(ApproachTick(a, 93.0f, 1, 60000));
+
+    // the crowd wait: never crowded, inside the wait, the wait over; a waiting bot wanders, never back to its guide
+    CHECK_TRUE(!CrowdWaiting(0, 0, 600000));
+    CHECK_TRUE(CrowdWaiting(12345, 0, 600000));
+    CHECK_TRUE(CrowdWaiting(12345, 599999, 600000));
+    CHECK_TRUE(!CrowdWaiting(12345, 600000, 600000));
+    CHECK_TRUE(GuideFallback(true) == Fallback::Wander);
+    CHECK_TRUE(GuideFallback(false) == Fallback::FollowGuide);
     return UnitFailures();
 }
