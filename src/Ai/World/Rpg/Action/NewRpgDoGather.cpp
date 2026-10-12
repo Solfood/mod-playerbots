@@ -8,6 +8,7 @@
 
 #include "GameObject.h"
 #include "GatherNodeMgr.h"
+#include "GuideMgr.h"
 #include "LootObjectStack.h"
 #include "NewRpgInfo.h"
 #include "ObjectDefines.h"
@@ -20,6 +21,8 @@
 #include "SpellInfo.h"
 #include "SpellMgr.h"
 #include "Timer.h"
+
+#include <algorithm>
 
 // Base-rank gather spells, the same ids OpenLootAction::DoLoot casts.
 enum GatherSpells
@@ -51,6 +54,8 @@ void NewRpgDoGatherAction::AbandonNode(NewRpgInfo::DoGather& data, bool markVisi
         data.visited.insert(data.nodeSpawnId);
     data.nodeSpawnId = 0;
     data.lastReach = 0;
+    data.approach = Guides::Approach{};
+    data.lastApproachMs = 0;
 }
 
 bool NewRpgDoGatherAction::Execute(Event /*event*/)
@@ -128,6 +133,8 @@ bool NewRpgDoGatherAction::Execute(Event /*event*/)
                 data.nodeSpawnId = live->spawnId;
                 data.nodePos = live->pos;
                 data.lastReach = 0;
+                data.approach = Guides::Approach{};
+                data.lastApproachMs = 0;
                 return true;
             }
         }
@@ -152,13 +159,28 @@ bool NewRpgDoGatherAction::Execute(Event /*event*/)
         data.nodeSpawnId = node->spawnId;
         data.nodePos = node->pos;
         data.lastReach = 0;
+        data.approach = Guides::Approach{};
+        data.lastApproachMs = 0;
         return true;
     }
 
     // 10yd keeps the bot inside lootDistance (default 15) so the loot
     // pipeline's "loot available" trigger can fire on the node.
     if (bot->GetExactDist(data.nodePos) > 10.0f)
+    {
+        // Guides (Plan 5c): no 5 yards closer in 60 s of walking = out of reach; give the node up for this session
+        // before MoveFarTo's 90 s stuck teleport would carry the bot onto it. Unguided bots: as before.
+        uint32 const now = getMSTime();
+        uint32 const elapsed = data.lastApproachMs ? std::min<uint32>(getMSTimeDiff(data.lastApproachMs, now), 10000) : 0;
+        data.lastApproachMs = now;
+        if (GuideMgr::instance().Guided(bot) &&
+            Guides::ApproachTick(data.approach, bot->GetExactDist(data.nodePos), elapsed, nodeApproachMs))
+        {
+            AbandonNode(data, /*markVisited*/ true);
+            return true;
+        }
         return MoveFarTo(data.nodePos);
+    }
 
     if (!data.lastReach)
         data.lastReach = getMSTime();

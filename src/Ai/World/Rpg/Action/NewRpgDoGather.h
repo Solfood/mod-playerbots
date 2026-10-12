@@ -30,6 +30,8 @@ protected:
     // Max time waiting at a reached node for the loot pipeline to harvest
     // it before giving up and moving on.
     const uint32 nodeStayTime = 30 * IN_MILLISECONDS;
+    // Guided bots (Plan 5c): no 5 yards closer to the node in this much walking = out of reach, give it up.
+    static constexpr uint32 nodeApproachMs = 60 * IN_MILLISECONDS;
     // Cadence for the periodic target-liveness and switch checks.
     const uint32 passiveCheckInterval = 2 * IN_MILLISECONDS;
     // A live node passed within this range takes priority over the current

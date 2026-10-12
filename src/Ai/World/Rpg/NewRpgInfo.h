@@ -87,6 +87,8 @@ struct NewRpgInfo
         uint32 lastReach{0};
         uint32 lastPassiveCheck{0};
         ObjectGuid::LowType lastSwitchedFrom{0};
+        Guides::Approach approach{};  // guided bots: give up an unreachable node
+        uint32 lastApproachMs{0};     // the approach clock's last tick (0 = none yet)
     };
     // RPG_FOLLOW_ROUTE (guildmaster quest routes, RouteMgr)
     struct FollowRoute

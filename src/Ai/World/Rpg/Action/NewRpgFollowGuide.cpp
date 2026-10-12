@@ -61,7 +61,12 @@ bool NewRpgFollowGuideAction::Execute(Event /*event*/)
             guides.Cross(bot, w);
             info.ChangeToIdle();
             return true;
-        case Guides::Pick::Crowded:  // Task 9
+        case Guides::Pick::Crowded:  // its step is full and nothing near is free: gather or grind for a while
+            guides.Unseat(guid);
+            FixedPopulation::Count(EconomyCounter::GuideStepsCrowded);
+            info.guide.crowdedAtMs = getMSTime();
+            info.ChangeToIdle();  // IDLE -> ChangeToGuideChoice: gather if it can, else grind near
+            return true;
         case Guides::Pick::End:      // paused, or more to judge next tick
             if (!guides.Guided(bot))
                 info.ChangeToIdle();
