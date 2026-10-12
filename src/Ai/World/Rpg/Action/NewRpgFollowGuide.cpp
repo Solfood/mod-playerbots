@@ -77,11 +77,19 @@ bool NewRpgFollowGuideAction::Execute(Event /*event*/)
         s.teleportsAtStart = info.stuckTeleports;
     }
     s.workedMs += elapsed;
-    if (Guides::TeleportStalled(s.teleportsAtStart, info.stuckTeleports))
-        return GiveUp(w);  // the 90 s stuck teleport fired twice on this step (decision 14)
-
     Guides::Step const& step = guides.AllGuides()[w.guide].steps[w.seq];
     GuideStepInfo const& in = *guides.InfoOf(w.guide, w.seq);
+    if (Guides::TeleportStalled(s.teleportsAtStart, info.stuckTeleports))
+    {
+        // the 90 s stuck teleport fired twice on this step (decision 14). Near the dock of a ride it cannot reach
+        // (seen live: the Tirisfal zeppelin tower), the ride has failed it: moved to where it lands (decision 0004).
+        bool const ride = step.kind == Guides::StepKind::Ride || step.kind == Guides::StepKind::Portal;
+        WorldPosition const dock = GuideMgr::Ground(bot, GuideMgr::Nearest(bot, in.points));
+        if (ride && dock.GetMapId() == bot->GetMapId() &&
+            bot->GetExactDist2d(dock.GetPositionX(), dock.GetPositionY()) <= NEAR_DOCK_YARDS)
+            return RideTimeout(w, dock);
+        return GiveUp(w);
+    }
     switch (step.kind)
     {
         case Guides::StepKind::Accept:
