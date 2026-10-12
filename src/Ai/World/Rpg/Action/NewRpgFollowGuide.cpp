@@ -406,15 +406,33 @@ bool NewRpgFollowGuideAction::RideTimeout(GuideMgr::Work const& w, WorldPosition
     NewRpgInfo& info = botAI->rpgInfo;
     WorldPosition there;
     uint32 const steps = static_cast<uint32>(guides.AllGuides()[w.guide].steps.size());
+    uint32 const to = guides.AllGuides()[w.guide].steps[w.seq].to;  // the zone the ride ends in
+    uint32 const dockMap = dock != WorldPosition() ? dock.GetMapId() : bot->GetMapId();
+    Map* const map = bot->GetMap();
     for (uint32 seq = w.seq + 1; seq < steps && seq <= w.seq + GuideMgr::WINDOW && there == WorldPosition(); ++seq)
         for (WorldPosition const& p : guides.InfoOf(w.guide, seq)->points)
         {
-            WorldPosition const g = GuideMgr::Ground(bot, p);
-            if (g.GetPositionZ() != 0.0f)
+            // A spot on another map needs its stored height (an NPC's spawn): no blind height on a foreign map.
+            if (p.GetMapId() != bot->GetMapId())
             {
-                there = g;
+                if (p.GetPositionZ() == 0.0f)
+                    continue;
+                there = p;
                 break;
             }
+            // On this map: the ground there. Never the bot's own height when none is found (Ground's fallback), which
+            // could put it under the terrain of a far landing on high ground: skip that spot instead.
+            float z = p.GetPositionZ();
+            if (z == 0.0f)
+                z = map->GetHeight(p.GetPositionX(), p.GetPositionY(), MAX_HEIGHT);
+            if (z <= INVALID_HEIGHT)
+                continue;
+            // On the dock's own map, only a spot in the zone the ride ends in, never one back on the departure side.
+            if (p.GetMapId() == dockMap &&
+                map->GetZoneId(bot->GetPhaseMask(), p.GetPositionX(), p.GetPositionY(), z) != to)
+                continue;
+            there = WorldPosition(p.GetMapId(), p.GetPositionX(), p.GetPositionY(), z);
+            break;
         }
     bool const arrive = there != WorldPosition();
     if (!arrive && bot->GetTransport() && dock != WorldPosition())
