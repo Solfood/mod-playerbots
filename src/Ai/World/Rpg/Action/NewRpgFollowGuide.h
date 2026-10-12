@@ -34,6 +34,7 @@ private:
     static constexpr float FLIGHT_MASTER_YARDS = 500.0f;  // a flight master farther than this is not "here"
     static constexpr float DECK_OFFSET_YARDS = 6.0f;  // deck probes fore and aft of the boat's middle
     static constexpr float DECK_PROBE_TOP = 16.0f;    // the deck is probed from this high above the boat's middle
+    static constexpr float NEAR_DOCK_YARDS = 300.0f;  // a walk that stalls this close to the dock fails the ride
     static constexpr float LEAVE_DECK_YARDS = 20.0f;  // a straight step off a docked boat when no path starts
     static constexpr uint32 RIDE_WAIT_MS = 2 * IN_MILLISECONDS;
     static constexpr uint32 DOCKED_MS = 5 * IN_MILLISECONDS;  // a boat that stood still this long has docked

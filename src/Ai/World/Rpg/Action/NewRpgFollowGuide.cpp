@@ -318,7 +318,14 @@ bool NewRpgFollowGuideAction::Ride(GuideMgr::Work const& w, Guides::Step const& 
     if (s.atNpcMs && GetMSTimeDiffToNow(s.atNpcMs) < BOARDING_MS)
         return ForceToWait(IN_MILLISECONDS);  // stepping onto a deck: let it finish (atNpcMs = when it stepped)
     if (!atDock)
-        return WalkTo(w, dock, elapsed);
+    {
+        // The hub-walk guard as WalkTo has it. A dock it cannot reach (a zeppelin tower's top, a spot over the water)
+        // fails it as a ride does when the walk stops coming closer within NEAR_DOCK_YARDS (decision 0004).
+        float const distance = bot->GetExactDist2d(dock.GetPositionX(), dock.GetPositionY());
+        if (bot->IsAlive() && Routes::HubWalkTick(s.walk, w.key, distance, elapsed))
+            return distance <= NEAR_DOCK_YARDS ? RideTimeout(w, dock) : GiveUp(w);
+        return MoveFarTo(dock) || MoveRandomNear(NUDGE_YARDS);
+    }
     if (step.kind == Guides::StepKind::Portal)
     {
         // an orb or a portal you click (a spell-caster object), as a player would
