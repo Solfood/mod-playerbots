@@ -11,6 +11,7 @@
 #include "DBCStores.h"
 #include "FixedPopulation.h"
 #include "GameObject.h"
+#include "GridTerrainData.h"  // MAX_HEIGHT, INVALID_HEIGHT
 #include "Log.h"
 #include "Map.h"
 #include "MotionMaster.h"
@@ -325,23 +326,30 @@ bool NewRpgFollowGuideAction::Ride(GuideMgr::Work const& w, Guides::Step const& 
         return ForceToWait(RIDE_WAIT_MS);
     }
     // At the dock: look for the deck of a boat or zeppelin alongside, in a ring around the dock, and step onto it in a
-    // straight line (no path: decks are not on the navigation mesh). The height is its own: it stands on the pier or
-    // platform, while the guide's spot may lie on the water or the ground below.
-    float const z = bot->GetPositionZ();
-    for (float r = 6.0f; r <= BOARD_PROBE_YARDS; r += 6.0f)
-        for (int a = 0; a < 12; ++a)
-        {
-            float const x = dock.GetPositionX() + r * std::cos(a * M_PI / 6.0f);
-            float const y = dock.GetPositionY() + r * std::sin(a * M_PI / 6.0f);
-            Transport* t = bot->GetMap()->GetTransportForPos(bot->GetPhaseMask(), x, y, z, bot);
-            if (t && !t->IsStaticTransport())
+    // straight line (no path: decks are not on the navigation mesh). Two heights: its own (it stands on the pier or
+    // platform) and just above the water (a guide's dock spot often lies off the pier, so it waits in the water and the
+    // deck is above it; the core's probe looks 2 yards up and 30 down).
+    float const water = bot->GetMap()->GetWaterLevel(dock.GetPositionX(), dock.GetPositionY());
+    float const heights[2] = {bot->GetPositionZ(), water > INVALID_HEIGHT ? water + DECK_ABOVE_WATER : MAX_HEIGHT};
+    for (float const z : heights)
+    {
+        if (z >= MAX_HEIGHT || (z != heights[0] && std::fabs(z - heights[0]) < 2.0f))
+            continue;
+        for (float r = 6.0f; r <= BOARD_PROBE_YARDS; r += 6.0f)
+            for (int a = 0; a < 12; ++a)
             {
-                LOG_DEBUG("playerbots", "[Guides] {} steps onto transport {} at {} {}", bot->GetName(), t->GetEntry(),
-                          x, y);
-                bot->GetMotionMaster()->MovePoint(0, x, y, z, FORCED_MOVEMENT_NONE, 0.0f, 0.0f, false);
-                s.atNpcMs = getMSTime();
-                return true;
+                float const x = dock.GetPositionX() + r * std::cos(a * M_PI / 6.0f);
+                float const y = dock.GetPositionY() + r * std::sin(a * M_PI / 6.0f);
+                Transport* t = bot->GetMap()->GetTransportForPos(bot->GetPhaseMask(), x, y, z, bot);
+                if (t && !t->IsStaticTransport())
+                {
+                    LOG_DEBUG("playerbots", "[Guides] {} steps onto transport {} at {} {} {}", bot->GetName(),
+                              t->GetEntry(), x, y, z);
+                    bot->GetMotionMaster()->MovePoint(0, x, y, z, FORCED_MOVEMENT_NONE, 0.0f, 0.0f, false);
+                    s.atNpcMs = getMSTime();
+                    return true;
+                }
             }
-        }
+    }
     return ForceToWait(RIDE_WAIT_MS);
 }
