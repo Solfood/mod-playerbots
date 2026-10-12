@@ -24,7 +24,7 @@ struct Settings
     uint32_t stepSoftCap = 6;        // .StepSoftCap: bots working one objective step at once
     uint32_t lookahead = 8;          // .StepLookahead: steps ahead a bot may do first when its step is full
     uint32_t crowdWaitMinutes = 10;  // .CrowdWaitMinutes: gather or grind this long when everything near is full
-    uint32_t rideMinutes = 25;       // .RideMinutes: a boat, zeppelin or portal not arrived by then pauses the guide
+    uint32_t rideMinutes = 10;       // .RideMinutes: a ride not arrived by then (from the dock) teleports to its landing
 };
 }  // namespace Guides
 

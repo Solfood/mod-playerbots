@@ -23,7 +23,7 @@ constexpr std::array<char const*, static_cast<std::size_t>(EconomyCounter::Count
     "professions_picked", "errands_started",  "mails_collected", "spirit_healer",
     "town_trips_abandoned", "bot_deaths",      "retreats_started", "retreats_ended", "route_drops", "hub_walks_given_up",
     "guide_steps_done", "guide_steps_blocked", "guide_steps_stalled", "guide_steps_crowded", "guides_paused",
-    "guide_rides_failed"};
+    "guide_rides_failed", "guide_rides_teleported"};
 }  // namespace
 
 bool FixedPopulation::Blocks(FixedPopulationGuard guard)

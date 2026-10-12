@@ -160,7 +160,8 @@ struct NewRpgInfo
             Routes::HubWalk walk{};      // travel: no closer for HUB_WALK_STALL_MINUTES = stalled
             float transportX{0}, transportY{0};  // RIDE: where its boat was last tick
             uint32 dockedMs{0};          // RIDE: how long the boat has stood still
-            uint32 rideMs{0};            // RIDE: FOLLOW_GUIDE ticks at the dock or aboard (RideTimedOut)
+            uint32 rideStartMs{0};       // RIDE: when it first reached the dock or was aboard (0 = not yet)
+            bool sailed{false};          // RIDE: its boat has moved since it stepped aboard
         } step;
     };
     GuideState guide;

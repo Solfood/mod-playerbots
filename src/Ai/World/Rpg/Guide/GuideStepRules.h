@@ -231,8 +231,9 @@ inline bool TeleportStalled(uint32_t teleportsAtStart, uint32_t teleportsNow)
     return teleportsNow >= teleportsAtStart + STALL_TELEPORTS;
 }
 
-// A boat, zeppelin or portal step that has not arrived within rideMinutes pauses the guide (decision 14).
-inline bool RideTimedOut(uint32_t workedMs, uint32_t rideMinutes) { return workedMs >= rideMinutes * 60000u; }
+// A boat, zeppelin or portal step that has not arrived rideMinutes after the bot reached the dock: the bot is moved to
+// where the ride lands (guildmaster decision 0004), or its guide pauses when that is not known (decision 14).
+inline bool RideTimedOut(uint32_t sinceDockMs, uint32_t rideMinutes) { return sinceDockMs >= rideMinutes * 60000u; }
 
 // Whether the bot's place should be saved now: it moved, and the last save is 30 s old or older (decision 8).
 constexpr uint32_t SAVE_EVERY_MS = 30000;

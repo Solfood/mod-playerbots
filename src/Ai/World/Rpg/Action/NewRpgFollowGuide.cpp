@@ -271,31 +271,33 @@ bool NewRpgFollowGuideAction::Ride(GuideMgr::Work const& w, Guides::Step const& 
 {
     GuideMgr& guides = GuideMgr::instance();
     NewRpgInfo::GuideState::Step& s = botAI->rpgInfo.guide.step;
-    // The ride clock runs only at the dock and aboard; the walk there has the hub-walk guard (WalkTo).
-    if (Guides::RideTimedOut(s.rideMs, sPlayerbotAIConfig.guideBots.rideMinutes))
-    {
-        FixedPopulation::Count(EconomyCounter::GuideRidesFailed);
-        guides.Pause(bot, "a boat, zeppelin or portal never took it there");
-        botAI->rpgInfo.ChangeToIdle();
-        return true;
-    }
     WorldPosition const dock = GuideMgr::Ground(bot, GuideMgr::Nearest(bot, in.points));
+    // The ride clock starts when it first reaches the dock (or is aboard) and runs on real time from then, through the
+    // boarding grace, the crossing and any FOLLOW_GUIDE <-> IDLE turns. The walk to the dock has the hub-walk guard.
+    bool const atDock = dock != WorldPosition() && dock.GetMapId() == bot->GetMapId() &&
+                        bot->GetExactDist2d(dock.GetPositionX(), dock.GetPositionY()) <= DOCK_YARDS;
+    if (!s.rideStartMs && (atDock || bot->GetTransport()))
+        s.rideStartMs = std::max<uint32>(1, getMSTime());
+    if (s.rideStartMs &&
+        Guides::RideTimedOut(GetMSTimeDiffToNow(s.rideStartMs), sPlayerbotAIConfig.guideBots.rideMinutes))
+        return RideTimeout(w, dock);
     if (Transport* t = bot->GetTransport())
     {
-        s.rideMs += elapsed;
         // Aboard: wait. Once the boat has stood still for DOCKED_MS, walk off: toward the next step in the destination
         // zone; back onto the dock when this boat came back to where it boarded without reaching it (the wrong boat).
         // PlayerbotAI leaves the transport when the bot is off its deck.
         bool const still = std::hypot(t->GetPositionX() - s.transportX, t->GetPositionY() - s.transportY) < 1.0f;
         s.transportX = t->GetPositionX();
         s.transportY = t->GetPositionY();
+        if (!still)
+            s.sailed = true;  // it has left the dock it boarded at (the wrong-boat rule waits for this)
         s.dockedMs = still ? s.dockedMs + RIDE_WAIT_MS : 0;
         if (s.dockedMs < DOCKED_MS)
             return ForceToWait(RIDE_WAIT_MS);
         WorldPosition off;
         if (bot->GetZoneId() == step.to)
             off = GuideMgr::Ground(bot, guides.NextPointAfter(w.guide, w.seq));
-        else if (dock.GetMapId() == bot->GetMapId() &&
+        else if (s.sailed && dock.GetMapId() == bot->GetMapId() &&
                  bot->GetExactDist2d(dock.GetPositionX(), dock.GetPositionY()) <= BOARD_SEARCH_YARDS)
             off = dock;
         if (off == WorldPosition() || off.GetMapId() != bot->GetMapId())
@@ -315,9 +317,8 @@ bool NewRpgFollowGuideAction::Ride(GuideMgr::Work const& w, Guides::Step const& 
         return ForceToWait(RIDE_WAIT_MS);  // crossing maps with the boat (the core teleports passengers)
     if (s.atNpcMs && GetMSTimeDiffToNow(s.atNpcMs) < BOARDING_MS)
         return ForceToWait(IN_MILLISECONDS);  // stepping onto a deck: let it finish (atNpcMs = when it stepped)
-    if (bot->GetExactDist2d(dock.GetPositionX(), dock.GetPositionY()) > DOCK_YARDS)
+    if (!atDock)
         return WalkTo(w, dock, elapsed);
-    s.rideMs += elapsed;
     if (step.kind == Guides::StepKind::Portal)
     {
         // an orb or a portal you click (a spell-caster object), as a player would
@@ -368,8 +369,55 @@ bool NewRpgFollowGuideAction::Ride(GuideMgr::Work const& w, Guides::Step const& 
                       x, y, z);
             bot->GetMotionMaster()->MovePoint(0, x, y, z, FORCED_MOVEMENT_NONE, 0.0f, 0.0f, false);
             s.atNpcMs = getMSTime();
+            s.sailed = false;
             return true;
         }
     }
     return ForceToWait(RIDE_WAIT_MS);
+}
+
+bool NewRpgFollowGuideAction::RideTimeout(GuideMgr::Work const& w, WorldPosition const& dock)
+{
+    // The user's ruling (decision 0004): a boat, zeppelin, tram or portal that has not taken it there RideMinutes after
+    // it reached the dock moves it to where the ride lands: the next spot of its guide with a known height (an NPC's
+    // spawn, or a spot on this map found on the ground). The step then counts as arrived (passed for the session).
+    // With no such spot the guide pauses as before, but never with the bot left aboard: it goes back to the dock.
+    GuideMgr& guides = GuideMgr::instance();
+    NewRpgInfo& info = botAI->rpgInfo;
+    WorldPosition there;
+    uint32 const steps = static_cast<uint32>(guides.AllGuides()[w.guide].steps.size());
+    for (uint32 seq = w.seq + 1; seq < steps && seq <= w.seq + GuideMgr::WINDOW && there == WorldPosition(); ++seq)
+        for (WorldPosition const& p : guides.InfoOf(w.guide, seq)->points)
+        {
+            WorldPosition const g = GuideMgr::Ground(bot, p);
+            if (g.GetPositionZ() != 0.0f)
+            {
+                there = g;
+                break;
+            }
+        }
+    bool const arrive = there != WorldPosition();
+    if (!arrive && bot->GetTransport() && dock != WorldPosition())
+        there = dock;
+    if (there != WorldPosition())
+    {
+        LOG_DEBUG("playerbots", "[Guides] {} ride timed out: teleport to {} {} {} {}", bot->GetName(),
+                  there.GetMapId(), there.GetPositionX(), there.GetPositionY(), there.GetPositionZ());
+        bot->TeleportTo(there.GetMapId(), there.GetPositionX(), there.GetPositionY(), there.GetPositionZ(),
+                        bot->GetOrientation());
+    }
+    if (arrive)
+    {
+        FixedPopulation::Count(EconomyCounter::GuideRidesTeleported);
+        info.guide.skip.insert(w.key);  // arrived: passed (not stalled) for the session
+        info.guide.step = NewRpgInfo::GuideState::Step{};
+        guides.Unseat(bot->GetGUID().GetCounter());
+    }
+    else
+    {
+        FixedPopulation::Count(EconomyCounter::GuideRidesFailed);
+        guides.Pause(bot, "a boat, zeppelin or portal never took it there");
+    }
+    info.ChangeToIdle();
+    return true;
 }

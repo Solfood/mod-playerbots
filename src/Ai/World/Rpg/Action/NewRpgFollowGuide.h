@@ -50,6 +50,7 @@ private:
     bool Hearth(GuideMgr::Work const& w, Guides::Step const& step, GuideStepInfo const& in, uint32 elapsed);
     bool TalkTo(GuideMgr::Work const& w, Guides::Step const& step, GuideStepInfo const& in, uint32 elapsed);
     bool Ride(GuideMgr::Work const& w, Guides::Step const& step, GuideStepInfo const& in, uint32 elapsed);
+    bool RideTimeout(GuideMgr::Work const& w, WorldPosition const& dock);  // teleport to the landing, or pause
     static uint32 ZoneOfArea(uint32 areaId);
 };
 

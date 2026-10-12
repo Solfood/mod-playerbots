@@ -55,7 +55,8 @@ enum class EconomyCounter : uint8
     GuideStepsStalled,  // steps skipped for the session after a stall
     GuideStepsCrowded,  // times a bot found its step full and nothing free ahead
     GuidesPaused,       // guides paused for a session (none for the bot, finished, no way to its next step)
-    GuideRidesFailed,   // boats, zeppelins and portals that never took a bot there in RideMinutes
+    GuideRidesFailed,   // boats, zeppelins and portals that never took a bot there in RideMinutes (guide paused)
+    GuideRidesTeleported,  // ... and the bot was moved to where the ride lands instead (decision 0004)
     Count
 };
 

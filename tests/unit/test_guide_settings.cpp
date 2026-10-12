@@ -10,6 +10,6 @@ int main()
     CHECK_EQ(6u, s.stepSoftCap);
     CHECK_EQ(8u, s.lookahead);
     CHECK_EQ(10u, s.crowdWaitMinutes);
-    CHECK_EQ(25u, s.rideMinutes);
+    CHECK_EQ(10u, s.rideMinutes);
     return UnitFailures();
 }

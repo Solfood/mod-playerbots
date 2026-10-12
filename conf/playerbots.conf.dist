@@ -880,15 +880,16 @@ AiPlayerbot.QuestRoutes.HubRadius = 150
 # StepSoftCap: bots working one objective step at once; more go to a later step.
 # StepLookahead: how many steps ahead a bot may look for a free one.
 # CrowdWaitMinutes: gather or grind this long when every step near it is full.
-# RideMinutes: a boat, zeppelin or portal not arrived by then pauses the bot's guide.
+# RideMinutes: a boat, zeppelin, tram or portal not arrived this long after the bot reached the dock: the bot is
+#     moved to where the ride lands (its guide's next spot), or its guide pauses when that is not known.
 # Changing these needs a worldserver restart.
-# Defaults: 0, "", 6, 8, 10, 25
+# Defaults: 0, "", 6, 8, 10, 10
 AiPlayerbot.GuideBots = 0
 AiPlayerbot.GuideBots.Dir = ""
 AiPlayerbot.GuideBots.StepSoftCap = 6
 AiPlayerbot.GuideBots.StepLookahead = 8
 AiPlayerbot.GuideBots.CrowdWaitMinutes = 10
-AiPlayerbot.GuideBots.RideMinutes = 25
+AiPlayerbot.GuideBots.RideMinutes = 10
 
 # Death knight "raisings" (only with FixedPopulation = 1). None at launch. Once a bot of a faction reaches
 # UnlockLevel, every WaveIntervalHours that faction raises bots that died within RecentDeathHours at

@@ -501,8 +501,9 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
         }
         case RPG_FOLLOW_GUIDE:
         {
-            // FOLLOW_GUIDE -> IDLE now and then, so errands and a changed focus are looked at again.
-            if (info.HasStatusPersisted(statusFollowGuideDuration))
+            // FOLLOW_GUIDE -> IDLE now and then, so errands and a changed focus are looked at again; never aboard a
+            // boat or zeppelin (the IDLE roll could send a passenger off to grind mid-sea).
+            if (info.HasStatusPersisted(statusFollowGuideDuration) && !bot->GetTransport())
             {
                 info.ChangeToIdle();
                 return true;
