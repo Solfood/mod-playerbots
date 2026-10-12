@@ -298,9 +298,8 @@ bool NewRpgFollowGuideAction::Ride(GuideMgr::Work const& w, Guides::Step const& 
             off = dock;
         if (off == WorldPosition() || off.GetMapId() != bot->GetMapId())
             return ForceToWait(RIDE_WAIT_MS);
-        if (MoveFarTo(off))
-            return true;
-        // No path starts on a deck (the boat is not on the navigation mesh): a straight step toward it.
+        // A straight step toward it: no path starts on a deck (the boat is not on the navigation mesh), and MoveFarTo
+        // may report a move it never makes from there (seen live: the bot rode back and forth).
         float const angle = bot->GetAngle(off.GetPositionX(), off.GetPositionY());
         bot->GetMotionMaster()->MovePoint(0, bot->GetPositionX() + LEAVE_DECK_YARDS * std::cos(angle),
                                           bot->GetPositionY() + LEAVE_DECK_YARDS * std::sin(angle),
