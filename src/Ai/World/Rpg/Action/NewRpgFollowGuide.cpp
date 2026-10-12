@@ -11,7 +11,6 @@
 #include "DBCStores.h"
 #include "FixedPopulation.h"
 #include "GameObject.h"
-#include "GridTerrainData.h"  // MAX_HEIGHT, INVALID_HEIGHT
 #include "Log.h"
 #include "Map.h"
 #include "MotionMaster.h"
@@ -279,34 +278,36 @@ bool NewRpgFollowGuideAction::Ride(GuideMgr::Work const& w, Guides::Step const& 
         botAI->rpgInfo.ChangeToIdle();
         return true;
     }
+    WorldPosition const dock = GuideMgr::Ground(bot, GuideMgr::Nearest(bot, in.points));
     if (Transport* t = bot->GetTransport())
     {
-        // Aboard: wait. Once the boat has stood still for DOCKED_MS in the destination zone, walk off toward the next
-        // step (PlayerbotAI leaves the transport when the bot is off its deck).
+        // Aboard: wait. Once the boat has stood still for DOCKED_MS, walk off: toward the next step in the destination
+        // zone; back onto the dock when this boat came back to where it boarded without reaching it (the wrong boat).
+        // PlayerbotAI leaves the transport when the bot is off its deck.
         bool const still = std::hypot(t->GetPositionX() - s.transportX, t->GetPositionY() - s.transportY) < 1.0f;
         s.transportX = t->GetPositionX();
         s.transportY = t->GetPositionY();
-        s.dockedMs = still && bot->GetZoneId() == step.to ? s.dockedMs + RIDE_WAIT_MS : 0;
-        if (s.dockedMs >= DOCKED_MS)
-        {
-            WorldPosition const next = GuideMgr::Ground(bot, guides.NextPointAfter(w.guide, w.seq));
-            if (next != WorldPosition() && next.GetMapId() == bot->GetMapId())
-            {
-                if (MoveFarTo(next))
-                    return true;
-                // No path starts on a deck (the boat is not on the navigation mesh): a straight step toward it.
-                float const angle = bot->GetAngle(next.GetPositionX(), next.GetPositionY());
-                bot->GetMotionMaster()->MovePoint(0, bot->GetPositionX() + LEAVE_DECK_YARDS * std::cos(angle),
-                                                  bot->GetPositionY() + LEAVE_DECK_YARDS * std::sin(angle),
-                                                  bot->GetPositionZ(), FORCED_MOVEMENT_NONE, 0.0f, 0.0f, false);
-                return true;
-            }
-        }
-        return ForceToWait(RIDE_WAIT_MS);
+        s.dockedMs = still ? s.dockedMs + RIDE_WAIT_MS : 0;
+        if (s.dockedMs < DOCKED_MS)
+            return ForceToWait(RIDE_WAIT_MS);
+        WorldPosition off;
+        if (bot->GetZoneId() == step.to)
+            off = GuideMgr::Ground(bot, guides.NextPointAfter(w.guide, w.seq));
+        else if (dock.GetMapId() == bot->GetMapId() &&
+                 bot->GetExactDist2d(dock.GetPositionX(), dock.GetPositionY()) <= BOARD_SEARCH_YARDS)
+            off = dock;
+        if (off == WorldPosition() || off.GetMapId() != bot->GetMapId())
+            return ForceToWait(RIDE_WAIT_MS);
+        if (MoveFarTo(off))
+            return true;
+        // No path starts on a deck (the boat is not on the navigation mesh): a straight step toward it.
+        float const angle = bot->GetAngle(off.GetPositionX(), off.GetPositionY());
+        bot->GetMotionMaster()->MovePoint(0, bot->GetPositionX() + LEAVE_DECK_YARDS * std::cos(angle),
+                                          bot->GetPositionY() + LEAVE_DECK_YARDS * std::sin(angle),
+                                          bot->GetPositionZ(), FORCED_MOVEMENT_NONE, 0.0f, 0.0f, false);
+        return true;
     }
-    s.transportX = s.transportY = 0.0f;
     s.dockedMs = 0;
-    WorldPosition const dock = GuideMgr::Ground(bot, GuideMgr::Nearest(bot, in.points));
     if (dock == WorldPosition())
         return GiveUp(w);
     if (dock.GetMapId() != bot->GetMapId())
@@ -325,31 +326,48 @@ bool NewRpgFollowGuideAction::Ride(GuideMgr::Work const& w, Guides::Step const& 
             go->Use(bot);
         return ForceToWait(RIDE_WAIT_MS);
     }
-    // At the dock: look for the deck of a boat or zeppelin alongside, in a ring around the dock, and step onto it in a
-    // straight line (no path: decks are not on the navigation mesh). Two heights: its own (it stands on the pier or
-    // platform) and just above the water (a guide's dock spot often lies off the pier, so it waits in the water and the
-    // deck is above it; the core's probe looks 2 yards up and 30 down).
-    float const water = bot->GetMap()->GetWaterLevel(dock.GetPositionX(), dock.GetPositionY());
-    float const heights[2] = {bot->GetPositionZ(), water > INVALID_HEIGHT ? water + DECK_ABOVE_WATER : MAX_HEIGHT};
-    for (float const z : heights)
-    {
-        if (z >= MAX_HEIGHT || (z != heights[0] && std::fabs(z - heights[0]) < 2.0f))
-            continue;
-        for (float r = 6.0f; r <= BOARD_PROBE_YARDS; r += 6.0f)
-            for (int a = 0; a < 12; ++a)
+    // At the dock: the boat or zeppelin nearest the dock (within BOARD_SEARCH_YARDS) once it stands still alongside
+    // (it has not moved since the last wait). The map's transports are a short list. The deck is found by the core's
+    // own probe (2 yards up, 30 down from the point) from high above the boat's middle down, so the first hit is the
+    // deck, not the hull from inside; it steps there in a straight line (decks are not on the navigation mesh).
+    Transport* boat = nullptr;
+    float best = BOARD_SEARCH_YARDS;
+    for (Transport* t : bot->GetMap()->GetAllTransports())
+        if (t->IsInWorld() && !t->IsStaticTransport())
+        {
+            float const d = t->GetExactDist2d(dock.GetPositionX(), dock.GetPositionY());
+            if (d < best)
             {
-                float const x = dock.GetPositionX() + r * std::cos(a * M_PI / 6.0f);
-                float const y = dock.GetPositionY() + r * std::sin(a * M_PI / 6.0f);
-                Transport* t = bot->GetMap()->GetTransportForPos(bot->GetPhaseMask(), x, y, z, bot);
-                if (t && !t->IsStaticTransport())
-                {
-                    LOG_DEBUG("playerbots", "[Guides] {} steps onto transport {} at {} {} {}", bot->GetName(),
-                              t->GetEntry(), x, y, z);
-                    bot->GetMotionMaster()->MovePoint(0, x, y, z, FORCED_MOVEMENT_NONE, 0.0f, 0.0f, false);
-                    s.atNpcMs = getMSTime();
-                    return true;
-                }
+                best = d;
+                boat = t;
             }
+        }
+    if (!boat)
+    {
+        s.transportX = s.transportY = 0.0f;
+        return ForceToWait(RIDE_WAIT_MS);
+    }
+    bool const still = std::hypot(boat->GetPositionX() - s.transportX, boat->GetPositionY() - s.transportY) < 1.0f;
+    s.transportX = boat->GetPositionX();
+    s.transportY = boat->GetPositionY();
+    if (!still)
+        return ForceToWait(RIDE_WAIT_MS);
+    // fore and aft of the middle first: a mast stands in the middle
+    for (float along : {DECK_OFFSET_YARDS, -DECK_OFFSET_YARDS, 0.0f})
+    {
+        float const x = boat->GetPositionX() + along * std::cos(boat->GetOrientation());
+        float const y = boat->GetPositionY() + along * std::sin(boat->GetOrientation());
+        for (float h = DECK_PROBE_TOP; h >= -DECK_PROBE_TOP; h -= 4.0f)
+        {
+            float const z = boat->GetPositionZ() + h;
+            if (bot->GetMap()->GetTransportForPos(bot->GetPhaseMask(), x, y, z, bot) != boat)
+                continue;
+            LOG_DEBUG("playerbots", "[Guides] {} steps onto transport {} at {} {} {}", bot->GetName(), boat->GetEntry(),
+                      x, y, z);
+            bot->GetMotionMaster()->MovePoint(0, x, y, z, FORCED_MOVEMENT_NONE, 0.0f, 0.0f, false);
+            s.atNpcMs = getMSTime();
+            return true;
+        }
     }
     return ForceToWait(RIDE_WAIT_MS);
 }

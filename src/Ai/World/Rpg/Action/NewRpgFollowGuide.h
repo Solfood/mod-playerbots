@@ -30,9 +30,10 @@ private:
     static constexpr std::size_t MAX_WATCHED = 32;
     static constexpr float DOCK_YARDS = 12.0f;        // at the dock or portal spot
     static constexpr float PORTAL_YARDS = 15.0f;      // an orb or portal object this close is used
-    static constexpr float BOARD_PROBE_YARDS = 30.0f; // looks for a boat deck this far around the dock
+    static constexpr float BOARD_SEARCH_YARDS = 100.0f;  // a boat or zeppelin this close to the dock is boarded
     static constexpr float FLIGHT_MASTER_YARDS = 500.0f;  // a flight master farther than this is not "here"
-    static constexpr float DECK_ABOVE_WATER = 6.0f;   // a deck is probed from this high above the water at the dock
+    static constexpr float DECK_OFFSET_YARDS = 6.0f;  // deck probes fore and aft of the boat's middle
+    static constexpr float DECK_PROBE_TOP = 16.0f;    // the deck is probed from this high above the boat's middle
     static constexpr float LEAVE_DECK_YARDS = 20.0f;  // a straight step off a docked boat when no path starts
     static constexpr uint32 RIDE_WAIT_MS = 2 * IN_MILLISECONDS;
     static constexpr uint32 DOCKED_MS = 5 * IN_MILLISECONDS;  // a boat that stood still this long has docked
