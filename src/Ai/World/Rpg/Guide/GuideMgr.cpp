@@ -409,7 +409,9 @@ Guides::StepFacts GuideMgr::Facts(Player* bot, int gi, uint32 seq, uint32 raceBi
     if (!f.forBot || f.skipped || f.blockedAtLoad)
         return f;
     WorldPosition const near = Nearest(bot, in.points);
-    f.otherMap = s.kind != K::Hearth && !in.points.empty() && near.GetMapId() != bot->GetMapId();
+    // A hearthstone crosses maps; so does a bot aboard its boat or zeppelin (the dock is behind it, not away).
+    bool const riding = (s.kind == K::Ride || s.kind == K::Portal) && bot->GetTransport();
+    f.otherMap = s.kind != K::Hearth && !riding && !in.points.empty() && near.GetMapId() != bot->GetMapId();
     switch (s.kind)
     {
         case K::Accept:

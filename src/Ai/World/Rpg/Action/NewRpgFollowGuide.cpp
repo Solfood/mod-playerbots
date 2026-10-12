@@ -6,7 +6,14 @@
 
 #include "NewRpgFollowGuide.h"
 
+#include <cmath>
+
+#include "DBCStores.h"
 #include "FixedPopulation.h"
+#include "GameObject.h"
+#include "Log.h"
+#include "Map.h"
+#include "MotionMaster.h"
 #include "NewRpgInfo.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
@@ -14,6 +21,10 @@
 #include "RouteMgr.h"
 #include "RouteSafetyRules.h"
 #include "Timer.h"
+#include "Transport.h"
+#include "TravelMgr.h"
+#include "TravelNode.h"
+#include "WorldSession.h"
 
 bool NewRpgFollowGuideAction::Execute(Event /*event*/)
 {
@@ -45,8 +56,12 @@ bool NewRpgFollowGuideAction::Execute(Event /*event*/)
             if (!GoGrindNear())
                 info.ChangeToIdle();
             return true;
+        case Guides::Pick::Away:  // its next step is on another map: a boat or portal step first, else pause
+            guides.Unseat(guid);
+            guides.Cross(bot, w);
+            info.ChangeToIdle();
+            return true;
         case Guides::Pick::Crowded:  // Task 9
-        case Guides::Pick::Away:     // Task 8
         case Guides::Pick::End:      // paused, or more to judge next tick
             if (!guides.Guided(bot))
                 info.ChangeToIdle();
@@ -80,9 +95,18 @@ bool NewRpgFollowGuideAction::Execute(Event /*event*/)
             if (!GoGrindNear())
                 return GiveUp(w);
             return true;
-        default:  // travel kinds: Task 8
-            return GiveUp(w);
+        case Guides::StepKind::Fly:
+            return Fly(w, step, in, elapsed);
+        case Guides::StepKind::Hearth:
+            return Hearth(w, step, in, elapsed);
+        case Guides::StepKind::SetHome:
+        case Guides::StepKind::FlightPath:
+            return TalkTo(w, step, in, elapsed);
+        case Guides::StepKind::Ride:
+        case Guides::StepKind::Portal:
+            return Ride(w, step, in, elapsed);
     }
+    return GiveUp(w);
 }
 
 bool NewRpgFollowGuideAction::WorkQuest(GuideMgr::Work const& w, Guides::Step const& step, GuideStepInfo const& in,
@@ -163,4 +187,160 @@ bool NewRpgFollowGuideAction::GiveUp(GuideMgr::Work const& w)
     GuideMgr::instance().Stall(bot, w);
     botAI->rpgInfo.ChangeToIdle();
     return true;
+}
+
+uint32 NewRpgFollowGuideAction::ZoneOfArea(uint32 areaId)
+{
+    AreaTableEntry const* area = sAreaTableStore.LookupEntry(areaId);
+    return area && area->zone ? area->zone : areaId;
+}
+
+bool NewRpgFollowGuideAction::Fly(GuideMgr::Work const& w, Guides::Step const& step, GuideStepInfo const& in,
+                                  uint32 elapsed)
+{
+    // Honest: only a flight from the flight master here along nodes it knows all of (as a player's taxi map offers);
+    // the core charges the fare and refuses it without the money. TRAVEL_FLIGHT walks to the flight master, pays and
+    // flies; it comes back to the guide after landing. Each try counts, so a refused flight is tried twice at most.
+    NewRpgInfo::GuideState::Step& s = botAI->rpgInfo.guide.step;
+    if (s.flightTries < MAX_FLIGHT_TRIES)
+    {
+        ++s.flightTries;
+        TravelMgr::FlightMasterInfo const* fm = sTravelMgr.GetNearestFlightMasterInfo(bot);
+        if (fm && fm->taxiNodeId && fm->pos.GetMapId() == bot->GetMapId() &&
+            bot->GetDistance(fm->pos) <= FLIGHT_MASTER_YARDS)
+        {
+            std::vector<uint32> path = sTravelNodeMap.FindTaxiPath(fm->taxiNodeId, step.node);
+            bool known = path.size() >= 2;
+            for (uint32 node : path)
+                known = known && (bot->isTaxiCheater() || bot->m_taxi.IsTaximaskNodeKnown(node));
+            if (known)
+            {
+                botAI->rpgInfo.ChangeToTravelFlight(fm->templateEntry, fm->pos, std::move(path));
+                return true;
+            }
+        }
+    }
+    // No such flight for it (a node it does not know yet, no flight master here): walk to where the flight would land.
+    return WalkTo(w, GuideMgr::Ground(bot, GuideMgr::Nearest(bot, in.points)), elapsed);
+}
+
+bool NewRpgFollowGuideAction::Hearth(GuideMgr::Work const& w, Guides::Step const& step, GuideStepInfo const& in,
+                                     uint32 elapsed)
+{
+    // Its hearthstone, when it is bound in the step's zone and the stone is ready; else it walks there.
+    bool const ready = bot->GetItemByEntry(HEARTHSTONE_ITEM) && !bot->HasSpellCooldown(HEARTHSTONE_SPELL);
+    if (ready && ZoneOfArea(bot->m_homebindAreaId) == step.to && !bot->IsInCombat() &&
+        botAI->DoSpecificAction("hearthstone", Event(), true))
+        return true;
+    WorldPosition const there = GuideMgr::Ground(bot, GuideMgr::Nearest(bot, in.points));
+    if (there == WorldPosition())
+        return GiveUp(w);  // no spot and no stone: skip it
+    return WalkTo(w, there, elapsed);
+}
+
+bool NewRpgFollowGuideAction::TalkTo(GuideMgr::Work const& w, Guides::Step const& step, GuideStepInfo const& in,
+                                     uint32 elapsed)
+{
+    // SETHOME: make the innkeeper its home (free, as SetHomeAction does). FPATH: learn the flight master's node.
+    WorldPosition const where = GuideMgr::Ground(bot, GuideMgr::Nearest(bot, in.points));
+    if (where == WorldPosition() ||
+        bot->GetExactDist2d(where.GetPositionX(), where.GetPositionY()) > GIVER_YARDS)
+        return WalkTo(w, where, elapsed);
+    Creature* npc = nullptr;
+    for (uint32 entry : step.ids)
+        if ((npc = bot->FindNearestCreature(entry, GIVER_YARDS)))
+            break;
+    NewRpgInfo::GuideState::Step& s = botAI->rpgInfo.guide.step;
+    if (!s.atNpcMs)
+        s.atNpcMs = getMSTime();
+    if (GetMSTimeDiffToNow(s.atNpcMs) > NPC_STUCK_MS)
+        return GiveUp(w);  // not there, or it never answers: not this session
+    if (!npc)
+        return ForceToWait(GIVER_WAIT_MS);  // maybe it walks back (a patrolling NPC) or respawns
+    if (bot->GetDistance(npc) > INTERACTION_DISTANCE)
+        return MoveWorldObjectTo(npc->GetGUID());
+    if (step.kind == Guides::StepKind::SetHome)
+        bot->GetSession()->SendBindPoint(npc);
+    else
+        bot->GetSession()->SendLearnNewTaxiNode(npc);
+    return ForceToWait(GIVER_WAIT_MS);
+}
+
+bool NewRpgFollowGuideAction::Ride(GuideMgr::Work const& w, Guides::Step const& step, GuideStepInfo const& in,
+                                   uint32 /*elapsed*/)
+{
+    GuideMgr& guides = GuideMgr::instance();
+    NewRpgInfo::GuideState::Step& s = botAI->rpgInfo.guide.step;
+    if (Guides::RideTimedOut(s.workedMs, sPlayerbotAIConfig.guideBots.rideMinutes))
+    {
+        FixedPopulation::Count(EconomyCounter::GuideRidesFailed);
+        guides.Pause(bot, "a boat, zeppelin or portal never took it there");
+        botAI->rpgInfo.ChangeToIdle();
+        return true;
+    }
+    if (Transport* t = bot->GetTransport())
+    {
+        // Aboard: wait. Once the boat has stood still for DOCKED_MS in the destination zone, walk off toward the next
+        // step (PlayerbotAI leaves the transport when the bot is off its deck).
+        bool const still = std::hypot(t->GetPositionX() - s.transportX, t->GetPositionY() - s.transportY) < 1.0f;
+        s.transportX = t->GetPositionX();
+        s.transportY = t->GetPositionY();
+        s.dockedMs = still && bot->GetZoneId() == step.to ? s.dockedMs + RIDE_WAIT_MS : 0;
+        if (s.dockedMs >= DOCKED_MS)
+        {
+            WorldPosition const next = GuideMgr::Ground(bot, guides.NextPointAfter(w.guide, w.seq));
+            if (next != WorldPosition() && next.GetMapId() == bot->GetMapId())
+            {
+                if (MoveFarTo(next))
+                    return true;
+                // No path starts on a deck (the boat is not on the navigation mesh): a straight step toward it.
+                float const angle = bot->GetAngle(next.GetPositionX(), next.GetPositionY());
+                bot->GetMotionMaster()->MovePoint(0, bot->GetPositionX() + LEAVE_DECK_YARDS * std::cos(angle),
+                                                  bot->GetPositionY() + LEAVE_DECK_YARDS * std::sin(angle),
+                                                  bot->GetPositionZ(), FORCED_MOVEMENT_NONE, 0.0f, 0.0f, false);
+                return true;
+            }
+        }
+        return ForceToWait(RIDE_WAIT_MS);
+    }
+    s.transportX = s.transportY = 0.0f;
+    s.dockedMs = 0;
+    WorldPosition const dock = GuideMgr::Ground(bot, GuideMgr::Nearest(bot, in.points));
+    if (dock == WorldPosition())
+        return GiveUp(w);
+    if (dock.GetMapId() != bot->GetMapId())
+        return ForceToWait(RIDE_WAIT_MS);  // crossing maps with the boat (the core teleports passengers)
+    if (s.atNpcMs && GetMSTimeDiffToNow(s.atNpcMs) < BOARDING_MS)
+        return ForceToWait(IN_MILLISECONDS);  // stepping onto a deck: let it finish (atNpcMs = when it stepped)
+    if (bot->GetExactDist2d(dock.GetPositionX(), dock.GetPositionY()) > DOCK_YARDS)
+        return MoveFarTo(dock) || MoveRandomNear(NUDGE_YARDS);
+    if (step.kind == Guides::StepKind::Portal)
+    {
+        // an orb or a portal you click (a spell-caster object), as a player would
+        GameObject* go = bot->FindNearestGameObjectOfType(GAMEOBJECT_TYPE_SPELLCASTER, PORTAL_YARDS);
+        if (!go)
+            go = bot->FindNearestGameObjectOfType(GAMEOBJECT_TYPE_GOOBER, PORTAL_YARDS);
+        if (go)
+            go->Use(bot);
+        return ForceToWait(RIDE_WAIT_MS);
+    }
+    // At the dock: look for the deck of a boat or zeppelin alongside, in a ring around the dock, and step onto it in a
+    // straight line (no path: decks are not on the navigation mesh).
+    for (float r = 6.0f; r <= BOARD_PROBE_YARDS; r += 6.0f)
+        for (int a = 0; a < 12; ++a)
+        {
+            float const x = dock.GetPositionX() + r * std::cos(a * M_PI / 6.0f);
+            float const y = dock.GetPositionY() + r * std::sin(a * M_PI / 6.0f);
+            Transport* t = bot->GetMap()->GetTransportForPos(bot->GetPhaseMask(), x, y, dock.GetPositionZ(), bot);
+            if (t && !t->IsStaticTransport())
+            {
+                LOG_DEBUG("playerbots", "[Guides] {} steps onto transport {} at {} {}", bot->GetName(), t->GetEntry(),
+                          x, y);
+                bot->GetMotionMaster()->MovePoint(0, x, y, dock.GetPositionZ(), FORCED_MOVEMENT_NONE, 0.0f, 0.0f,
+                                                  false);
+                s.atNpcMs = getMSTime();
+                return true;
+            }
+        }
+    return ForceToWait(RIDE_WAIT_MS);
 }
