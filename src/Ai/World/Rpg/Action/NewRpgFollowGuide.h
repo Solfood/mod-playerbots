@@ -39,7 +39,7 @@ private:
     static constexpr uint32 RIDE_WAIT_MS = 2 * IN_MILLISECONDS;
     static constexpr uint32 DOCKED_MS = 5 * IN_MILLISECONDS;  // a boat that stood still this long has docked
     static constexpr uint32 BOARDING_MS = 10 * IN_MILLISECONDS;  // a step onto a deck is left to finish this long
-    static constexpr uint32 MAX_FLIGHT_TRIES = 2;     // then the step is Away: its guide pauses
+    static constexpr uint32 MAX_FLIGHT_TRIES = 2;     // then a short walk, or its guide pauses (Away)
     static constexpr uint32 HEARTHSTONE_ITEM = 6948;
     static constexpr uint32 HEARTHSTONE_SPELL = 8690;
 
@@ -47,7 +47,8 @@ private:
     bool WatchQuest(GuideMgr::Work const& w, uint32 quest, int32 job, float distance, uint32 elapsed);
     bool WalkTo(GuideMgr::Work const& w, WorldPosition const& where, uint32 elapsed);
     bool GiveUp(GuideMgr::Work const& w);  // stall: skip the step for the session, back to IDLE
-    bool Fly(Guides::Step const& step);  // a flight it knows, else its guide pauses (the step is Away)
+    // a flight it knows, else a short walk, else its guide pauses (the step is Away)
+    bool Fly(GuideMgr::Work const& w, Guides::Step const& step, GuideStepInfo const& in, uint32 elapsed);
     bool Hearth(GuideMgr::Work const& w, Guides::Step const& step, GuideStepInfo const& in, uint32 elapsed);
     bool TalkTo(GuideMgr::Work const& w, Guides::Step const& step, GuideStepInfo const& in, uint32 elapsed);
     bool Ride(GuideMgr::Work const& w, Guides::Step const& step, GuideStepInfo const& in, uint32 elapsed);

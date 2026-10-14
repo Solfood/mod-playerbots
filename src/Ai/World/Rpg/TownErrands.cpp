@@ -246,9 +246,10 @@ bool TownErrands::WeaponBroken(Player* bot)
 
 bool TownErrands::RepairWeaponNow(PlayerbotAI* botAI, Player* bot)
 {
-    return SurvivalRulesOn(bot) && Routes::RepairSkipsCooldown(WeaponBroken(bot), bot->GetMoney(),
-                                                               WeaponRepairCost(bot),
-                                                               botAI->rpgInfo.abandonedTrip != WorldPosition());
+    NewRpgInfo const& info = botAI->rpgInfo;
+    return SurvivalRulesOn(bot) &&
+           Routes::RepairSkipsCooldown(WeaponBroken(bot), bot->GetMoney(), WeaponRepairCost(bot),
+                                       info.abandonedTrip != WorldPosition(), CooldownLeftMs(info.lastErrandMs));
 }
 
 uint32 TownErrands::JunkValue(PlayerbotAI* botAI, Player* bot)

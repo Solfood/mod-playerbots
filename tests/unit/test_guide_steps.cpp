@@ -184,13 +184,22 @@ int main()
     CHECK_TRUE(GuidedIdle(true) == IdleChoice::Earn);
     CHECK_TRUE(GuidedIdle(false) == IdleChoice::Guide);
 
-    // a FLY step: it flies only with a try left, a flight master here and every node on the way known; anything
-    // else is Away (its guide pauses), never a walk to where the flight lands (Westfall to Thelsamar through
-    // Burning Steppes)
-    CHECK_TRUE(PlanFly(true, true, true) == FlyPlan::Fly);
-    CHECK_TRUE(PlanFly(true, true, false) == FlyPlan::Away);   // Thelsamar not known yet
-    CHECK_TRUE(PlanFly(true, false, true) == FlyPlan::Away);   // no flight master within reach
-    CHECK_TRUE(PlanFly(false, true, true) == FlyPlan::Away);   // refused twice (no money for the fare)
-    CHECK_TRUE(PlanFly(false, false, false) == FlyPlan::Away);
+    // a FLY step: it flies with a try left, a flight master here and every node on the way known. Else a short walk
+    // (at the destination's own flight master, or the landing on this map within FLY_WALK_YARDS) is walked as
+    // before; anything longer is Away (its guide pauses), never a long walk (Westfall to Thelsamar through Burning
+    // Steppes). Args: triesLeft, flightMasterHere, pathKnown, atDestination, landingYards (<0: not on this map).
+    CHECK_TRUE(PlanFly(true, true, true, false, 5000.0f) == FlyPlan::Fly);
+    CHECK_TRUE(PlanFly(true, true, false, false, 5000.0f) == FlyPlan::Away);   // Thelsamar not known yet
+    CHECK_TRUE(PlanFly(true, false, true, false, 5000.0f) == FlyPlan::Away);   // no flight master within reach
+    CHECK_TRUE(PlanFly(false, true, true, false, 5000.0f) == FlyPlan::Away);   // refused twice (no fare)
+    CHECK_TRUE(PlanFly(false, false, false, false, -1.0f) == FlyPlan::Away);   // landing on another map
+    // fix round 1: landed (or arrived on foot) outside the 150-yard arrival radius: the destination's own flight
+    // master is the nearest one, FindTaxiPath(node, node) is empty; it walks the last bit
+    CHECK_TRUE(PlanFly(true, true, false, true, 400.0f) == FlyPlan::Walk);
+    CHECK_TRUE(PlanFly(false, true, false, true, -1.0f) == FlyPlan::Walk);     // zone-only step, no spot
+    // just over 500 yards from a flight master, the landing a short walk away: walk as before
+    CHECK_TRUE(PlanFly(true, false, false, false, FLY_WALK_YARDS) == FlyPlan::Walk);
+    CHECK_TRUE(PlanFly(true, false, false, false, FLY_WALK_YARDS + 1.0f) == FlyPlan::Away);
+    CHECK_TRUE(PlanFly(true, true, true, false, 300.0f) == FlyPlan::Fly);      // a known flight still wins
     return UnitFailures();
 }

@@ -254,18 +254,28 @@ enum class IdleChoice : uint8_t
 inline IdleChoice GuidedIdle(bool retreating) { return retreating ? IdleChoice::Earn : IdleChoice::Guide; }
 
 // A FLY step (fix round GM-BOTAI-0092): it flies with a try left, a flight master here and every node on the way
-// known. Anything else counts as Away: its guide pauses for the session and it plays as an unguided bot. It no longer
-// walks to where the flight lands (seen live: Westfall to Thelsamar through Burning Steppes, Moonglade to Thunder Bluff
-// through Winterspring). Never a teleport: decision 0004 covers only failed boat, zeppelin and tram rides.
+// known. Else a short walk is walked as before (fix round 1, GM-BOTAI-0093): at the destination's own flight master
+// (landed, or came on foot, outside the arrival radius), or with the landing on this map within FLY_WALK_YARDS
+// (`landingYards` < 0: no landing spot on this map). Anything longer counts as Away: its guide pauses for the session
+// and it plays as an unguided bot. It no longer walks far to where the flight lands (seen live: Westfall to
+// Thelsamar through Burning Steppes, Moonglade to Thunder Bluff through Winterspring). Never a teleport: decision
+// 0004 covers only failed boat, zeppelin and tram rides.
+constexpr float FLY_WALK_YARDS = 1000.0f;
+
 enum class FlyPlan : uint8_t
 {
     Fly = 0,
+    Walk,
     Away,
 };
 
-inline FlyPlan PlanFly(bool triesLeft, bool flightMasterHere, bool pathKnown)
+inline FlyPlan PlanFly(bool triesLeft, bool flightMasterHere, bool pathKnown, bool atDestination, float landingYards)
 {
-    return triesLeft && flightMasterHere && pathKnown ? FlyPlan::Fly : FlyPlan::Away;
+    if (triesLeft && flightMasterHere && pathKnown)
+        return FlyPlan::Fly;
+    if (atDestination || (landingYards >= 0.0f && landingYards <= FLY_WALK_YARDS))
+        return FlyPlan::Walk;
+    return FlyPlan::Away;
 }
 
 // The 90 s stuck teleport fired twice while the bot worked one step: skip the step this session (decision 14).

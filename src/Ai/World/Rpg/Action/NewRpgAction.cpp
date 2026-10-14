@@ -384,7 +384,10 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
             if (GuideMgr::instance().Guided(bot))
             {
                 if (Guides::GuidedIdle(info.route.retreating) == Guides::IdleChoice::Earn)
+                {
+                    GuideMgr::instance().Unseat(bot->GetGUID().GetCounter());  // its step's seat is for working bots
                     return RandomChangeStatus({RPG_WANDER_RANDOM, RPG_WANDER_NPC, RPG_REST});
+                }
                 return ChangeToGuideChoice();
             }
             // Retreating (quest routes, spec §6): earn near town. Quests at or below its level on its own hub (the
@@ -443,6 +446,15 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
         {
             if (info.HasStatusPersisted(statusWanderNpcDuration))
             {
+                // A broken weapon it could pay for is still broken: it never reached the repairer. Given up like a
+                // town trip, so the cooldown runs once and the next repair trip avoids this place (fix round 1,
+                // GM-BOTAI-0093: else the cooldown skip sent it back here at once, for good).
+                if (TownErrands::RepairWeaponNow(botAI, bot))
+                {
+                    info.lastErrandMs = getMSTime();
+                    info.abandonedTrip = WorldPosition(bot);
+                    FixedPopulation::Count(EconomyCounter::TownTripsAbandoned);
+                }
                 info.ChangeToIdle();
                 return true;
             }

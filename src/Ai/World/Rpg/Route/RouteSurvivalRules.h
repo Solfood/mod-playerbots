@@ -36,11 +36,13 @@ inline bool RetreatDone(uint64_t money, uint32_t weaponRepairCost, uint32_t rese
 }
 
 // A broken main hand it can pay for now (money alone, no junk to sell first) skips the errand cooldown and goes to a
-// repairer (fix round GM-BOTAI-0092: 41 % of bots fought with a broken weapon, many able to pay). Not right after a
-// repair trip it gave up: then the cooldown runs, else it would set out again every 5 seconds.
-inline bool RepairSkipsCooldown(bool weaponBroken, uint64_t money, uint32_t weaponRepairCost, bool tripJustAbandoned)
+// repairer (fix round GM-BOTAI-0092: 41 % of bots fought with a broken weapon, many able to pay). Not while the
+// cooldown of a repair trip it gave up still runs (a town trip that never arrived, or a town wander that never
+// reached the repairer): else it would set out again at once, for good (fix round 1, GM-BOTAI-0093).
+inline bool RepairSkipsCooldown(bool weaponBroken, uint64_t money, uint32_t weaponRepairCost, bool tripAbandoned,
+                                uint32_t cooldownLeftMs)
 {
-    return weaponBroken && weaponRepairCost && money >= weaponRepairCost && !tripJustAbandoned;
+    return weaponBroken && weaponRepairCost && money >= weaponRepairCost && !(tripAbandoned && cooldownLeftMs);
 }
 
 constexpr std::size_t MAX_DEATHS_KEPT = 64;

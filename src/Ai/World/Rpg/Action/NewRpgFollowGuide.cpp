@@ -114,7 +114,7 @@ bool NewRpgFollowGuideAction::Execute(Event /*event*/)
                 return GiveUp(w);
             return true;
         case Guides::StepKind::Fly:
-            return Fly(step);
+            return Fly(w, step, in, elapsed);
         case Guides::StepKind::Hearth:
             return Hearth(w, step, in, elapsed);
         case Guides::StepKind::SetHome:
@@ -213,40 +213,56 @@ uint32 NewRpgFollowGuideAction::ZoneOfArea(uint32 areaId)
     return area && area->zone ? area->zone : areaId;
 }
 
-bool NewRpgFollowGuideAction::Fly(Guides::Step const& step)
+bool NewRpgFollowGuideAction::Fly(GuideMgr::Work const& w, Guides::Step const& step, GuideStepInfo const& in,
+                                  uint32 elapsed)
 {
     // Honest: only a flight from the flight master here along nodes it knows all of (as a player's taxi map offers);
     // the core charges the fare and refuses it without the money. TRAVEL_FLIGHT walks to the flight master, pays and
     // flies; it comes back to the guide after landing. Each try counts, so a refused flight is tried twice at most.
     if (!bot->IsAlive())
         return false;  // a ghost on its way back to its body: judged again once it lives
-    NewRpgInfo::GuideState::Step& s = botAI->rpgInfo.guide.step;
+    NewRpgInfo& info = botAI->rpgInfo;
+    NewRpgInfo::GuideState::Step& s = info.guide.step;
     bool const triesLeft = s.flightTries < MAX_FLIGHT_TRIES;
-    TravelMgr::FlightMasterInfo const* fm = triesLeft ? sTravelMgr.GetNearestFlightMasterInfo(bot) : nullptr;
-    bool const here = fm && fm->taxiNodeId && fm->pos.GetMapId() == bot->GetMapId() &&
-                      bot->GetDistance(fm->pos) <= FLIGHT_MASTER_YARDS;
+    TravelMgr::FlightMasterInfo const* fm = sTravelMgr.GetNearestFlightMasterInfo(bot);
+    bool const sameMap = fm && fm->taxiNodeId && fm->pos.GetMapId() == bot->GetMapId();
+    bool const here = sameMap && bot->GetDistance(fm->pos) <= FLIGHT_MASTER_YARDS;
     std::vector<uint32> path;
     bool known = false;
-    if (here)
+    if (triesLeft && here)
     {
         path = sTravelNodeMap.FindTaxiPath(fm->taxiNodeId, step.node);
         known = path.size() >= 2;
         for (uint32 node : path)
             known = known && (bot->isTaxiCheater() || bot->m_taxi.IsTaximaskNodeKnown(node));
     }
-    if (Guides::PlanFly(triesLeft, here, known) == Guides::FlyPlan::Fly)
+    WorldPosition const landing = GuideMgr::Ground(bot, GuideMgr::Nearest(bot, in.points));
+    float const landingYards = landing != WorldPosition() && landing.GetMapId() == bot->GetMapId()
+                                   ? bot->GetExactDist2d(landing.GetPositionX(), landing.GetPositionY())
+                                   : -1.0f;
+    switch (Guides::PlanFly(triesLeft, here, known, sameMap && fm->taxiNodeId == step.node, landingYards))
     {
-        ++s.flightTries;
-        botAI->rpgInfo.ChangeToTravelFlight(fm->templateEntry, fm->pos, std::move(path));
-        return true;
+        case Guides::FlyPlan::Fly:
+            ++s.flightTries;
+            info.ChangeToTravelFlight(fm->templateEntry, fm->pos, std::move(path));
+            return true;
+        case Guides::FlyPlan::Walk:  // landed, or nearly there: the last bit on foot, as before (fix round 1)
+            return WalkTo(w, landing, elapsed);
+        case Guides::FlyPlan::Away:
+            break;
     }
-    // No such flight for it (a node it does not know yet, no flight master here, refused twice): the step is Away
-    // (fix round GM-BOTAI-0092). Walking to where the flight lands crossed level-50 zones, so its guide pauses for
-    // the session and it plays as an unguided bot; its place stays on this step. Paused here, not through Cross():
-    // the landing is on this map, and a crossing looked up from this map to this map could move its place to an
-    // unrelated boat step.
+    // No such flight for it (a node it does not know yet, no flight master here, refused twice) and a long walk: the
+    // step is Away (fix round GM-BOTAI-0092). Walking to where the flight lands crossed level-50 zones, so its guide
+    // pauses for the session and it plays as an unguided bot; its place stays on this step. Paused here, not through
+    // Cross(): the landing is on this map, and a crossing looked up from this map to this map could move its place to
+    // an unrelated boat step. A paused bot is no longer under the survival rules, so a retreat it is on ends here.
     GuideMgr::instance().Pause(bot, "no flight it knows to its next step");
-    botAI->rpgInfo.ChangeToIdle();
+    if (info.route.retreating)
+    {
+        info.route.retreating = false;
+        FixedPopulation::Count(EconomyCounter::RetreatsEnded);
+    }
+    info.ChangeToIdle();
     return true;
 }
 
