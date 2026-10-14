@@ -23,6 +23,15 @@ int main()
     CHECK_TRUE(RetreatDone(150, 50, 100));
     CHECK_TRUE(RetreatDone(100, 0, 100));
 
+    // A broken main hand it can pay for now skips the errand cooldown (fix round GM-BOTAI-0092), unless it just gave
+    // up a repair trip (then the cooldown runs, else it would set out again every 5 seconds).
+    CHECK_TRUE(RepairSkipsCooldown(true, 28, 28, false));    // Uriondor: 373 c, weapon 28 c
+    CHECK_TRUE(RepairSkipsCooldown(true, 1454, 120, false));
+    CHECK_TRUE(!RepairSkipsCooldown(true, 27, 28, false));   // cannot pay: it retreats and earns instead
+    CHECK_TRUE(!RepairSkipsCooldown(false, 5000, 28, false)); // weapon not broken: the cooldown stands
+    CHECK_TRUE(!RepairSkipsCooldown(true, 5000, 28, true));  // a repair trip just given up
+    CHECK_TRUE(!RepairSkipsCooldown(true, 5000, 0, false));  // nothing to pay for (no weapon cost)
+
     // Deaths in the last hour (kept for an hour, at most 64). The clock starts at 4000 so `since` never wraps below 0
     // (preflight C3).
     std::deque<uint32_t> deaths;

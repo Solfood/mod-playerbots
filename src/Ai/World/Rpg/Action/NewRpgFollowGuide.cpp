@@ -114,7 +114,7 @@ bool NewRpgFollowGuideAction::Execute(Event /*event*/)
                 return GiveUp(w);
             return true;
         case Guides::StepKind::Fly:
-            return Fly(w, step, in, elapsed);
+            return Fly(step);
         case Guides::StepKind::Hearth:
             return Hearth(w, step, in, elapsed);
         case Guides::StepKind::SetHome:
@@ -213,33 +213,41 @@ uint32 NewRpgFollowGuideAction::ZoneOfArea(uint32 areaId)
     return area && area->zone ? area->zone : areaId;
 }
 
-bool NewRpgFollowGuideAction::Fly(GuideMgr::Work const& w, Guides::Step const& step, GuideStepInfo const& in,
-                                  uint32 elapsed)
+bool NewRpgFollowGuideAction::Fly(Guides::Step const& step)
 {
     // Honest: only a flight from the flight master here along nodes it knows all of (as a player's taxi map offers);
     // the core charges the fare and refuses it without the money. TRAVEL_FLIGHT walks to the flight master, pays and
     // flies; it comes back to the guide after landing. Each try counts, so a refused flight is tried twice at most.
+    if (!bot->IsAlive())
+        return false;  // a ghost on its way back to its body: judged again once it lives
     NewRpgInfo::GuideState::Step& s = botAI->rpgInfo.guide.step;
-    if (s.flightTries < MAX_FLIGHT_TRIES)
+    bool const triesLeft = s.flightTries < MAX_FLIGHT_TRIES;
+    TravelMgr::FlightMasterInfo const* fm = triesLeft ? sTravelMgr.GetNearestFlightMasterInfo(bot) : nullptr;
+    bool const here = fm && fm->taxiNodeId && fm->pos.GetMapId() == bot->GetMapId() &&
+                      bot->GetDistance(fm->pos) <= FLIGHT_MASTER_YARDS;
+    std::vector<uint32> path;
+    bool known = false;
+    if (here)
+    {
+        path = sTravelNodeMap.FindTaxiPath(fm->taxiNodeId, step.node);
+        known = path.size() >= 2;
+        for (uint32 node : path)
+            known = known && (bot->isTaxiCheater() || bot->m_taxi.IsTaximaskNodeKnown(node));
+    }
+    if (Guides::PlanFly(triesLeft, here, known) == Guides::FlyPlan::Fly)
     {
         ++s.flightTries;
-        TravelMgr::FlightMasterInfo const* fm = sTravelMgr.GetNearestFlightMasterInfo(bot);
-        if (fm && fm->taxiNodeId && fm->pos.GetMapId() == bot->GetMapId() &&
-            bot->GetDistance(fm->pos) <= FLIGHT_MASTER_YARDS)
-        {
-            std::vector<uint32> path = sTravelNodeMap.FindTaxiPath(fm->taxiNodeId, step.node);
-            bool known = path.size() >= 2;
-            for (uint32 node : path)
-                known = known && (bot->isTaxiCheater() || bot->m_taxi.IsTaximaskNodeKnown(node));
-            if (known)
-            {
-                botAI->rpgInfo.ChangeToTravelFlight(fm->templateEntry, fm->pos, std::move(path));
-                return true;
-            }
-        }
+        botAI->rpgInfo.ChangeToTravelFlight(fm->templateEntry, fm->pos, std::move(path));
+        return true;
     }
-    // No such flight for it (a node it does not know yet, no flight master here): walk to where the flight would land.
-    return WalkTo(w, GuideMgr::Ground(bot, GuideMgr::Nearest(bot, in.points)), elapsed);
+    // No such flight for it (a node it does not know yet, no flight master here, refused twice): the step is Away
+    // (fix round GM-BOTAI-0092). Walking to where the flight lands crossed level-50 zones, so its guide pauses for
+    // the session and it plays as an unguided bot; its place stays on this step. Paused here, not through Cross():
+    // the landing is on this map, and a crossing looked up from this map to this map could move its place to an
+    // unrelated boat step.
+    GuideMgr::instance().Pause(bot, "no flight it knows to its next step");
+    botAI->rpgInfo.ChangeToIdle();
+    return true;
 }
 
 bool NewRpgFollowGuideAction::Hearth(GuideMgr::Work const& w, Guides::Step const& step, GuideStepInfo const& in,

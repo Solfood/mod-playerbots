@@ -242,6 +242,32 @@ enum class Fallback : uint8_t
 
 inline Fallback GuideFallback(bool crowdWaiting) { return crowdWaiting ? Fallback::Wander : Fallback::FollowGuide; }
 
+// What a guided bot does at IDLE once its errands are done (fix round GM-BOTAI-0092). While it retreats (a broken
+// weapon or worn gear it cannot pay for, Plan 5a spec §6) it earns near town as a routed bot does, and its place in
+// the guide is kept for when the retreat ends; else it follows its guide or its focus.
+enum class IdleChoice : uint8_t
+{
+    Guide = 0,
+    Earn,
+};
+
+inline IdleChoice GuidedIdle(bool retreating) { return retreating ? IdleChoice::Earn : IdleChoice::Guide; }
+
+// A FLY step (fix round GM-BOTAI-0092): it flies with a try left, a flight master here and every node on the way
+// known. Anything else counts as Away: its guide pauses for the session and it plays as an unguided bot. It no longer
+// walks to where the flight lands (seen live: Westfall to Thelsamar through Burning Steppes, Moonglade to Thunder Bluff
+// through Winterspring). Never a teleport: decision 0004 covers only failed boat, zeppelin and tram rides.
+enum class FlyPlan : uint8_t
+{
+    Fly = 0,
+    Away,
+};
+
+inline FlyPlan PlanFly(bool triesLeft, bool flightMasterHere, bool pathKnown)
+{
+    return triesLeft && flightMasterHere && pathKnown ? FlyPlan::Fly : FlyPlan::Away;
+}
+
 // The 90 s stuck teleport fired twice while the bot worked one step: skip the step this session (decision 14).
 constexpr uint32_t STALL_TELEPORTS = 2;
 inline bool TeleportStalled(uint32_t teleportsAtStart, uint32_t teleportsNow)

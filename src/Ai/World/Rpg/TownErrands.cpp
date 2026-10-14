@@ -19,6 +19,7 @@
 #include "Playerbots.h"
 #include "RandomPlayerbotMgr.h"
 #include "RouteMgr.h"
+#include "RouteSurvivalRules.h"
 #include "Survival.h"
 #include "Timer.h"
 #include "TravelMgr.h"
@@ -241,6 +242,13 @@ bool TownErrands::WeaponBroken(Player* bot)
 {
     Item const* weapon = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_MAINHAND);
     return weapon && weapon->GetUInt32Value(ITEM_FIELD_MAXDURABILITY) && !weapon->GetUInt32Value(ITEM_FIELD_DURABILITY);
+}
+
+bool TownErrands::RepairWeaponNow(PlayerbotAI* botAI, Player* bot)
+{
+    return SurvivalRulesOn(bot) && Routes::RepairSkipsCooldown(WeaponBroken(bot), bot->GetMoney(),
+                                                               WeaponRepairCost(bot),
+                                                               botAI->rpgInfo.abandonedTrip != WorldPosition());
 }
 
 uint32 TownErrands::JunkValue(PlayerbotAI* botAI, Player* bot)

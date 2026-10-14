@@ -179,5 +179,18 @@ int main()
     CHECK_TRUE(!CrowdWaiting(12345, 600000, 600000));
     CHECK_TRUE(GuideFallback(true) == Fallback::Wander);
     CHECK_TRUE(GuideFallback(false) == Fallback::FollowGuide);
+
+    // fix round (GM-BOTAI-0092): a retreating guided bot earns near town; its guide waits for the retreat to end
+    CHECK_TRUE(GuidedIdle(true) == IdleChoice::Earn);
+    CHECK_TRUE(GuidedIdle(false) == IdleChoice::Guide);
+
+    // a FLY step: it flies only with a try left, a flight master here and every node on the way known; anything
+    // else is Away (its guide pauses), never a walk to where the flight lands (Westfall to Thelsamar through
+    // Burning Steppes)
+    CHECK_TRUE(PlanFly(true, true, true) == FlyPlan::Fly);
+    CHECK_TRUE(PlanFly(true, true, false) == FlyPlan::Away);   // Thelsamar not known yet
+    CHECK_TRUE(PlanFly(true, false, true) == FlyPlan::Away);   // no flight master within reach
+    CHECK_TRUE(PlanFly(false, true, true) == FlyPlan::Away);   // refused twice (no money for the fare)
+    CHECK_TRUE(PlanFly(false, false, false) == FlyPlan::Away);
     return UnitFailures();
 }

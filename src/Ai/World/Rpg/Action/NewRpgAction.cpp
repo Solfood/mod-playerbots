@@ -328,8 +328,11 @@ bool NewRpgStatusUpdateAction::CheckWornGearAndTownTrip(NewRpgStatus status)
     if (status == RPG_WANDER_NPC || status == RPG_TRAVEL_FLIGHT)
         return false;
 
-    // Leave for town in time, not only when the activity ends (one bad fight costs 10% and a spirit healer 25%).
-    if (AI_VALUE(uint8, "durability") < sPlayerbotAIConfig.fixedPopulationRepairBelow && GoRunErrands(true))
+    // Leave for town in time, not only when the activity ends (one bad fight costs 10% and a spirit healer 25%). A
+    // broken main hand it can pay for goes now too, whatever the rest of its gear (fix round GM-BOTAI-0092).
+    if ((AI_VALUE(uint8, "durability") < sPlayerbotAIConfig.fixedPopulationRepairBelow ||
+         TownErrands::RepairWeaponNow(botAI, bot)) &&
+        GoRunErrands(true))
         return true;
 
     bool const playSafe = TownErrands::PlaySafe(botAI, bot);
@@ -375,9 +378,15 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
                 return true;
             // Guides (Plan 5c): a guided bot follows its guide; no roll. Its focus may send it grinding, to world PvP
             // or gathering instead, and a full step sends it gathering or grinding for a while. Errands (repair,
-            // sell, train) came first just above.
+            // sell, train) came first just above. Retreating (fix round GM-BOTAI-0092): it earns near town as a
+            // routed bot does, mobs at or below its level and townsfolk to sell to; its place in the guide is kept,
+            // and once it can pay the repair (UpdateRetreat) it repairs and goes back to the guide.
             if (GuideMgr::instance().Guided(bot))
+            {
+                if (Guides::GuidedIdle(info.route.retreating) == Guides::IdleChoice::Earn)
+                    return RandomChangeStatus({RPG_WANDER_RANDOM, RPG_WANDER_NPC, RPG_REST});
                 return ChangeToGuideChoice();
+            }
             // Retreating (quest routes, spec §6): earn near town. Quests at or below its level on its own hub (the
             // route keeps it only there), mobs at or below its level (the fight rule), townsfolk to sell to; no
             // trips away.

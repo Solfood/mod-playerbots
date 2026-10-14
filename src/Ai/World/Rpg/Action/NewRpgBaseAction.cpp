@@ -1122,7 +1122,8 @@ bool NewRpgBaseAction::GoRunErrands(bool repairOnly)
         return false;
 
     NewRpgInfo& info = botAI->rpgInfo;
-    if (TownErrands::CooldownLeftMs(info.lastErrandMs))
+    // A broken main hand it can pay for does not wait out the cooldown (fix round GM-BOTAI-0092).
+    if (TownErrands::CooldownLeftMs(info.lastErrandMs) && !TownErrands::RepairWeaponNow(botAI, bot))
         return false;
 
     uint8 const errands = TownErrands::Needed(botAI, bot);

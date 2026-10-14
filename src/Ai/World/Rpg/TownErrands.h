@@ -62,6 +62,10 @@ public:
     static uint32 WeaponRepairCost(Player* bot);
     // The main-hand weapon is at durability 0 (quest routes, spec §6 retreat and earn).
     static bool WeaponBroken(Player* bot);
+    // A broken main hand it can pay for now: skip the errand cooldown and go to a repairer (fix round
+    // GM-BOTAI-0092; Routes::RepairSkipsCooldown). Routed or guided bots only (SurvivalRulesOn): with both switches
+    // off no bot changes.
+    static bool RepairWeaponNow(PlayerbotAI* botAI, Player* bot);
     // What a vendor pays for the items `sell vendor` sells (vendor and auction house usage).
     static uint32 JunkValue(PlayerbotAI* botAI, Player* bot);
     // Worn-out gear (below AiPlayerbot.FixedPopulation.PlaySafeBelowDurability): no gathering or grind trips,
