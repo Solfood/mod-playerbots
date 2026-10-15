@@ -6,6 +6,7 @@
 
 #include "ProfessionPicker.h"
 
+#include "CraftMgr.h"
 #include "EarnedTraining.h"
 #include "FixedPopulation.h"
 #include "Log.h"
@@ -14,6 +15,8 @@
 #include "PlayerbotAIConfig.h"
 #include "PlayerbotOperation.h"
 #include "PlayerbotWorldThreadProcessor.h"
+#include "ProfessionRules.h"
+#include "Random.h"
 #include "RandomPlayerbotMgr.h"
 #include "SharedDefines.h"
 #include "SpellMgr.h"
@@ -78,11 +81,21 @@ bool StorePick(Player* bot)
             keep(static_cast<uint16>(skill));
 
     std::pair<uint16, uint16> pick;
+    // World of Craft (Plan 6a, spec §1): a crafting world's new picks are a gathering profession plus the craft that
+    // uses it (or two gathering professions, about 1 in 5), and a lone kept profession gets its partner. Crafting off:
+    // the old gathering-heavy tables, exactly as before.
+    bool const crafting = CraftMgr::instance().Crafting(bot);
     if (kept.size() >= 2)
         pick = {kept[0], kept[1]};
     else if (kept.size() == 1)
-        pick = {kept[0],
-                PlayerbotFactory::ChooseComplementaryProfession(ProfessionPicker::TableFor(bot->getClass()), kept[0])};
+        pick = {kept[0], crafting ? Craft::PartnerOf(kept[0])
+                                  : PlayerbotFactory::ChooseComplementaryProfession(
+                                        ProfessionPicker::TableFor(bot->getClass()), kept[0])};
+    else if (crafting)
+    {
+        std::vector<Craft::Pair> const pairs = Craft::PairsFor(bot->getClass());
+        pick = Craft::PickPair(pairs, urand(1, Craft::TotalWeight(pairs)));
+    }
     else
         pick = ProfessionPicker::Roll(bot->getClass());
 

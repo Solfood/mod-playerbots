@@ -22,6 +22,9 @@ public:
     // The gathering tools it buys (also counted by `.playerbots econ show`).
     static constexpr uint32 ITEM_MINING_PICK = 2901;
     static constexpr uint32 ITEM_SKINNING_KNIFE = 7005;
+    // World of Craft (Plan 6a, decision 9): the craft tools a crafting bot buys at vendor price.
+    static constexpr uint32 ITEM_BLACKSMITH_HAMMER = 5956;
+    static constexpr uint32 ITEM_COPPER_ROD = 6217;
 
     struct Result
     {

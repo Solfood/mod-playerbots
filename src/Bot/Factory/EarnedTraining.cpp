@@ -4,6 +4,7 @@
  * or (at your option) any later version.
  */
 
+#include "CraftMgr.h"
 #include "EarnedTraining.h"
 
 #include "FixedPopulation.h"
@@ -238,12 +239,26 @@ void BuyMounts(Player* bot, uint32 reserve, EarnedTraining::Result& result)
 
 void BuyGatheringTools(Player* bot, uint32 reserve, EarnedTraining::Result& result)
 {
-    static constexpr std::array<std::pair<uint16, uint32>, 2> TOOLS = {
+    static constexpr std::array<std::pair<uint16, uint32>, 2> GATHER_TOOLS = {
         {{SKILL_MINING, EarnedTraining::ITEM_MINING_PICK}, {SKILL_SKINNING, EarnedTraining::ITEM_SKINNING_KNIFE}}};
+    // World of Craft (Plan 6a, decision 9): a blacksmith needs a hammer, an enchanter a rod to make its runed rod.
+    static constexpr std::array<std::pair<uint16, uint32>, 2> CRAFT_TOOLS = {
+        {{SKILL_BLACKSMITHING, EarnedTraining::ITEM_BLACKSMITH_HAMMER},
+         {SKILL_ENCHANTING, EarnedTraining::ITEM_COPPER_ROD}}};
+    // Rods an enchanter may already hold (copper, runed copper, silver, golden, truesilver, arcanite, fel iron,
+    // adamantite, eternium, titanium): it never buys a copper rod again.
+    static constexpr std::array<uint32, 10> RODS = {6217, 6218, 6339, 11130, 11145, 16207, 22461, 22462, 22463, 44452};
 
-    for (auto const& [skill, itemId] : TOOLS)
+    std::vector<std::pair<uint16, uint32>> tools(GATHER_TOOLS.begin(), GATHER_TOOLS.end());
+    if (CraftMgr::instance().Crafting(bot))
+        tools.insert(tools.end(), CRAFT_TOOLS.begin(), CRAFT_TOOLS.end());
+
+    for (auto const& [skill, itemId] : tools)
     {
         if (!bot->HasSkill(skill) || bot->HasItemCount(itemId, 1, true))
+            continue;
+        if (itemId == EarnedTraining::ITEM_COPPER_ROD &&
+            std::any_of(RODS.begin(), RODS.end(), [bot](uint32 rod) { return bot->HasItemCount(rod, 1, true); }))
             continue;
 
         ItemTemplate const* proto = sObjectMgr->GetItemTemplate(itemId);
