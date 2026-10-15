@@ -9,6 +9,7 @@
 #include <algorithm>
 
 #include "DBCStores.h"
+#include "DatabaseEnv.h"
 #include "GameObjectData.h"
 #include "HubAuctioneers.h"
 #include "Log.h"
@@ -43,7 +44,27 @@ bool OnContinent(uint32 mapId)
     return map && map->IsContinent();
 }
 
-uint32 ZoneOf(uint32 mapId, float x, float y, float z) { return sMapMgr->GetZoneId(PHASEMASK_NORMAL, mapId, x, y, z); }
+// The zone a spawn is in: the world database's zoneId when it has one (no terrain is loaded), else the core's lookup
+// (it loads the terrain of that grid, so only spots that are kept ask; hub spawns have no database row).
+std::unordered_map<ObjectGuid::LowType, uint32> DbZones(char const* table)
+{
+    std::unordered_map<ObjectGuid::LowType, uint32> zones;
+    if (QueryResult result = WorldDatabase.Query("SELECT guid, zoneId FROM {} WHERE zoneId <> 0", table))
+    {
+        do
+        {
+            zones[(*result)[0].Get<uint32>()] = (*result)[1].Get<uint16>();  // guid INT, zoneId SMALLINT
+        } while (result->NextRow());
+    }
+    return zones;
+}
+
+uint32 ZoneOf(std::unordered_map<ObjectGuid::LowType, uint32> const& dbZones, ObjectGuid::LowType spawnId,
+              uint32 mapId, float x, float y, float z)
+{
+    auto const it = dbZones.find(spawnId);
+    return it != dbZones.end() ? it->second : sMapMgr->GetZoneId(PHASEMASK_NORMAL, mapId, x, y, z);
+}
 }  // namespace
 
 CraftMgr& CraftMgr::instance()
@@ -146,6 +167,7 @@ void CraftMgr::BuildSpots()
         for (Craft::Reagent const& g : r.reagents)
             reagents.insert(g.item);
 
+    std::unordered_map<ObjectGuid::LowType, uint32> const goZones = DbZones("gameobject");
     for (auto const& [spawnId, data] : sObjectMgr->GetAllGOData())
     {
         if (!OnContinent(data.mapid))
@@ -158,13 +180,14 @@ void CraftMgr::BuildSpots()
             continue;
         CraftSpot s;
         s.pos = WorldPosition(data.mapid, data.posX, data.posY, data.posZ);
-        s.zone = ZoneOf(data.mapid, data.posX, data.posY, data.posZ);
+        s.zone = ZoneOf(goZones, spawnId, data.mapid, data.posX, data.posY, data.posZ);
         s.focus = focus;
         s.spawnId = spawnId;
         _stations[data.mapid].push_back(s);
         ++_stationCount;
     }
 
+    std::unordered_map<ObjectGuid::LowType, uint32> const creatureZones = DbZones("creature");
     for (auto const& [spawnId, data] : sObjectMgr->GetAllCreatureData())
     {
         if (!OnContinent(data.mapid))
@@ -177,9 +200,27 @@ void CraftMgr::BuildSpots()
         FactionTemplateEntry const* faction = sFactionTemplateStore.LookupEntry(t->faction);
         if ((!auctioneer && !vendor) || !faction)
             continue;
+        // The materials it sells for plain gold with unlimited stock (limited stock or tokens: never planned on).
+        std::vector<std::pair<uint32, uint32>> sold;  // (item, unit price)
+        if (VendorItemData const* list = vendor ? sObjectMgr->GetNpcVendorItemList(data.id) : nullptr)
+        {
+            for (uint32 slot = 0; slot < list->GetItemCount(); ++slot)
+            {
+                VendorItem const* v = list->GetItem(slot);
+                if (!v || v->maxcount || v->ExtendedCost || !reagents.count(v->item))
+                    continue;
+                ItemTemplate const* proto = sObjectMgr->GetItemTemplate(v->item);
+                if (!proto || proto->BuyPrice <= 0)
+                    continue;
+                sold.emplace_back(v->item, std::max<uint32>(1, static_cast<uint32>(proto->BuyPrice) /
+                                                                   std::max<uint32>(1, proto->BuyCount)));
+            }
+        }
+        if (!auctioneer && sold.empty())
+            continue;  // a vendor of nothing a recipe needs: not kept, so its zone is never looked up
         CraftSpot s;
         s.pos = WorldPosition(data.mapid, data.posX, data.posY, data.posZ, data.orientation);
-        s.zone = ZoneOf(data.mapid, data.posX, data.posY, data.posZ);
+        s.zone = ZoneOf(creatureZones, spawnId, data.mapid, data.posX, data.posY, data.posZ);
         s.entry = data.id;
         s.spawnId = spawnId;
         s.forAlliance = !(faction->hostileMask & FACTION_MASK_ALLIANCE);
@@ -189,31 +230,17 @@ void CraftMgr::BuildSpots()
             _auctioneers[data.mapid].push_back(s);
             ++_auctioneerCount;
         }
-        VendorItemData const* list = vendor ? sObjectMgr->GetNpcVendorItemList(data.id) : nullptr;
-        if (!list)
+        if (sold.empty())
             continue;
-        bool sells = false;
-        for (uint32 slot = 0; slot < list->GetItemCount(); ++slot)
+        for (auto const& [item, unit] : sold)
         {
-            VendorItem const* v = list->GetItem(slot);
-            if (!v || v->maxcount || v->ExtendedCost || !reagents.count(v->item))
-                continue;  // limited stock or paid in tokens: never planned on
-            ItemTemplate const* proto = sObjectMgr->GetItemTemplate(v->item);
-            if (!proto || proto->BuyPrice <= 0)
-                continue;
-            uint32 const unit =
-                std::max<uint32>(1, static_cast<uint32>(proto->BuyPrice) / std::max<uint32>(1, proto->BuyCount));
-            auto const [it, inserted] = _vendorPrice.emplace(v->item, unit);
+            auto const [it, inserted] = _vendorPrice.emplace(item, unit);
             if (!inserted && unit < it->second)
                 it->second = unit;
-            _vendors[v->item][data.mapid].push_back(s);
-            sells = true;
+            _vendors[item][data.mapid].push_back(s);
         }
-        if (sells)
-        {
-            ++_vendorCount;
-            _vendorSpots[data.mapid].push_back(s);  // any material vendor (InCraftTown, Task 7)
-        }
+        ++_vendorCount;
+        _vendorSpots[data.mapid].push_back(s);  // any material vendor (InCraftTown, Task 7)
     }
 }
 
