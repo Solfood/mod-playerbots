@@ -131,6 +131,14 @@ inline bool SkinHuntOn(uint32_t untilMs, uint32_t nowMs)
 {
     return untilMs && static_cast<int32_t>(untilMs - nowMs) > 0;
 }
+
+// The hunt filters the grind target (skinnable beasts at or below its level) only while it runs and the bot is
+// hunting: `hunting` = its status is GO_GRIND or WANDER_RANDOM (the grind spot and the wander that follows). Back on a
+// quest, route, guide step or craft trip it fights for those as before.
+inline bool SkinHuntFilters(uint32_t untilMs, uint32_t nowMs, bool hunting)
+{
+    return hunting && SkinHuntOn(untilMs, nowMs);
+}
 }  // namespace Craft
 
 #endif

@@ -73,9 +73,13 @@ Unit* GrindTargetValue::FindTargetForGrinding(uint32 assistCount)
     bool const routed = SurvivalRulesOn(bot);  // routed or guided (Plan 5c)
     bool const retreating = routed && botAI->rpgInfo.route.retreating;
     Routes::Settings const& routeRules = sPlayerbotAIConfig.questRoutes;
-    // World of Craft (Plan 6a, decision 12): on a skin hunt, only skinnable beasts at or below its level.
-    bool const skinHunt = Craft::SkinHuntOn(botAI->rpgInfo.craft.skinHuntUntilMs, getMSTime()) &&
-                          CraftMgr::instance().Crafting(bot);
+    // World of Craft (Plan 6a, decision 12): on a skin hunt, only skinnable beasts at or below its level, and only
+    // while it grinds or wanders at the spot (a quest, route, guide step or craft trip fights as before).
+    NewRpgStatus const rpgStatus = botAI->rpgInfo.GetStatus();
+    bool const skinHunt =
+        Craft::SkinHuntFilters(botAI->rpgInfo.craft.skinHuntUntilMs, getMSTime(),
+                               rpgStatus == RPG_GO_GRIND || rpgStatus == RPG_WANDER_RANDOM) &&
+        CraftMgr::instance().Crafting(bot);
 
     for (ObjectGuid const guid : targets)
     {

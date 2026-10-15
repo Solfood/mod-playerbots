@@ -148,5 +148,10 @@ int main()
     CHECK_TRUE(!SkinHuntOn(5000, 9000));
     CHECK_TRUE(SkinHuntOn(100, 0xFFFFFF00u));   // ends just after the clock wraps; read just before: still on
     CHECK_TRUE(!SkinHuntOn(0xFFFFFF00u, 100));  // ended just before the wrap; read just after: over
+    // the hunt filters targets only while it grinds or wanders there (not back on a quest, route, guide or craft trip)
+    CHECK_TRUE(SkinHuntFilters(9000, 5000, true));
+    CHECK_TRUE(!SkinHuntFilters(9000, 5000, false));
+    CHECK_TRUE(!SkinHuntFilters(5000, 9000, true));
+    CHECK_TRUE(!SkinHuntFilters(0, 5000, true));
     return UnitFailures();
 }
