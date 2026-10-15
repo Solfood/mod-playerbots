@@ -16,6 +16,7 @@
 #include "Item.h"
 #include "ItemUsageValue.h"
 #include "MarketRules.h"
+#include "MoveSpline.h"
 #include "ObjectMgr.h"
 #include "Player.h"
 #include "PlayerbotAIConfig.h"
@@ -185,7 +186,15 @@ bool NewRpgCraftAction::ReadyToCast()
     bool ready = true;
     if (bot->isMoving())
     {
-        bot->StopMoving();
+        // isMoving() reads the movement flags, and a bot has no client to clear them. With no spline running (it is
+        // not walking), a flag left behind (a fall that ended with FALLING still set) keeps isMoving() true for good:
+        // StopMoving() does nothing then, so the bot never casts, never walks (the walk guard never gives up), and the
+        // trip holds it in place until TripMinutes (Task 13: bots stood 15 minutes at a forge and made nothing).
+        // Clear the stale flags; a bot that really walks is stopped as before.
+        if (bot->movespline->Finalized())
+            bot->m_movementInfo.RemoveMovementFlag(MOVEMENTFLAG_MASK_MOVING);
+        else
+            bot->StopMoving();
         ready = false;
     }
     if (bot->IsMounted())
