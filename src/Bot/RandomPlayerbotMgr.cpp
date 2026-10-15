@@ -3240,6 +3240,8 @@ void RandomPlayerbotMgr::PrintStats()
             LOG_INFO("playerbots", "    FollowRoute: {}", rpgStatusCount[RPG_FOLLOW_ROUTE]);
         if (sPlayerbotAIConfig.guideBots.enabled)
             LOG_INFO("playerbots", "    FollowGuide: {}", rpgStatusCount[RPG_FOLLOW_GUIDE]);
+        if (sPlayerbotAIConfig.crafting.enabled)
+            LOG_INFO("playerbots", "    Craft: {}", rpgStatusCount[RPG_CRAFT]);
 
         LOG_INFO("playerbots", "Bots total quests:");
         LOG_INFO("playerbots", "    Accepted: {}, Rewarded: {}, Dropped: {}", rpgStasticTotal.questAccepted,

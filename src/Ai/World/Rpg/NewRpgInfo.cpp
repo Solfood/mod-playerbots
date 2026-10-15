@@ -104,6 +104,16 @@ void NewRpgInfo::ChangeToFollowGuide()
     data = FollowGuide{};
 }
 
+void NewRpgInfo::ChangeToCraft(::Craft::Plan plan, bool guided)
+{
+    startT = getMSTime();
+    CraftTrip trip;
+    trip.batch = std::move(plan.batch);
+    trip.buy = std::move(plan.buy);
+    trip.guided = guided;
+    data = std::move(trip);
+}
+
 bool NewRpgInfo::CanChangeTo(NewRpgStatus)
 {
     return true;
@@ -137,6 +147,7 @@ NewRpgStatus NewRpgInfo::StatusFromString(std::string const& name)
     if (name == "do gather")      return RPG_DO_GATHER;
     if (name == "follow route")   return RPG_FOLLOW_ROUTE;
     if (name == "follow guide")   return RPG_FOLLOW_GUIDE;
+    if (name == "craft")          return RPG_CRAFT;
     return RPG_STATUS_END;
 }
 
@@ -156,6 +167,7 @@ NewRpgStatus NewRpgInfo::GetStatus()
         if constexpr (std::is_same_v<T, DoGather>) return RPG_DO_GATHER;
         if constexpr (std::is_same_v<T, FollowRoute>) return RPG_FOLLOW_ROUTE;
         if constexpr (std::is_same_v<T, FollowGuide>) return RPG_FOLLOW_GUIDE;
+        if constexpr (std::is_same_v<T, CraftTrip>) return RPG_CRAFT;
         return RPG_IDLE;
     }, data);
 }
@@ -248,6 +260,12 @@ std::string NewRpgInfo::ToString()
         {
             out << "FOLLOW_GUIDE";
             out << "\nguide: " << guide.guide << " seq: " << guide.seq;
+        }
+        else if constexpr (std::is_same_v<T, CraftTrip>)
+        {
+            out << "CRAFT";
+            out << "\nphase: " << uint32(arg.phase) << " step: " << arg.step << " of " << arg.batch.size();
+            out << "\nmade: " << arg.made << " to buy: " << arg.buy.size();
         }
         else
             out << "UNKNOWN";

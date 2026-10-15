@@ -78,6 +78,7 @@ protected:
     const int32 statusDoGatherDuration = 15 * MINUTE * IN_MILLISECONDS;
     const int32 statusFollowRouteDuration = 45 * MINUTE * IN_MILLISECONDS;
     const int32 statusFollowGuideDuration = 45 * MINUTE * IN_MILLISECONDS;
+    const int32 statusCraftSlackMs = MINUTE * IN_MILLISECONDS;  // CRAFT ends itself at TripMinutes; this is a backstop
 };
 
 class NewRpgGoGrindAction : public NewRpgBaseAction

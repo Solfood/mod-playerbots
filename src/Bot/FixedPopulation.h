@@ -57,6 +57,16 @@ enum class EconomyCounter : uint8
     GuidesPaused,       // guides paused for a session (none for the bot, finished, no way to its next step)
     GuideRidesFailed,   // boats, zeppelins and portals that never took a bot there in RideMinutes (guide paused)
     GuideRidesTeleported,  // ... and the bot was moved to where the ride lands instead (decision 0004)
+    CraftsMade,           // World of Craft (Plan 6a): craft casts that started (smelting not included)
+    CraftsEquipped,       // crafted items a bot wears after its trip (it made them itself)
+    GatherYield,          // items stored from gathering nodes and skinning (every population bot; a count only)
+    Smelts,               // smelting casts
+    AuctionsListed,       // auctions a bot created through the core's handler
+    AuctionsSold,         // its auctions that sold (the sale mail collected)
+    AuctionsBought,       // buyouts it made
+    AuctionGoldIn,        // copper from sale mails collected (the price: no cut on this server, our own rule)
+    AuctionGoldOut,       // copper paid in buyouts (and deposits, were a server to charge them)
+    CraftTripsAbandoned,  // craft trips ended by the clock or an unreachable vendor or station
     Count
 };
 

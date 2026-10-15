@@ -703,6 +703,20 @@ bool PlayerbotAIConfig::Initialize()
     guideBots.lookahead = sConfigMgr->GetOption<uint32>("AiPlayerbot.GuideBots.StepLookahead", 8);
     guideBots.crowdWaitMinutes = sConfigMgr->GetOption<uint32>("AiPlayerbot.GuideBots.CrowdWaitMinutes", 10);
     guideBots.rideMinutes = sConfigMgr->GetOption<uint32>("AiPlayerbot.GuideBots.RideMinutes", 10);
+    crafting.enabled = sConfigMgr->GetOption<bool>("AiPlayerbot.Crafting", false);
+    crafting.hubAuctioneers = sConfigMgr->GetOption<bool>("AiPlayerbot.Crafting.HubAuctioneers", false);
+    crafting.tripMinutes = sConfigMgr->GetOption<uint32>("AiPlayerbot.Crafting.TripMinutes", 15);
+    crafting.emptyCooldownMinutes = sConfigMgr->GetOption<uint32>("AiPlayerbot.Crafting.EmptyCooldownMinutes", 30);
+    crafting.maxListings = sConfigMgr->GetOption<uint32>("AiPlayerbot.Crafting.MaxListings", 10);
+    crafting.listHours = sConfigMgr->GetOption<uint32>("AiPlayerbot.Crafting.ListHours", 24);
+    if (crafting.listHours != 12 && crafting.listHours != 24 && crafting.listHours != 48)
+        crafting.listHours = 24;  // the core accepts only 12, 24 or 48 hours
+    crafting.materialPricePct = sConfigMgr->GetOption<uint32>("AiPlayerbot.Crafting.MaterialPricePct", 300);
+    crafting.undercutPct = sConfigMgr->GetOption<uint32>("AiPlayerbot.Crafting.UndercutPct", 2);
+    crafting.relistPct = sConfigMgr->GetOption<uint32>("AiPlayerbot.Crafting.RelistPct", 80);
+    crafting.supplyStack = sConfigMgr->GetOption<uint32>("AiPlayerbot.Crafting.SupplyStack", 5);
+    crafting.stationYards = sConfigMgr->GetOption<uint32>("AiPlayerbot.Crafting.StationYards", 1500);
+    crafting.townYards = sConfigMgr->GetOption<uint32>("AiPlayerbot.Crafting.TownYards", 150);
     professionPickMinLevel = sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.ProfessionMinLevel", 5);
     professionPickMaxLevel = sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.ProfessionMaxLevel", 10);
     if (professionPickMaxLevel < professionPickMinLevel)
@@ -783,6 +797,7 @@ bool PlayerbotAIConfig::Initialize()
     RpgStatusProbWeight[RPG_REST] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.Rest", 5);
     RpgStatusProbWeight[RPG_OUTDOOR_PVP] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.OutdoorPvp", 10);
     RpgStatusProbWeight[RPG_DO_GATHER] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.DoGather", 15);
+    RpgStatusProbWeight[RPG_CRAFT] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.Craft", 15);
     rpgFocusMultiplier = sConfigMgr->GetOption<uint32>("AiPlayerbot.RpgFocusMultiplier", 6);
 
     syncLevelWithPlayers = sConfigMgr->GetOption<bool>("AiPlayerbot.SyncLevelWithPlayers", false);

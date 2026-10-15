@@ -931,6 +931,7 @@ void PlayerbotAI::Reset(bool full)
         fresh.lastStuckDest = rpgInfo.lastStuckDest;
         fresh.route = std::move(rpgInfo.route);  // quest routes: hub, style, head_to (and later the survival state)
         fresh.guide = std::move(rpgInfo.guide);  // guides: its place, pause and session skips
+        fresh.craft = std::move(rpgInfo.craft);  // World of Craft: its cooldown, listings and held items
         rpgInfo = std::move(fresh);
     }
 

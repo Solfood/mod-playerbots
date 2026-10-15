@@ -10,6 +10,7 @@
 #include "DBCEnums.h"
 #include "RouteSettings.h"
 #include "GuideSettings.h"
+#include "CraftSettings.h"
 #include "SharedDefines.h"
 #include <algorithm>
 #include <map>
@@ -79,7 +80,10 @@ enum NewRpgStatus : int
     RPG_FOLLOW_ROUTE = 10,
     // Follow a levelling guide step by step (guildmaster guides; only when AiPlayerbot.GuideBots = 1 or a test seam)
     RPG_FOLLOW_GUIDE = 11,
-    RPG_STATUS_END = 12
+    // A craft trip: buy materials, walk to a station, craft, use the results (World of Craft; only when
+    // AiPlayerbot.Crafting = 1 or a test seam)
+    RPG_CRAFT = 12,
+    RPG_STATUS_END = 13
 };
 
 #define MAX_SPECNO 20
@@ -374,6 +378,7 @@ public:
     uint32 fixedPopulationTownTripTimeout;
     Routes::Settings questRoutes;  // guildmaster quest routes (AiPlayerbot.QuestRoutes.*), off by default
     Guides::Settings guideBots;  // AiPlayerbot.GuideBots.* (guildmaster Plan 5c)
+    Craft::Settings crafting;    // AiPlayerbot.Crafting.* (guildmaster World of Craft part 1, Plan 6a)
     uint32 professionPickMinLevel;
     uint32 professionPickMaxLevel;
     float spiritHealerGraveRadius;

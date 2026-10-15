@@ -8,6 +8,7 @@
 #include "BroadcastHelper.h"
 #include "ChatHelper.h"
 #include "Event.h"
+#include "FixedPopulation.h"
 #include "GuideMgr.h"
 #include "GuildMgr.h"
 #include "GuildTaskMgr.h"
@@ -487,6 +488,11 @@ bool StoreLootAction::Execute(Event event)
                     if (ref->GetSource() != bot)
                         GuildTaskMgr::instance().CheckItemTask(itemid, itemcount, ref->GetSource(), bot);
         }
+
+        // World of Craft (Plan 6a): gathering yield, from nodes and skins (a count only; changes no bot).
+        if (sRandomPlayerbotMgr.IsRandomBot(bot) &&
+            (loot_type == LOOT_SKINNING || (guid.IsGameObject() && proto->Class == ITEM_CLASS_TRADE_GOODS)))
+            FixedPopulation::Count(EconomyCounter::GatherYield, itemcount);
 
         WorldPacket* packet = new WorldPacket(CMSG_AUTOSTORE_LOOT_ITEM, 1);
         *packet << itemindex;

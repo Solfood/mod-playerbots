@@ -8,10 +8,12 @@
 #define PLAYERBOTS_NEWRPGINFO_H
 
 #include <deque>
+#include <map>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
 
+#include "CraftPlanRules.h"
 #include "Define.h"
 #include "ObjectGuid.h"
 #include "ObjectMgr.h"
@@ -112,6 +114,21 @@ struct NewRpgInfo
     {
         uint32 lastTickMs{0};  // the action's last tick (the safety net's clock; 0 = none yet)
     };
+    // RPG_CRAFT (World of Craft part 1, Plan 6a): one craft trip, planned before it started (CraftMgr::PlanFor).
+    struct CraftTrip
+    {
+        uint8 phase{0};                       // 0 shop for vendor materials, 1 make the batch, 2 use the results
+        std::vector<::Craft::Step> batch;     // the plan, in priority order (CraftPlanRules)
+        std::map<uint32, uint32> buy;         // vendor materials still to buy: item -> count
+        uint32 step{0};                       // index into batch
+        uint32 castsDone{0};                  // casts of batch[step] made
+        uint32 made{0};                       // casts made on this trip (smelting included)
+        std::vector<uint32> products;         // gear it made (counted as worn after the trip if it wears it)
+        WorldPosition target{};               // the vendor or station it walks to now (empty = none)
+        Guides::Approach approach{};          // no 5 yards closer in 60 s of walking: the trip is given up
+        uint32 lastTickMs{0};                 // the approach clock's last tick (0 = none yet)
+        bool guided{false};                   // planned as a guided bot: stations and vendors in town only
+    };
     struct Idle
     {
     };
@@ -167,9 +184,29 @@ struct NewRpgInfo
         } step;
     };
     GuideState guide;
+    // World of Craft (Plan 6a): kept across statuses and AI resets, lost at logout.
+    struct CraftState
+    {
+        uint32 emptyAtMs{0};        // a trip (or a plan) that made nothing ended then: the cooldown runs (0 = none)
+        uint32 skinHuntUntilMs{0};  // a skin hunt (Task 9): the grind target takes skinnable beasts only until then
+        uint32 auctionTripMs{0};    // the town trip (lastErrandMs) it visited an auctioneer on: one visit per trip
+        uint32 liveListings{0};     // its live auctions, as the last visit counted them (sales and returns lower it)
+        uint32 listableAtMs{0};     // when `listable` was last counted (at most once a minute)
+        uint32 listable{0};         // items it holds back for its next auction visit (CraftMgr::HeldForAuction)
+        std::unordered_map<uint32, uint8> returned;       // item entry -> times an auction of it came back unsold
+        std::unordered_map<uint32, uint32> askedPerUnit;  // item entry -> buyout per unit it last asked
+        ::Craft::Plan pending;      // the plan the roll's availability check made; ChangeToCraft takes it
+        uint32 pendingAtMs{0};
+        bool pendingGuided{false};  // `pending` was planned as a guided bot (in town only)
+        std::map<uint32, uint32> missing;       // from its last plan: materials an auction visit may buy
+        std::map<uint32, uint32> missingValue;  // ... and what the recipe they were missing for is worth
+        std::map<uint32, uint64> missingOtherCost;  // ... and the vendor cost of that recipe's other materials
+        GuidSet heldItems;          // the items it holds back for the auction house (refreshed with `listable`)
+    };
+    CraftState craft;
     WorldPosition abandonedTrip;  // where the last town trip given up was going (the next repair trip avoids it)
 
-    // Guildmaster bridge focus (0 none, 1 questing, 2 grinding, 3 pvp, 4 gathering, 5 resting; the bridge's
+    // Guildmaster bridge focus (0 none, 1 questing, 2 grinding, 3 pvp, 4 gathering, 5 resting, 6 crafting; the bridge's
     // Focus enum uses the same numbers). Multiplies the weights of matching statuses in RandomChangeStatus.
     uint8 focus{0};
     // `routed`: the bot follows quest routes. Its questing focus boosts the route as DO_QUEST (guildmaster spec §3
@@ -189,6 +226,8 @@ struct NewRpgInfo
                 return status == RPG_DO_GATHER;
             case 5:
                 return status == RPG_REST || status == RPG_WANDER_NPC || status == RPG_GO_CAMP;
+            case 6:
+                return status == RPG_CRAFT;
             default:
                 return false;
         }
@@ -216,7 +255,8 @@ struct NewRpgInfo
         OutdoorPvP,
         DoGather,
         FollowRoute,
-        FollowGuide
+        FollowGuide,
+        CraftTrip
     >;
     RpgData data;
 
@@ -237,6 +277,7 @@ struct NewRpgInfo
     // FOLLOW_ROUTE to a class quest's giver (spec §4: class quests first); its hub binding is kept.
     void ChangeToClassQuest(uint32 questId, WorldPosition giver);
     void ChangeToFollowGuide();
+    void ChangeToCraft(::Craft::Plan plan, bool guided);
     bool CanChangeTo(NewRpgStatus status);
     void Reset();
     void SetMoveFarTo(WorldPosition pos);

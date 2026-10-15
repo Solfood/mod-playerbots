@@ -891,6 +891,34 @@ AiPlayerbot.GuideBots.StepLookahead = 8
 AiPlayerbot.GuideBots.CrowdWaitMinutes = 10
 AiPlayerbot.GuideBots.RideMinutes = 10
 
+# World of Craft, part 1 (guildmaster Plan 6a). With Crafting = 1, population bots of a new world pick a gathering
+# profession plus the craft that uses it, gather for their recipes, go on craft trips (buy vendor materials, walk to
+# an anvil, forge or fire, craft, wear upgrades, keep food, bandages and potions) and trade extras at the auction house
+# through the core's own auction functions and mail (guildmaster sets no auction fees and instant mail in
+# worldserver.conf: its own rule). Off (0) means bots behave exactly as
+# before. Changing these needs a worldserver restart.
+# HubAuctioneers: OUR OWN RULE, not standard WoW: an auctioneer in 14 quest hubs per faction (in memory, never saved).
+#     The world controller turns it on only for a New Game with crafting on.
+# TripMinutes: a craft trip ends after this long. EmptyCooldownMinutes: a trip that made nothing waits this long.
+# MaxListings: live auctions per bot. ListHours: 12, 24 or 48.
+# MaterialPricePct: a material's start price, % of its vendor value (gear: 400-800 % by item level).
+# UndercutPct: below the cheapest same-item listing. RelistPct: a returned item is listed once more at this %.
+# SupplyStack: food, bandages and potions a bot keeps. StationYards: the farthest station an unguided bot walks to.
+# TownYards: a guided bot crafts only at a station this near (in the town it is in).
+# Defaults: 0, 0, 15, 30, 10, 24, 300, 2, 80, 5, 1500, 150
+AiPlayerbot.Crafting = 0
+AiPlayerbot.Crafting.HubAuctioneers = 0
+AiPlayerbot.Crafting.TripMinutes = 15
+AiPlayerbot.Crafting.EmptyCooldownMinutes = 30
+AiPlayerbot.Crafting.MaxListings = 10
+AiPlayerbot.Crafting.ListHours = 24
+AiPlayerbot.Crafting.MaterialPricePct = 300
+AiPlayerbot.Crafting.UndercutPct = 2
+AiPlayerbot.Crafting.RelistPct = 80
+AiPlayerbot.Crafting.SupplyStack = 5
+AiPlayerbot.Crafting.StationYards = 1500
+AiPlayerbot.Crafting.TownYards = 150
+
 # Death knight "raisings" (only with FixedPopulation = 1). None at launch. Once a bot of a faction reaches
 # UnlockLevel, every WaveIntervalHours that faction raises bots that died within RecentDeathHours at
 # MinCandidateLevel or higher: the original character retires (kept in the database) and a level-55
@@ -1576,6 +1604,7 @@ AiPlayerbot.EnableNewRpgStrategy = 1
 # Rest          (Default: 5   Take a break for a while and do nothing)
 # OutdoorPvp    (Default: 10  Participate in outdoor PvP capture points if already in an outdoor PvP zone)
 # DoGather      (Default: 15  Roam the current zone harvesting herb/ore nodes; requires Herbalism or Mining)
+# Craft         (Default: 15  A craft trip; only with AiPlayerbot.Crafting = 1)
 AiPlayerbot.RpgStatusProbWeight.WanderRandom = 15
 AiPlayerbot.RpgStatusProbWeight.WanderNpc = 20
 AiPlayerbot.RpgStatusProbWeight.GoGrind = 15
@@ -1585,6 +1614,7 @@ AiPlayerbot.RpgStatusProbWeight.TravelFlight = 15
 AiPlayerbot.RpgStatusProbWeight.Rest = 5
 AiPlayerbot.RpgStatusProbWeight.OutdoorPvp = 10
 AiPlayerbot.RpgStatusProbWeight.DoGather = 15
+AiPlayerbot.RpgStatusProbWeight.Craft = 15
 
 #    AiPlayerbot.RpgFocusMultiplier
 #        Description: Guildmaster bridge focus. A bot with a focus picks the matching new-RPG activities this

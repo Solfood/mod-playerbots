@@ -6,6 +6,7 @@
 
 #include "BattleGroundTactics.h"
 #include "Chat.h"
+#include "CraftCommand.h"
 #include "EconomyCommand.h"
 #include "GuideCommand.h"
 #include "GuildTaskMgr.h"
@@ -43,6 +44,7 @@ public:
             {"econ", HandleEconomyCommand, SEC_GAMEMASTER, Console::Yes},
             {"routes", HandleRoutesCommand, SEC_GAMEMASTER, Console::Yes},
             {"guides", HandleGuidesCommand, SEC_GAMEMASTER, Console::Yes},
+            {"craft", HandleCraftCommand, SEC_GAMEMASTER, Console::Yes},
             {"debug", playerbotsDebugCommandTable},
             {"account", playerbotsAccountCommandTable},
         };
@@ -75,6 +77,11 @@ public:
     }
 
     static bool HandleGuidesCommand(ChatHandler* handler, char const* args) { return GuideCommand::Handle(handler, args); }
+
+    static bool HandleCraftCommand(ChatHandler* handler, char const* args)
+    {
+        return CraftCommand::Handle(handler, args);
+    }
 
     static bool HandleGuildTaskCommand(ChatHandler* handler, char const* args)
     {

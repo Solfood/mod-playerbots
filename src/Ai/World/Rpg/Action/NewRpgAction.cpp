@@ -531,6 +531,18 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
             }
             break;
         }
+        case RPG_CRAFT:
+        {
+            // The trip ends itself at TripMinutes (Task 7); this backstop only catches a trip whose action stopped
+            // running (a bot held by a dungeon run, a stuck strategy).
+            if (info.HasStatusPersisted(sPlayerbotAIConfig.crafting.tripMinutes * MINUTE * IN_MILLISECONDS +
+                                        statusCraftSlackMs))
+            {
+                info.ChangeToIdle();
+                return true;
+            }
+            break;
+        }
         default:
             break;
     }
