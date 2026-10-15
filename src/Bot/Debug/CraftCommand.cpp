@@ -6,12 +6,14 @@
 
 #include "CraftCommand.h"
 
+#include <algorithm>
 #include <sstream>
 #include <string>
 #include <vector>
 
 #include "Chat.h"
 #include "CraftMgr.h"
+#include "MapMgr.h"
 #include "NewRpgInfo.h"
 #include "ObjectAccessor.h"
 #include "Player.h"
@@ -67,7 +69,7 @@ bool CraftCommand::Handle(ChatHandler* handler, char const* args)
     std::vector<std::string> const words = Words(args);
     if (words.empty())
     {
-        handler->PSendSysMessage("CRAFTERR usage: craft stats | on|off|bot <name>");
+        handler->PSendSysMessage("CRAFTERR usage: craft stats | hubs | on|off|bot <name>");
         return false;
     }
     CraftMgr& crafts = CraftMgr::instance();
@@ -76,9 +78,28 @@ bool CraftCommand::Handle(ChatHandler* handler, char const* args)
 
     if (sub == "stats")
     {
-        handler->PSendSysMessage("CRAFTSTAT on={} built={} test={} build_ms={}",
-                                 sPlayerbotAIConfig.crafting.enabled ? 1 : 0, crafts.Built() ? 1 : 0,
-                                 crafts.TestCount(), crafts.BuildMs());
+        handler->PSendSysMessage("CRAFTSTAT on={} hubs_on={} built={} recipes={} stations={} vendors={} auctioneers={} "
+                                 "hubs={} test={} build_ms={}",
+                                 sPlayerbotAIConfig.crafting.enabled ? 1 : 0,
+                                 sPlayerbotAIConfig.crafting.hubAuctioneers ? 1 : 0, crafts.Built() ? 1 : 0,
+                                 crafts.RecipeCount(), crafts.StationCount(), crafts.VendorCount(),
+                                 crafts.AuctioneerCount(), crafts.HubSpawns().size(), crafts.TestCount(),
+                                 crafts.BuildMs());
+        return true;
+    }
+    if (sub == "hubs")
+    {
+        for (CraftMgr::HubSpawn const& h : crafts.HubSpawns())
+        {
+            std::string name = h.hub;
+            std::replace(name.begin(), name.end(), ' ', '_');
+            // live: the creature stands in the world now (its grid is loaded: a player or bot is near)
+            Map* map = sMapMgr->FindBaseMap(h.map);
+            bool const live = map && map->GetCreatureBySpawnIdStore().count(h.spawnId) > 0;
+            handler->PSendSysMessage("CRAFTHUB hub={} spawn={} map={} x={:.1f} y={:.1f} live={}", name, h.spawnId,
+                                     h.map, h.x, h.y, live ? 1 : 0);
+        }
+        handler->PSendSysMessage("CRAFTOK hubs n={}", crafts.HubSpawns().size());
         return true;
     }
     if (words.size() < 2)

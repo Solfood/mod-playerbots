@@ -10,6 +10,7 @@
 #include "Channel.h"
 #include "CheckMountStateAction.h"
 #include "Config.h"
+#include "CraftMgr.h"
 #include "BuiltInConfig.h"
 #include "DBUpdater.h"
 #include "DatabaseEnv.h"
@@ -580,6 +581,14 @@ public:
         {
             LOG_INFO("server.loading", "Loading guide routes...");
             GuideMgr::instance().Build();
+        }
+
+        // World of Craft (guildmaster Plan 6a): built only when crafting is on, or when this world asked for hub
+        // auctioneers (a New Game with crafting on); with both off nothing is built or spawned at startup.
+        if (sPlayerbotAIConfig.crafting.enabled || sPlayerbotAIConfig.crafting.hubAuctioneers)
+        {
+            LOG_INFO("server.loading", "Building crafting indexes...");
+            CraftMgr::instance().Build();
         }
 
         LOG_INFO("server.loading", "Playerbots World Thread Processor initialized");
