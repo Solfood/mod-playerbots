@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <sstream>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 #include "Chat.h"
@@ -68,9 +69,10 @@ void PrintBot(ChatHandler* handler, Player* bot)
         if (Item* item = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slot))
             if (item->GetGuidValue(ITEM_FIELD_CREATOR) == bot->GetGUID())
                 ++wornOwn;
-    uint32 ore = 0;  // ore it holds: the reagents of the smelting recipes (one ore can feed two: a live-check hint)
+    uint32 ore = 0;  // ore it holds: the first reagents of the ore-to-bar recipes (Craft::OreToBar), each ore once
+    std::unordered_set<uint32> ores;
     for (CraftRecipeInfo const* r : CraftMgr::instance().RecipesOf(SKILL_MINING))
-        if (!r->reagents.empty())
+        if (r->oreSmelt && ores.insert(r->reagents[0].item).second)
             ore += bot->GetItemCount(r->reagents[0].item, false);
     out << " step=" << (trip ? trip->step : 0) << " steps=" << (trip ? trip->batch.size() : 0)
         << " made=" << (trip ? trip->made : 0) << " worn_own=" << wornOwn << " ore=" << ore;

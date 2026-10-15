@@ -76,6 +76,11 @@ int main()
     CHECK_EQ(29u * MINUTE_MS, CooldownLeftMs(0xFFFFFFFFu - 999, 0xFFFFFFFFu - 999 + MINUTE_MS, 30));  // the clock wraps
 
     // stations: never in a zone above its level; a guided bot only in town
+    // station arrival (fix round 1): inside the spell focus radius with a 2-yard margin, at least 3 yards
+    CHECK_TRUE(StationArriveYards(10) == 8.0f);
+    CHECK_TRUE(StationArriveYards(5) == 3.0f);
+    CHECK_TRUE(StationArriveYards(0) == 3.0f);  // no radius in the data: close in
+    CHECK_TRUE(StationArriveYards(20) == 18.0f);
     CHECK_TRUE(StationOk(false, 1200.0f, false, 1500, 150));
     CHECK_TRUE(!StationOk(true, 10.0f, false, 1500, 150));
     CHECK_TRUE(!StationOk(false, 1600.0f, false, 1500, 150));

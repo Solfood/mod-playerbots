@@ -37,6 +37,7 @@ struct CraftRecipeInfo
     uint32 high = 0;                       // ... grey from here
     bool enchant = false;
     bool smelt = false;
+    bool oreSmelt = false;                 // smelt, ore to bars (Craft::OreToBar); bar-to-bar recipes are not
     std::array<uint32, 2> totem{};         // tools it needs in the bags (item ids)
     std::array<uint32, 2> totemCategory{}; // ... or tool kinds (a Blacksmith Hammer is category 162)
     std::vector<::Craft::Reagent> reagents;
@@ -48,6 +49,7 @@ struct CraftSpot
     WorldPosition pos;
     uint32 zone = 0;
     uint32 focus = 0;                      // stations: the spell focus id
+    uint32 focusDist = 0;                  // stations: the focus's reach (GO data1; the core's GameObjectFocusCheck)
     uint32 entry = 0;                      // vendors and auctioneers: the creature entry
     ObjectGuid::LowType spawnId = 0;
     bool forAlliance = true;               // creatures: not hostile to that faction

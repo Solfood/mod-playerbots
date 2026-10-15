@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -94,6 +95,16 @@ struct Reagent
     uint32_t item = 0;
     uint32_t count = 0;
 };
+
+// A smelting recipe that turns ore into bars (decision 8: smelted first): its first reagent is no smelting recipe's
+// product. Bar-to-bar recipes (Smelt Bronze: copper bar + tin bar) are not: they rank as skill-ups or extras, so they
+// never take bars meant for gear. `smeltProducts`: what the smelting recipes make (bars come in Metal & Stone too, so
+// the item class cannot tell ore from bar).
+inline bool OreToBar(bool smelt, std::vector<Reagent> const& reagents,
+                     std::unordered_set<uint32_t> const& smeltProducts)
+{
+    return smelt && !reagents.empty() && !smeltProducts.count(reagents[0].item);
+}
 
 struct Recipe
 {

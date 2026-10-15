@@ -2,6 +2,8 @@
 #include "../../src/Ai/World/Rpg/Craft/CraftPlanRules.h"
 #include "check.h"
 
+#include <unordered_set>
+
 using namespace Craft;
 
 namespace
@@ -25,6 +27,14 @@ Recipe R(uint32_t spell, Want want, uint32_t casts, std::vector<Reagent> reagent
 int main()
 {
     // colours and wants
+    // ore to bar (fix round 1): a smelting recipe smelts ore only when its first reagent is no smelting product
+    {
+        std::unordered_set<uint32_t> const bars = {2840, 3576, 2841};  // copper, tin, bronze bars
+        CHECK_TRUE(OreToBar(true, {{2770, 1}}, bars));                // Smelt Copper: copper ore
+        CHECK_TRUE(!OreToBar(true, {{2840, 1}, {3576, 1}}, bars));    // Smelt Bronze: bars to a bar
+        CHECK_TRUE(!OreToBar(false, {{2770, 1}}, bars));              // not a smelting recipe
+        CHECK_TRUE(!OreToBar(true, {}, bars));                        // no reagent
+    }
     CHECK_EQ(static_cast<int>(Color::Orange), static_cast<int>(ColorOf(10, 15, 35)));
     CHECK_EQ(static_cast<int>(Color::Yellow), static_cast<int>(ColorOf(20, 15, 35)));
     CHECK_EQ(static_cast<int>(Color::Green), static_cast<int>(ColorOf(30, 15, 35)));

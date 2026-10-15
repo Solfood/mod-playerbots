@@ -53,6 +53,11 @@ inline bool StationOk(bool zoneAboveLevel, float yards, bool guided, uint32_t st
     return yards <= float(guided ? townYards : stationYards);
 }
 
+// Where a bot counts as at its station (fix round 1): inside the spell focus's radius (its GO data1, the core's
+// GameObjectFocusCheck) with a 2-yard margin, and at least 3 yards. The focus object may sit inside a forge's model, so
+// a fixed few yards could never be reached.
+inline float StationArriveYards(uint32_t focusDist) { return focusDist > 5 ? float(focusDist) - 2.0f : 3.0f; }
+
 // One auction house visit per town trip: the trip is known by the errand clock it started (lastErrandMs).
 inline bool AuctionVisitDue(uint32_t visitedTripMs, uint32_t tripMs) { return tripMs && visitedTripMs != tripMs; }
 

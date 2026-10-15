@@ -25,7 +25,6 @@
 
 namespace
 {
-constexpr float STATION_ARRIVE_YARDS = 4.0f;  // inside a spell focus's reach (most reach 10 yards)
 constexpr float VENDOR_ARRIVE_YARDS = 4.0f;   // inside INTERACTION_DISTANCE (5.5)
 constexpr float VENDOR_LOOK_YARDS = 40.0f;    // near its spot: look for the vendor itself (it may step about)
 constexpr uint32 APPROACH_MS = 60 * IN_MILLISECONDS;
@@ -231,7 +230,8 @@ bool NewRpgCraftAction::Make(NewRpgInfo::CraftTrip& trip)
                 NextStep(trip);
                 continue;
             }
-            if (bot->GetExactDist(station->pos) > STATION_ARRIVE_YARDS)
+            // Inside the focus's reach, with a margin (the focus object may sit inside a forge's model).
+            if (bot->GetExactDist(station->pos) > Craft::StationArriveYards(station->focusDist))
                 return WalkTo(trip, station->pos);
         }
         if (!ReadyToCast())

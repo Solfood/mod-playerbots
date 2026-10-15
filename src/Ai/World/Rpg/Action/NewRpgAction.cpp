@@ -40,6 +40,7 @@
 #include "Timer.h"
 #include "TownErrands.h"
 #include "TravelMgr.h"
+#include "TripRules.h"
 #include "WaypointMovementGenerator.h"
 #include "G3D/Vector2.h"
 #include <cmath>
@@ -543,6 +544,10 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
             if (info.HasStatusPersisted(sPlayerbotAIConfig.crafting.tripMinutes * MINUTE * IN_MILLISECONDS +
                                         statusCraftSlackMs))
             {
+                // A trip that made nothing starts the cooldown here too (fix round 1), as NewRpgCraftAction::End does.
+                auto const* trip = std::get_if<NewRpgInfo::CraftTrip>(&info.data);
+                if (Craft::CooldownAfterTrip(trip ? trip->made : 0, sPlayerbotAIConfig.crafting.emptyCooldownMinutes))
+                    info.craft.emptyAtMs = std::max<uint32>(1, getMSTime());
                 info.ChangeToIdle();
                 return true;
             }

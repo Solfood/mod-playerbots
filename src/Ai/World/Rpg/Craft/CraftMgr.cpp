@@ -167,6 +167,13 @@ void CraftMgr::BuildRecipes()
             continue;  // listed twice (race variants of one ability)
         _recipes.push_back(std::move(r));
     }
+    // Ore to bar (decision 8, fix round 1): a smelting recipe whose first reagent no smelting recipe makes.
+    std::unordered_set<uint32_t> smeltProducts;
+    for (CraftRecipeInfo const& r : _recipes)
+        if (r.smelt && r.product)
+            smeltProducts.insert(r.product);
+    for (CraftRecipeInfo& r : _recipes)
+        r.oreSmelt = Craft::OreToBar(r.smelt, r.reagents, smeltProducts);
     // The vector is complete: pointers into it are stable from here.
     for (CraftRecipeInfo const& r : _recipes)
     {
@@ -197,6 +204,7 @@ void CraftMgr::BuildSpots()
         s.pos = WorldPosition(data.mapid, data.posX, data.posY, data.posZ);
         s.zone = ZoneOf(goZones, spawnId, data.mapid, data.posX, data.posY, data.posZ);
         s.focus = focus;
+        s.focusDist = go->spellFocus.dist;
         s.spawnId = spawnId;
         _stations[data.mapid].push_back(s);
         ++_stationCount;
@@ -461,9 +469,10 @@ bool CraftMgr::IsSupply(ItemTemplate const* proto)
             c.productCount = r->productCount;
             c.reagents = r->reagents;
             c.station = r->station;
-            if (r->smelt)
+            if (r->oreSmelt)
             {
-                // Decision 8: a miner smelts the ore it holds first; the bars count for the recipes after it.
+                // Decision 8: a miner smelts the ore it holds first; the bars count for the recipes after it. A
+                // bar-to-bar recipe (Smelt Bronze) is no ore smelt: it goes below, as a skill-up or an extra.
                 uint32 const ore = r->reagents.empty() ? 0 : held(r->reagents[0].item);
                 c.want = ore ? ::Craft::Want::Smelt : ::Craft::Want::None;
                 c.casts = ::Craft::CastsWanted(c.want, color, ore, 0, r->reagents.empty() ? 1 : r->reagents[0].count);
