@@ -190,9 +190,12 @@ int main()
     std::map<uint32_t, uint32_t> bars = {{2840, 4}};
     std::map<uint32_t, uint32_t> moreBars = {{2840, 6}};
     std::map<uint32_t, uint32_t> barsAndCloth = {{2840, 4}, {2589, 2}};
+    std::map<uint32_t, uint32_t> cloth = {{2589, 4}};
     CHECK_EQ(0u, MissingSignature(none));
     CHECK_TRUE(MissingSignature(bars) != 0);
-    CHECK_TRUE(MissingSignature(bars) != MissingSignature(moreBars));
+    // only which items are missing counts (fix round 2): the count changes with every gather or loot
+    CHECK_EQ(MissingSignature(bars), MissingSignature(moreBars));
+    CHECK_TRUE(MissingSignature(bars) != MissingSignature(cloth));  // another item, same count
     CHECK_TRUE(MissingSignature(bars) != MissingSignature(barsAndCloth));
     CHECK_EQ(MissingSignature(bars), MissingSignature(std::map<uint32_t, uint32_t>{{2840, 4}}));
     uint64_t const sig = MissingSignature(bars);
@@ -201,7 +204,8 @@ int main()
     CHECK_TRUE(MissingTripDue(sig, 0, 0, 5000, 30));                      // never looked
     CHECK_TRUE(!MissingTripDue(sig, sig, 5000, 5000 + min30 - 1, 30));    // same set, looked lately: no trip
     CHECK_TRUE(MissingTripDue(sig, sig, 5000, 5000 + min30, 30));         // same set, 30 minutes later
-    CHECK_TRUE(MissingTripDue(MissingSignature(moreBars), sig, 5000, 6000, 30));  // the set changed
+    CHECK_TRUE(!MissingTripDue(MissingSignature(moreBars), sig, 5000, 6000, 30));  // only the count changed
+    CHECK_TRUE(MissingTripDue(MissingSignature(barsAndCloth), sig, 5000, 6000, 30));  // another item is missing
     CHECK_TRUE(!MissingTripDue(sig, sig, 0xFFFFFF00u, 100, 30));          // across the clock wrap
 
     // Fix round 1, I2 + I3: the auction errand needs an auctioneer in reach, then something to list or a due material

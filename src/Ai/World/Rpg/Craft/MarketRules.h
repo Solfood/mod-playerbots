@@ -160,19 +160,19 @@ inline bool VendorMarkOn(uint32_t markedMs, uint32_t nowMs)
     return markedMs && static_cast<uint32_t>(nowMs - markedMs) < VENDOR_MARK_MS;
 }
 
-// A fingerprint of the materials its plan misses (item -> count); 0 = none missing. FNV-1a over the pairs.
+// A fingerprint of which materials its plan misses (the item ids of item -> count); 0 = none missing. FNV-1a over the
+// ids only: the counts change with every gather or loot and must not count as a new set (fix round 2).
 inline uint64_t MissingSignature(std::map<uint32_t, uint32_t> const& missing)
 {
     if (missing.empty())
         return 0;
     uint64_t h = 1469598103934665603ull;
-    for (auto const& [item, count] : missing)
-        for (uint32_t v : {item, count})
-            for (int shift = 0; shift < 32; shift += 8)
-            {
-                h ^= (v >> shift) & 0xFFu;
-                h *= 1099511628211ull;
-            }
+    for (auto const& entry : missing)
+        for (int shift = 0; shift < 32; shift += 8)
+        {
+            h ^= (entry.first >> shift) & 0xFFu;
+            h *= 1099511628211ull;
+        }
     return h ? h : 1;
 }
 
