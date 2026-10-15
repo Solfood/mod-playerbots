@@ -118,6 +118,21 @@ int main()
                   0);
     CHECK_EQ(30u, p.batch[0].spell);
 
+    // fix round 1: materials it already holds are free, so a recipe whose vendor reagent is in the bags ranks cheap
+    {
+        constexpr uint32_t DYE = 2325;
+        std::map<uint32_t, uint32_t> const pr = {{THREAD, 10}, {DYE, 5}};
+        p = PlanBatch({R(40, Want::SkillUp, 1, {{THREAD, 1}}), R(41, Want::SkillUp, 1, {{DYE, 3}})}, {{DYE, 3}}, pr,
+                      1000, 0);
+        CHECK_EQ(2u, p.batch.size());
+        CHECK_EQ(41u, p.batch[0].spell);
+        // missingOtherCost counts only the vendor materials still to buy
+        Recipe b2 = R(25, Want::Gear, 1, {{COPPER_BAR, 3}, {THREAD, 1}});
+        b2.value = 250;
+        p = PlanBatch({b2}, {{COPPER_BAR, 1}, {THREAD, 1}}, pr, 1000, 0);
+        CHECK_EQ(0u, p.missingOtherCost.at(COPPER_BAR));
+    }
+
     // at most 5 recipes a trip
     std::vector<Recipe> many;
     for (uint32_t s = 100; s < 108; ++s)

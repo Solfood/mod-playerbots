@@ -137,14 +137,18 @@ inline Plan PlanBatch(std::vector<Recipe> candidates, std::map<uint32_t, uint32_
 {
     Plan plan;
     uint64_t const budget = money > reserve ? money - reserve : 0;
-    // The cost of what it would have to buy for one cast (own materials are free); skill-ups go cheapest first.
+    // The cost of what it would still have to buy for one cast (what it holds is free); skill-ups go cheapest first.
     auto buyCost = [&](Recipe const& r)
     {
         uint64_t cost = 0;
         for (Reagent const& g : r.reagents)
         {
             auto const it = vendorPrice.find(g.item);
-            cost += it == vendorPrice.end() ? 0 : uint64_t(it->second) * g.count;
+            if (it == vendorPrice.end())
+                continue;
+            auto const h = inventory.find(g.item);
+            uint32_t const held = h == inventory.end() ? 0 : h->second;
+            cost += uint64_t(it->second) * (g.count > held ? g.count - held : 0);
         }
         return cost;
     };
