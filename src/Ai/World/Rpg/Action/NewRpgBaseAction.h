@@ -86,6 +86,9 @@ protected:
     bool ChangeToGuideChoice();
     // GO_GRIND to a spot near it (under-levelled, a ding step, a grinding focus); false = no spot found.
     bool GoGrindNear();
+    // World of Craft (Plan 6a): CraftMgr::ReadyToCraft and CraftMgr::StartTrip for this bot.
+    bool CraftReady(bool guided);
+    bool ChangeToCraftPlan();
 
 protected:
     /* FOR MOVE FAR */

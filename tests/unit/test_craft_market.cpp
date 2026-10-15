@@ -24,6 +24,14 @@ int main()
     CHECK_EQ(100u, ListPrice(300, 5, 10, 10, 2));    // theirs is below the vendor value: the vendor value
     CHECK_EQ(300u, ListPrice(300, 50, 10, 10, 2));   // theirs is dearer: keep its own price
 
+    // vendor shopping (Task 7): stacks of BuyCount, rounded up, at most 255 (the core's uint8 count)
+    CHECK_EQ(3u, VendorStacks(3, 1));
+    CHECK_EQ(1u, VendorStacks(3, 5));    // sold in fives: one stack
+    CHECK_EQ(2u, VendorStacks(6, 5));
+    CHECK_EQ(1u, VendorStacks(1, 0));    // BuyCount 0 counts as 1
+    CHECK_EQ(0u, VendorStacks(0, 1));    // nothing to buy
+    CHECK_EQ(255u, VendorStacks(1000, 1));
+
     // worth listing (no fees, our own rule): it must beat what the vendor pays for the stack
     CHECK_TRUE(WorthListing(300, 10, 10));
     CHECK_TRUE(WorthListing(101, 10, 10));

@@ -7,6 +7,7 @@
 #include "NewRpgBaseAction.h"
 #include "BroadcastHelper.h"
 #include "ChatHelper.h"
+#include "CraftMgr.h"
 #include "Creature.h"
 #include "FixedPopulation.h"
 #include "GameObject.h"
@@ -42,6 +43,7 @@
 #include "Timer.h"
 #include "TownErrands.h"
 #include "TravelMgr.h"
+#include "TripRules.h"
 #include "G3D/Vector2.h"
 #include <algorithm>
 
@@ -1342,6 +1344,8 @@ bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> candidateSta
         case RPG_FOLLOW_GUIDE:  // never rolled (guided bots skip the roll); keeps the switch complete
             botAI->rpgInfo.ChangeToFollowGuide();
             return true;
+        case RPG_CRAFT:
+            return ChangeToCraftPlan();  // CheckRpgStatusAvailable planned it in this roll
         case RPG_IDLE:
         {
             botAI->rpgInfo.ChangeToIdle();
@@ -1568,8 +1572,14 @@ bool NewRpgBaseAction::CheckRpgStatusAvailable(NewRpgStatus status)
             OutdoorPvP* outdoorPvP = sOutdoorPvPMgr->GetOutdoorPvPToZoneId(zoneId);
             return outdoorPvP != nullptr;
         }
+        case RPG_CRAFT:
+            return CraftReady(GuideMgr::instance().Guided(bot));
         default:
             return false;
     }
     return false;
 }
+
+bool NewRpgBaseAction::CraftReady(bool guided) { return CraftMgr::instance().ReadyToCraft(botAI, bot, guided); }
+
+bool NewRpgBaseAction::ChangeToCraftPlan() { return CraftMgr::instance().StartTrip(botAI, bot); }

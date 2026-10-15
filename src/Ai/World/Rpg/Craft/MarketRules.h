@@ -85,6 +85,15 @@ inline uint32_t ListSlots(uint32_t live, uint32_t maxListings) { return live >= 
 // It pays only from money above its repair reserve.
 inline bool CanPay(uint64_t money, uint64_t amount, uint64_t reserve) { return money >= amount + reserve; }
 
+// Vendor shopping (Task 7): a vendor sells an item in stacks of BuyCount (0 counts as 1); to get `count` it buys this
+// many stacks, rounded up, at most 255 (Player::BuyItemFromVendorSlot takes a uint8 count).
+inline uint32_t VendorStacks(uint32_t count, uint32_t buyCount)
+{
+    uint32_t const per = buyCount ? buyCount : 1;
+    uint32_t const stacks = count / per + (count % per ? 1 : 0);
+    return stacks < 255 ? stacks : 255;
+}
+
 // Buying gear: an upgrade for itself (the equip upgrade test) it can pay for and still afford its repairs.
 inline bool BuyGear(bool upgrade, uint64_t buyout, uint64_t money, uint64_t reserve)
 {

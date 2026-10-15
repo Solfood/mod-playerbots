@@ -21,6 +21,8 @@
 #include "TravelMgr.h"
 
 class Player;
+class PlayerbotAI;
+struct ItemTemplate;
 
 // One trade-skill recipe: a spell that creates an item or enchants one, from the core's spell and skill data.
 struct CraftRecipeInfo
@@ -86,6 +88,22 @@ public:
     CraftSpot const* NearestStation(Player* bot, uint32 focus, bool guided) const;
     CraftSpot const* NearestVendorFor(Player* bot, uint32 item, bool guided) const;
     CraftSpot const* NearestAuctioneer(Player* bot, float maxYards) const;
+    // A craft trip's plan for this bot now (map thread; per trip, never per tick): the candidates from the recipes it
+    // knows, can learn at its skill, has the tools for and has a station for in reach (a guided bot: in town only),
+    // and the vendor prices of materials it may walk to; then Craft::PlanBatch.
+    ::Craft::Plan PlanFor(PlayerbotAI* botAI, Player* bot, bool guided) const;
+    bool HasTools(Player* bot, CraftRecipeInfo const& recipe) const;
+    static bool IsSupply(ItemTemplate const* proto);
+    // May it start a craft trip now? Crafting on for it, not fighting, dead or in a group run, no cooldown, and the
+    // planner finds something worth making. Plans once per roll (the plan is kept for the roll that follows; decision
+    // 7). An empty plan starts the cooldown (decision 10), for a guided bot only in town (Craft::EmptyPlanCooldown).
+    bool ReadyToCraft(PlayerbotAI* botAI, Player* bot, bool guided) const;
+    // Starts the trip with the plan ReadyToCraft made (only a plan at most PLAN_REUSE_MS old: a plan kept across an AI
+    // reset is never used). A guided bot gives up its step seat; its place is kept.
+    bool StartTrip(PlayerbotAI* botAI, Player* bot) const;
+    // In a crafting town: a station (anvil, forge, fire) or a material vendor within TownYards.
+    bool InCraftTown(Player* bot) const;
+    static constexpr uint32 PLAN_REUSE_MS = 5 * IN_MILLISECONDS;
     // Copper a node or skin of that kind is worth to a bot of `level` (vendor value, or the auction price last seen).
     uint32 GatherValue(uint16 skill, uint32 level) const;
     void NoteSeenPrice(uint32 item, uint32 perUnit);

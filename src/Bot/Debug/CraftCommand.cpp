@@ -13,6 +13,7 @@
 
 #include "Chat.h"
 #include "CraftMgr.h"
+#include "Item.h"
 #include "MapMgr.h"
 #include "NewRpgInfo.h"
 #include "ObjectAccessor.h"
@@ -20,6 +21,7 @@
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
 #include "RandomPlayerbotMgr.h"
+#include "SharedDefines.h"
 #include "Timer.h"
 #include "TripRules.h"
 
@@ -60,6 +62,18 @@ void PrintBot(ChatHandler* handler, Player* bot)
         << " cooldown_s=" << cooldown / IN_MILLISECONDS << " prof1=" << prof1
         << " v1=" << (prof1 ? bot->GetSkillValue(prof1) : 0) << " prof2=" << prof2
         << " v2=" << (prof2 ? bot->GetSkillValue(prof2) : 0) << " money=" << bot->GetMoney();
+    auto const* trip = std::get_if<NewRpgInfo::CraftTrip>(&info.data);
+    uint32 wornOwn = 0;
+    for (uint8 slot = EQUIPMENT_SLOT_START; slot < EQUIPMENT_SLOT_END; ++slot)
+        if (Item* item = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slot))
+            if (item->GetGuidValue(ITEM_FIELD_CREATOR) == bot->GetGUID())
+                ++wornOwn;
+    uint32 ore = 0;  // ore it holds: the reagents of the smelting recipes (one ore can feed two: a live-check hint)
+    for (CraftRecipeInfo const* r : CraftMgr::instance().RecipesOf(SKILL_MINING))
+        if (!r->reagents.empty())
+            ore += bot->GetItemCount(r->reagents[0].item, false);
+    out << " step=" << (trip ? trip->step : 0) << " steps=" << (trip ? trip->batch.size() : 0)
+        << " made=" << (trip ? trip->made : 0) << " worn_own=" << wornOwn << " ore=" << ore;
     handler->PSendSysMessage("{}", out.str());
 }
 }  // namespace
@@ -69,7 +83,7 @@ bool CraftCommand::Handle(ChatHandler* handler, char const* args)
     std::vector<std::string> const words = Words(args);
     if (words.empty())
     {
-        handler->PSendSysMessage("CRAFTERR usage: craft stats | hubs | on|off|bot <name>");
+        handler->PSendSysMessage("CRAFTERR usage: craft stats | hubs | on|off|bot|plan|trip <name>");
         return false;
     }
     CraftMgr& crafts = CraftMgr::instance();
@@ -129,6 +143,52 @@ bool CraftCommand::Handle(ChatHandler* handler, char const* args)
     if (sub == "bot")
     {
         PrintBot(handler, bot);
+        return true;
+    }
+    if (sub == "plan")
+    {
+        // The seams plan as an unguided bot (stations and vendors up to StationYards, ruling P3): every AzerothOne bot
+        // is guided, and a live check needs a real walk to a forge. It only prints; nothing changes.
+        Craft::Plan const plan = crafts.PlanFor(GET_PLAYERBOT_AI(bot), bot, false);
+        for (size_t i = 0; i < plan.batch.size(); ++i)
+        {
+            CraftRecipeInfo const* r = crafts.Recipe(plan.batch[i].spell);
+            handler->PSendSysMessage("CRAFTPLAN step={} spell={} casts={} station={} want={} product={}", i,
+                                     plan.batch[i].spell, plan.batch[i].casts, plan.batch[i].station,
+                                     static_cast<uint32>(plan.batch[i].want), r ? r->product : 0);
+        }
+        for (auto const& [item, n] : plan.buy)
+            handler->PSendSysMessage("CRAFTPLAN buy item={} count={}", item, n);
+        for (auto const& [item, n] : plan.missing)
+        {
+            auto const value = plan.missingValue.find(item);
+            handler->PSendSysMessage("CRAFTPLAN missing item={} count={} value={}", item, n,
+                                     value == plan.missingValue.end() ? 0 : value->second);
+        }
+        handler->PSendSysMessage("CRAFTOK plan steps={} cost={}", plan.batch.size(), plan.cost);
+        return true;
+    }
+    if (sub == "trip")
+    {
+        // Test seam: a trip now, planned as an unguided bot (ruling P3). It waives the cooldown only, then runs the
+        // same ReadyToCraft / StartTrip as the roll (CraftReady / ChangeToCraftPlan, ruling P17): it never makes or
+        // gives anything.
+        PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
+        info.craft.emptyAtMs = 0;
+        info.craft.pendingAtMs = 0;
+        if (!crafts.ReadyToCraft(botAI, bot, false))
+        {
+            handler->PSendSysMessage("CRAFTERR nothing worth making for {} (or not crafting, dead or fighting)",
+                                     bot->GetName());
+            return false;
+        }
+        size_t const steps = info.craft.pending.batch.size();
+        if (!crafts.StartTrip(botAI, bot))
+        {
+            handler->PSendSysMessage("CRAFTERR the trip of {} did not start", bot->GetName());
+            return false;
+        }
+        handler->PSendSysMessage("CRAFTOK trip {} steps={}", bot->GetName(), steps);
         return true;
     }
     handler->PSendSysMessage("CRAFTERR unknown sub-command {}", sub);

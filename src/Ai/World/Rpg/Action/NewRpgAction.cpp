@@ -8,6 +8,7 @@
 #include "AreaDefines.h"
 #include "BroadcastHelper.h"
 #include "ChatHelper.h"
+#include "CraftMgr.h"
 #include "DBCStores.h"
 #include "EarnedTraining.h"
 #include "FixedPopulation.h"
@@ -403,6 +404,10 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
             // step 3). Any other bot gets exactly the list above.
             if (RouteMgr::instance().Routed(bot))
                 candidates.push_back(RPG_FOLLOW_ROUTE);
+            // World of Craft (Plan 6a): a crafting bot may roll a craft trip, at the gathering weight
+            // (RpgStatusProbWeight.Craft); a crafting focus boosts it. Crafting off: the list above, as before.
+            if (CraftMgr::instance().Crafting(bot))
+                candidates.push_back(RPG_CRAFT);
             return RandomChangeStatus(candidates);
         }
 

@@ -7,16 +7,26 @@
 #include "CraftMgr.h"
 
 #include <algorithm>
+#include <map>
 
+#include "AiObjectContext.h"
 #include "DBCStores.h"
 #include "DatabaseEnv.h"
+#include "EarnedTraining.h"
 #include "GameObjectData.h"
+#include "GuideMgr.h"
 #include "HubAuctioneers.h"
+#include "Item.h"
+#include "ItemUsageValue.h"
 #include "Log.h"
 #include "MapMgr.h"
+#include "MarketRules.h"
+#include "NewRpgInfo.h"
 #include "ObjectMgr.h"
 #include "Player.h"
+#include "PlayerbotAI.h"
 #include "PlayerbotAIConfig.h"
+#include "Playerbots.h"
 #include "ProfessionRules.h"
 #include "RandomPlayerbotMgr.h"
 #include "SharedDefines.h"
@@ -31,6 +41,11 @@ constexpr uint32 FOCUS_ANVIL = 1;
 constexpr uint32 FOCUS_FORGE = 3;
 constexpr uint32 FOCUS_FIRE = 4;
 constexpr uint32 HUB_RESPAWN_SECONDS = 300;
+
+// The skills a craft trip plans with: the part 1 crafts, mining (smelting), cooking and first aid.
+constexpr std::array<uint16, 8> PLAN_SKILLS = {SKILL_MINING,   SKILL_BLACKSMITHING, SKILL_LEATHERWORKING,
+                                                SKILL_ALCHEMY,  SKILL_TAILORING,     SKILL_ENCHANTING,
+                                                SKILL_COOKING,  SKILL_FIRST_AID};
 
 bool IsCraftSkill(uint32 skill)
 {
@@ -376,4 +391,165 @@ void CraftMgr::NoteSeenPrice(uint32 item, uint32 perUnit)
 {
     std::lock_guard<std::mutex> guard(_seenLock);
     _seen[item] = perUnit;
+}
+
+bool CraftMgr::HasTools(Player* bot, CraftRecipeInfo const& recipe) const
+{
+    for (uint8 k = 0; k < 2; ++k)
+    {
+        if (recipe.totem[k] && !bot->HasItemCount(recipe.totem[k], 1))
+            return false;
+        if (recipe.totemCategory[k] && !bot->HasItemTotemCategory(recipe.totemCategory[k]))
+            return false;
+    }
+    return true;
+}
+
+bool CraftMgr::IsSupply(ItemTemplate const* proto)
+{
+    return proto->Class == ITEM_CLASS_CONSUMABLE &&
+           (proto->SubClass == ITEM_SUBCLASS_FOOD || proto->SubClass == ITEM_SUBCLASS_POTION ||
+            proto->SubClass == ITEM_SUBCLASS_BANDAGE);
+}
+
+::Craft::Plan CraftMgr::PlanFor(PlayerbotAI* botAI, Player* bot, bool guided) const
+{
+    Craft::Settings const& s = sPlayerbotAIConfig.crafting;
+    AiObjectContext* context = botAI->GetAiObjectContext();
+    std::map<uint32, uint32> inventory;
+    for (Item* item : botAI->GetInventoryItems())
+        inventory[item->GetEntry()] += item->GetCount();
+    auto held = [&inventory](uint32 item)
+    {
+        auto const it = inventory.find(item);
+        return it == inventory.end() ? 0u : it->second;
+    };
+    // Stations and vendors are looked up once per kind per plan.
+    std::unordered_map<uint32, bool> stationNear, vendorNear;
+    auto stationOk = [&](uint32 focus)
+    {
+        if (!focus)
+            return true;
+        auto const [it, fresh] = stationNear.emplace(focus, false);
+        if (fresh)
+            it->second = NearestStation(bot, focus, guided) != nullptr;
+        return it->second;
+    };
+    auto vendorOk = [&](uint32 item)
+    {
+        auto const [it, fresh] = vendorNear.emplace(item, false);
+        if (fresh)
+            it->second = VendorUnitPrice(item) && NearestVendorFor(bot, item, guided) != nullptr;
+        return it->second;
+    };
+
+    std::vector<::Craft::Recipe> candidates;
+    std::map<uint32, uint32> prices;
+    for (uint16 skill : PLAN_SKILLS)
+    {
+        if (!bot->HasSkill(skill))
+            continue;
+        uint32 const value = bot->GetSkillValue(skill);
+        for (CraftRecipeInfo const* r : RecipesOf(skill))
+        {
+            if (r->minRank > value || !bot->HasSpell(r->spell) || !HasTools(bot, *r) || !stationOk(r->station))
+                continue;
+            ::Craft::Color const color = ::Craft::ColorOf(value, r->low, r->high);
+            ::Craft::Recipe c;
+            c.spell = r->spell;
+            c.product = r->product;
+            c.productCount = r->productCount;
+            c.reagents = r->reagents;
+            c.station = r->station;
+            if (r->smelt)
+            {
+                // Decision 8: a miner smelts the ore it holds first; the bars count for the recipes after it.
+                uint32 const ore = r->reagents.empty() ? 0 : held(r->reagents[0].item);
+                c.want = ore ? ::Craft::Want::Smelt : ::Craft::Want::None;
+                c.casts = ::Craft::CastsWanted(c.want, color, ore, 0, r->reagents.empty() ? 1 : r->reagents[0].count);
+            }
+            else if (r->enchant)
+                continue;  // Task 8: enchanting its own gear
+            else
+            {
+                ItemTemplate const* proto = sObjectMgr->GetItemTemplate(r->product);
+                if (!proto)
+                    continue;
+                ItemUsage const usage = context->GetValue<ItemUsage>("item usage", r->product)->Get();
+                bool const upgrade = usage == ITEM_USAGE_EQUIP || usage == ITEM_USAGE_REPLACE;
+                bool const supply = IsSupply(proto) && bot->CanUseItem(proto) == EQUIP_ERR_OK;
+                uint32 const pct = upgrade ? ::Craft::GearPricePct(proto->ItemLevel) : s.materialPricePct;
+                c.value = static_cast<uint32>(uint64(proto->SellPrice) * r->productCount * pct / 100);
+                // An extra only when it is worth something when sold (Task 2 ruling: PlanBatch does not filter it).
+                bool const sells = c.value > 0 && proto->Bonding != BIND_WHEN_PICKED_UP;
+                uint32 const have = held(r->product);
+                c.want = ::Craft::WantFor(upgrade, supply && have < s.supplyStack, color, sells);
+                c.casts = ::Craft::CastsWanted(c.want, color, have, s.supplyStack, r->productCount);
+            }
+            if (c.want == ::Craft::Want::None || !c.casts)
+                continue;
+            for (::Craft::Reagent const& g : c.reagents)
+                if (vendorOk(g.item))
+                    prices[g.item] = VendorUnitPrice(g.item);
+            candidates.push_back(std::move(c));
+        }
+    }
+    return ::Craft::PlanBatch(std::move(candidates), std::move(inventory), prices, bot->GetMoney(),
+                              EarnedTraining::RepairReserve(bot));
+}
+
+bool CraftMgr::InCraftTown(Player* bot) const
+{
+    for (uint32 focus : {FOCUS_ANVIL, FOCUS_FORGE, FOCUS_FIRE})
+        if (NearestStation(bot, focus, true))
+            return true;
+    auto const it = _vendorSpots.find(bot->GetMapId());
+    return Nearest(it == _vendorSpots.end() ? nullptr : &it->second, bot, 0, true,
+                   static_cast<float>(sPlayerbotAIConfig.crafting.stationYards)) != nullptr;
+}
+
+bool CraftMgr::ReadyToCraft(PlayerbotAI* botAI, Player* bot, bool guided) const
+{
+    if (!Crafting(bot) || !bot->GetMap())
+        return false;
+    NewRpgInfo& info = botAI->rpgInfo;
+    Craft::Settings const& s = sPlayerbotAIConfig.crafting;
+    uint32 const now = getMSTime();
+    bool const groupRun = bot->GetGroup() != nullptr || bot->GetMap()->Instanceable();
+    if (!Craft::MayStartTrip(bot->IsInCombat(), !bot->IsAlive(), groupRun,
+                             Craft::CooldownLeftMs(info.craft.emptyAtMs, now, s.emptyCooldownMinutes)))
+        return false;
+    // Once per roll: a plan made in the last PLAN_REUSE_MS (this roll's availability check) is reused; an older one,
+    // or one kept across an AI reset (Task 4), is made again.
+    if (!info.craft.pendingAtMs || info.craft.pendingGuided != guided ||
+        getMSTimeDiff(info.craft.pendingAtMs, now) > PLAN_REUSE_MS)
+    {
+        info.craft.pending = PlanFor(botAI, bot, guided);
+        info.craft.pendingAtMs = std::max<uint32>(1, now);
+        info.craft.pendingGuided = guided;
+        info.craft.missing = info.craft.pending.missing;  // what an auction visit may buy (Task 10)
+        info.craft.missingValue = info.craft.pending.missingValue;
+        info.craft.missingOtherCost = info.craft.pending.missingOtherCost;
+        // Nothing worth making (decision 10): the cooldown runs. A guided bot away from town planned without a station
+        // or vendor in reach: no cooldown, so it still crafts when it gets to one (ruling P2).
+        if (info.craft.pending.Empty() && Craft::EmptyPlanCooldown(guided, guided && InCraftTown(bot)))
+            info.craft.emptyAtMs = std::max<uint32>(1, now);
+    }
+    return !info.craft.pending.Empty();
+}
+
+bool CraftMgr::StartTrip(PlayerbotAI* botAI, Player* bot) const
+{
+    NewRpgInfo& info = botAI->rpgInfo;
+    // Only the plan this roll made: never a stale one (a plan survives an AI reset; Task 4).
+    if (info.craft.pending.Empty() || !info.craft.pendingAtMs ||
+        getMSTimeDiff(info.craft.pendingAtMs, getMSTime()) > PLAN_REUSE_MS)
+        return false;
+    ::Craft::Plan plan = std::move(info.craft.pending);
+    info.craft.pending = ::Craft::Plan{};
+    info.craft.pendingAtMs = 0;
+    if (GuideMgr::instance().Guided(bot))
+        GuideMgr::instance().Unseat(bot->GetGUID().GetCounter());  // its step's seat is for working bots
+    info.ChangeToCraft(std::move(plan), info.craft.pendingGuided);
+    return true;
 }

@@ -6,10 +6,272 @@
 
 #include "NewRpgCraft.h"
 
+#include <algorithm>
+
+#include "CraftMgr.h"
+#include "Creature.h"
+#include "CreatureData.h"
+#include "EarnedTraining.h"
+#include "FixedPopulation.h"
+#include "Item.h"
+#include "MarketRules.h"
+#include "ObjectMgr.h"
+#include "Player.h"
+#include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
+#include "Timer.h"
+#include "TripRules.h"
+#include "WorldSession.h"
+
+namespace
+{
+constexpr float STATION_ARRIVE_YARDS = 4.0f;  // inside a spell focus's reach (most reach 10 yards)
+constexpr float VENDOR_ARRIVE_YARDS = 4.0f;   // inside INTERACTION_DISTANCE (5.5)
+constexpr float VENDOR_LOOK_YARDS = 40.0f;    // near its spot: look for the vendor itself (it may step about)
+constexpr uint32 APPROACH_MS = 60 * IN_MILLISECONDS;
+
+Creature* SpawnedCreature(Player* bot, ObjectGuid::LowType spawnId)
+{
+    auto const bounds = bot->GetMap()->GetCreatureBySpawnIdStore().equal_range(spawnId);
+    for (auto it = bounds.first; it != bounds.second; ++it)
+        if (it->second->IsInWorld() && it->second->IsAlive())
+            return it->second;
+    return nullptr;
+}
+
+bool IsGear(uint32 entry)
+{
+    ItemTemplate const* proto = sObjectMgr->GetItemTemplate(entry);
+    return proto && proto->InventoryType != INVTYPE_NON_EQUIP;
+}
+}  // namespace
 
 bool NewRpgCraftAction::Execute(Event /*event*/)
 {
-    botAI->rpgInfo.ChangeToIdle();  // Task 7 makes the trip
+    NewRpgInfo& info = botAI->rpgInfo;
+    auto* trip = std::get_if<NewRpgInfo::CraftTrip>(&info.data);
+    if (!trip)
+        return false;
+    // Dead or fighting: the trip waits (its clock keeps running); the death and combat strategies act first.
+    if (!bot->IsAlive() || bot->IsInCombat())
+        return false;
+    if (Craft::TripOver(GetMSTimeDiffToNow(info.startT), sPlayerbotAIConfig.crafting.tripMinutes))
+        return End(trip->phase != PHASE_USE);
+    switch (trip->phase)
+    {
+        case PHASE_SHOP:
+            return Shop(*trip);
+        case PHASE_MAKE:
+            return Make(*trip);
+        default:
+            return UseResults(*trip);
+    }
+}
+
+bool NewRpgCraftAction::WalkTo(NewRpgInfo::CraftTrip& trip, WorldPosition const& pos, WorldPosition const* goal)
+{
+    WorldPosition const& key = goal ? *goal : pos;
+    if (trip.target != key)
+    {
+        trip.target = key;
+        trip.approach = Guides::Approach{};
+        trip.lastTickMs = 0;
+    }
+    uint32 const now = getMSTime();
+    uint32 const elapsed = trip.lastTickMs ? std::min<uint32>(getMSTimeDiff(trip.lastTickMs, now), 10000) : 0;
+    trip.lastTickMs = now;
+    // Given up before MoveFarTo's 90 s stuck teleport could carry it there: never a teleport on a craft trip.
+    if (Guides::ApproachTick(trip.approach, bot->GetExactDist(pos), elapsed, APPROACH_MS))
+        return End(true);
+    return MoveFarTo(pos) || MoveRandomNear(10.0f);
+}
+
+bool NewRpgCraftAction::End(bool abandoned)
+{
+    NewRpgInfo& info = botAI->rpgInfo;
+    auto const* trip = std::get_if<NewRpgInfo::CraftTrip>(&info.data);
+    uint32 const made = trip ? trip->made : 0;
+    if (abandoned)
+        FixedPopulation::Count(EconomyCounter::CraftTripsAbandoned);
+    // spec §3 "Limits": a trip that crafted nothing starts the cooldown; one that made something does not.
+    bool const cooldown = Craft::CooldownAfterTrip(made, sPlayerbotAIConfig.crafting.emptyCooldownMinutes) != 0;
+    info.craft.emptyAtMs = cooldown ? std::max<uint32>(1, getMSTime()) : 0;
+    info.ChangeToIdle();
     return true;
+}
+
+bool NewRpgCraftAction::BuyFrom(Creature* npc, VendorItemData const* list, uint32 item, uint32 count)
+{
+    ItemTemplate const* proto = sObjectMgr->GetItemTemplate(item);
+    if (!proto)
+        return false;
+    for (uint32 slot = 0; slot < list->GetItemCount(); ++slot)
+    {
+        VendorItem const* v = list->GetItem(slot);
+        if (!v || v->item != item || v->maxcount || v->ExtendedCost)
+            continue;
+        // The vendor sells it in stacks of BuyCount at BuyPrice a stack; it pays the vendor's own price (the core
+        // applies any reputation discount), never below its repair reserve.
+        uint32 const stacks = Craft::VendorStacks(count, proto->BuyCount);
+        uint64 const price = uint64(std::max<int32>(0, proto->BuyPrice)) * stacks;
+        if (stacks && Craft::CanPay(bot->GetMoney(), price, EarnedTraining::RepairReserve(bot)))
+        {
+            // The core reads the slot from the list of the vendor last opened, if any: this vendor's own list.
+            bot->GetSession()->SetCurrentVendor(0);
+            bot->BuyItemFromVendorSlot(npc->GetGUID(), slot, item, static_cast<uint8>(stacks), NULL_BAG, NULL_SLOT);
+        }
+        return true;
+    }
+    return false;
+}
+
+bool NewRpgCraftAction::Shop(NewRpgInfo::CraftTrip& trip)
+{
+    CraftMgr& crafts = CraftMgr::instance();
+    bool const guided = trip.guided;  // as it was planned
+    while (!trip.buy.empty())
+    {
+        uint32 const item = trip.buy.begin()->first;
+        CraftSpot const* vendor = crafts.NearestVendorFor(bot, item, guided);
+        if (!vendor)
+        {
+            trip.buy.erase(trip.buy.begin());  // no vendor in reach any more: Make skips what lacks it
+            continue;
+        }
+        // Near its spot: walk to the vendor itself (it may have stepped off its spawn point).
+        Creature* npc = bot->GetExactDist(vendor->pos) <= VENDOR_LOOK_YARDS ? SpawnedCreature(bot, vendor->spawnId)
+                                                                            : nullptr;
+        WorldPosition const where = npc ? WorldPosition(npc) : vendor->pos;
+        if (bot->GetExactDist(where) > VENDOR_ARRIVE_YARDS)
+            return WalkTo(trip, where, &vendor->pos);
+        VendorItemData const* list = npc ? sObjectMgr->GetNpcVendorItemList(npc->GetEntry()) : nullptr;
+        if (!list)
+        {
+            trip.buy.erase(trip.buy.begin());  // dead or not spawned: Make skips what lacks it
+            continue;
+        }
+        // Everything this vendor sells from the list in one stop; the rest waits for the next vendor.
+        for (auto it = trip.buy.begin(); it != trip.buy.end();)
+        {
+            if (BuyFrom(npc, list, it->first, it->second) || it->first == item)
+                it = trip.buy.erase(it);
+            else
+                ++it;
+        }
+    }
+    trip.phase = PHASE_MAKE;
+    trip.target = WorldPosition();
+    return true;
+}
+
+bool NewRpgCraftAction::HasReagents(CraftRecipeInfo const& recipe) const
+{
+    for (Craft::Reagent const& g : recipe.reagents)
+        if (bot->GetItemCount(g.item, false) < g.count)
+            return false;
+    return true;
+}
+
+void NewRpgCraftAction::NextStep(NewRpgInfo::CraftTrip& trip)
+{
+    ++trip.step;
+    trip.castsDone = 0;
+    trip.target = WorldPosition();
+}
+
+bool NewRpgCraftAction::ReadyToCast()
+{
+    bool ready = true;
+    if (bot->isMoving())
+    {
+        bot->StopMoving();
+        ready = false;
+    }
+    if (bot->IsMounted())
+    {
+        bot->RemoveAurasByType(SPELL_AURA_MOUNTED);
+        bot->Dismount();
+        ready = false;
+    }
+    if (bot->GetShapeshiftForm() != FORM_NONE)
+    {
+        botAI->RemoveShapeshift();
+        ready = false;
+    }
+    if (!bot->IsStandState())
+    {
+        bot->SetStandState(UNIT_STAND_STATE_STAND);
+        ready = false;
+    }
+    if (!ready)
+        botAI->SetNextCheckDelay(sPlayerbotAIConfig.reactDelay);
+    return ready;
+}
+
+bool NewRpgCraftAction::Make(NewRpgInfo::CraftTrip& trip)
+{
+    if (bot->IsNonMeleeSpellCast(false))
+        return true;  // its last cast is still going
+    CraftMgr& crafts = CraftMgr::instance();
+    bool const guided = trip.guided;  // as it was planned
+    while (trip.step < trip.batch.size())
+    {
+        Craft::Step const& step = trip.batch[trip.step];
+        CraftRecipeInfo const* recipe = crafts.Recipe(step.spell);
+        if (!recipe || trip.castsDone >= step.casts || !HasReagents(*recipe))
+        {
+            NextStep(trip);  // done, or its materials are gone (sold, used, never bought)
+            continue;
+        }
+        if (recipe->station)
+        {
+            CraftSpot const* station = crafts.NearestStation(bot, recipe->station, guided);
+            if (!station)
+            {
+                NextStep(trip);
+                continue;
+            }
+            if (bot->GetExactDist(station->pos) > STATION_ARRIVE_YARDS)
+                return WalkTo(trip, station->pos);
+        }
+        if (!ReadyToCast())
+            return true;  // stopped, stood up or dismounted this tick: it casts on the next one
+        Item* target = nullptr;  // Task 8: the piece an enchant goes on
+        if (!botAI->CastSpell(recipe->spell, bot, target))
+        {
+            NextStep(trip);  // the core refused (no tool, no focus in reach, full bags): skip the step
+            continue;
+        }
+        ++trip.castsDone;
+        ++trip.made;
+        FixedPopulation::Count(recipe->smelt ? EconomyCounter::Smelts : EconomyCounter::CraftsMade);
+        if (recipe->product && !recipe->smelt && IsGear(recipe->product) &&
+            std::find(trip.products.begin(), trip.products.end(), recipe->product) == trip.products.end())
+            trip.products.push_back(recipe->product);
+        return true;
+    }
+    trip.phase = PHASE_USE;
+    return true;
+}
+
+bool NewRpgCraftAction::WearsOwn(uint32 entry) const
+{
+    for (uint8 slot = EQUIPMENT_SLOT_START; slot < EQUIPMENT_SLOT_END; ++slot)
+        if (Item* item = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slot))
+            if (item->GetEntry() == entry && item->GetGuidValue(ITEM_FIELD_CREATOR) == bot->GetGUID())
+                return true;
+    return false;
+}
+
+bool NewRpgCraftAction::UseResults(NewRpgInfo::CraftTrip& trip)
+{
+    if (bot->IsNonMeleeSpellCast(false))
+        return true;
+    // Task 8: an enchanter disenchants here first.
+    // Wear what it made that beats what it wears (the same upgrade test the equip action uses), then count it.
+    botAI->DoSpecificAction("equip upgrade", Event(), true);
+    for (uint32 product : trip.products)
+        if (WearsOwn(product))
+            FixedPopulation::Count(EconomyCounter::CraftsEquipped);
+    return End(false);
 }
