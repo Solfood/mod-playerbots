@@ -39,10 +39,10 @@ private:
     bool BuyFrom(Creature* npc, VendorItemData const* list, uint32 item, uint32 count);
     bool HasReagents(CraftRecipeInfo const& recipe) const;
     bool WearsOwn(uint32 entry) const;
-    // Ready to cast where it stands: not moving, standing and not mounted. False: it fixed one of them this tick, and
-    // casts on a later tick (PlayerbotAI::CastSpell refuses a cast while it moves or sits; that is no refusal by the
-    // core, so the step must not be skipped for it).
-    bool ReadyToCast();
+    // Ready to cast `spell` where it stands: not moving, standing, not mounted, and in no form that blocks `spell`.
+    // False: it fixed one of them this tick, and casts on a later tick (PlayerbotAI::CastSpell refuses a cast while it
+    // moves or sits; that is no refusal by the core, so the step must not be skipped for it).
+    bool ReadyToCast(uint32 spell);
     static void NextStep(NewRpgInfo::CraftTrip& trip);
 };
 

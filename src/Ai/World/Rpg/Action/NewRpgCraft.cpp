@@ -21,6 +21,9 @@
 #include "Player.h"
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
+#include "SpellAuraDefines.h"
+#include "SpellInfo.h"
+#include "SpellMgr.h"
 #include "Timer.h"
 #include "TripRules.h"
 #include "WorldSession.h"
@@ -181,18 +184,21 @@ void NewRpgCraftAction::NextStep(NewRpgInfo::CraftTrip& trip)
     trip.target = WorldPosition();
 }
 
-bool NewRpgCraftAction::ReadyToCast()
+bool NewRpgCraftAction::ReadyToCast(uint32 spell)
 {
     bool ready = true;
     if (bot->isMoving())
     {
         // isMoving() reads the movement flags, and a bot has no client to clear them. With no spline running (it is
         // not walking), a flag left behind (a fall that ended with FALLING still set) keeps isMoving() true for good:
-        // StopMoving() does nothing then, so the bot never casts, never walks (the walk guard never gives up), and the
-        // trip holds it in place until TripMinutes (Task 13: bots stood 15 minutes at a forge and made nothing).
-        // Clear the stale flags; a bot that really walks is stopped as before.
+        // StopMoving() does nothing then. Clear the stale flags (as the TK and dismount code do); a bot that really
+        // walks is stopped as before.
         if (bot->movespline->Finalized())
+        {
             bot->m_movementInfo.RemoveMovementFlag(MOVEMENTFLAG_MASK_MOVING);
+            if (!bot->IsRooted())
+                bot->SendMovementFlagUpdate();
+        }
         else
             bot->StopMoving();
         ready = false;
@@ -203,10 +209,18 @@ bool NewRpgCraftAction::ReadyToCast()
         bot->Dismount();
         ready = false;
     }
-    if (bot->GetShapeshiftForm() != FORM_NONE)
+    // Leave a form only when it blocks this cast (the spell's own stance rules, as the gather action does). A warrior's
+    // stance, Shadowform or Stealth never blocks a craft, and PlayerbotAI::RemoveShapeshift only removes druid forms
+    // and Ghost Wolf: the old "any form" test spun here every tick for such a bot until TripMinutes (GM-BOTAI-0120:
+    // Task 13's c01 bots stood at the forge for 15 minutes and made nothing).
+    if (ShapeshiftForm const form = bot->GetShapeshiftForm(); form != FORM_NONE)
     {
-        botAI->RemoveShapeshift();
-        ready = false;
+        SpellInfo const* info = sSpellMgr->GetSpellInfo(spell);
+        if (info && info->CheckShapeshift(form) != SPELL_CAST_OK)
+        {
+            bot->RemoveAurasByType(SPELL_AURA_MOD_SHAPESHIFT);
+            ready = false;
+        }
     }
     if (!bot->IsStandState())
     {
@@ -245,7 +259,7 @@ bool NewRpgCraftAction::Make(NewRpgInfo::CraftTrip& trip)
             if (bot->GetExactDist(station->pos) > Craft::StationArriveYards(station->focusDist))
                 return WalkTo(trip, station->pos);
         }
-        if (!ReadyToCast())
+        if (!ReadyToCast(recipe->spell))
             return true;  // stopped, stood up or dismounted this tick: it casts on the next one
         // An enchant goes on the piece it was planned for (the first worn one it fits that has no permanent enchant).
         Item* target = nullptr;
@@ -293,7 +307,7 @@ bool NewRpgCraftAction::UseResults(NewRpgInfo::CraftTrip& trip)
                 continue;
             if (AI_VALUE2(ItemUsage, "item usage", item->GetEntry()) != ITEM_USAGE_DISENCHANT)
                 continue;
-            if (!ReadyToCast())
+            if (!ReadyToCast(SPELL_DISENCHANT))
                 return true;  // stopped, stood up or dismounted this tick: it disenchants on the next one
             trip.tried.insert(item->GetGUID().GetCounter());
             if (botAI->CastSpell(SPELL_DISENCHANT, bot, item))

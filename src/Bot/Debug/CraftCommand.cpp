@@ -17,6 +17,7 @@
 #include "CraftMgr.h"
 #include "Item.h"
 #include "MapMgr.h"
+#include "MoveSpline.h"
 #include "NewRpgInfo.h"
 #include "ObjectAccessor.h"
 #include "Player.h"
@@ -84,6 +85,33 @@ void PrintBot(ChatHandler* handler, Player* bot)
         << " listable=" << CraftMgr::instance().ListableCount(botAI, bot) << " live=" << info.craft.liveListings
         << " missing=" << info.craft.missing.size();
     handler->PSendSysMessage("{}", out.str());
+    if (!trip)
+        return;
+    // GM-BOTAI-0120 diagnostic (Task 13's c01 stall): where the trip stands and what keeps it from casting or walking.
+    // station_d/arrive: the current step's nearest station and the distance that counts as there (-1: no station);
+    // target_d: the place WalkTo walks to (-1: none); still_ms: the walk guard's clock (gives up at 60000).
+    float stationDist = -1.0f, arrive = -1.0f;
+    if (trip->step < trip->batch.size())
+        if (CraftRecipeInfo const* r = CraftMgr::instance().Recipe(trip->batch[trip->step].spell); r && r->station)
+            if (CraftSpot const* st = CraftMgr::instance().NearestStation(bot, r->station, trip->guided))
+            {
+                stationDist = bot->GetExactDist(st->pos);
+                arrive = Craft::StationArriveYards(st->focusDist);
+            }
+    std::ostringstream t;
+    t << "CRAFTTRIP name=" << bot->GetName() << " phase=" << uint32(trip->phase) << " step=" << trip->step
+      << " casts=" << trip->castsDone << " class=" << uint32(bot->getClass())
+      << " form=" << uint32(bot->GetShapeshiftForm()) << " moving=" << (bot->isMoving() ? 1 : 0)
+      << " falling=" << (bot->HasUnitMovementFlag(MOVEMENTFLAG_FALLING | MOVEMENTFLAG_FALLING_FAR) ? 1 : 0)
+      << " forward=" << (bot->HasUnitMovementFlag(MOVEMENTFLAG_FORWARD) ? 1 : 0)
+      << " spline_done=" << (bot->movespline->Finalized() ? 1 : 0)
+      << " casting=" << (bot->IsNonMeleeSpellCast(false) ? 1 : 0) << " mounted=" << (bot->IsMounted() ? 1 : 0)
+      << " stand=" << (bot->IsStandState() ? 1 : 0) << " combat=" << (bot->IsInCombat() ? 1 : 0)
+      << " station_d=" << stationDist << " arrive=" << arrive
+      << " target_d=" << (trip->target ? bot->GetExactDist(trip->target) : -1.0f)
+      << " best=" << trip->approach.best << " still_ms=" << trip->approach.stillMs
+      << " trip_s=" << GetMSTimeDiffToNow(info.startT) / IN_MILLISECONDS;
+    handler->PSendSysMessage("{}", t.str());
 }
 }  // namespace
 
