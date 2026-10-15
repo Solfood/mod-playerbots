@@ -1407,6 +1407,8 @@ bool NewRpgBaseAction::ChangeToGuideChoice()
             if (CheckRpgStatusAvailable(RPG_OUTDOOR_PVP))
                 return RandomChangeStatus({RPG_OUTDOOR_PVP});
             break;
+        case Guides::Activity::Craft:  // Task 11: a craft trip when there is something worth making
+            break;
         case Guides::Activity::Guide:
             break;
     }

@@ -204,13 +204,14 @@ inline bool ApproachTick(Approach& a, float distance, uint32_t elapsedMs, uint32
 }
 
 // What a guided bot does from RPG_IDLE, by its guildmaster focus (decision 10; the bridge's numbers: 0 none,
-// 1 questing, 2 grinding, 3 pvp, 4 gathering, 5 resting). Nudges are always obeyed.
+// 1 questing, 2 grinding, 3 pvp, 4 gathering, 5 resting, 6 crafting). Nudges are always obeyed.
 enum class Activity : uint8_t
 {
     Guide = 0,
     Grind,
     Pvp,
     Gather,
+    Craft,  // World of Craft (Plan 6a): a craft trip when there is something worth making, else the guide
 };
 
 inline Activity ActivityFor(uint8_t focus)
@@ -220,6 +221,7 @@ inline Activity ActivityFor(uint8_t focus)
         case 2: return Activity::Grind;
         case 3: return Activity::Pvp;
         case 4: return Activity::Gather;
+        case 6: return Activity::Craft;
         default: return Activity::Guide;
     }
 }

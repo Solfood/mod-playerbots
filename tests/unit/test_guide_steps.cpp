@@ -155,6 +155,8 @@ int main()
     CHECK_TRUE(ActivityFor(3) == Activity::Pvp);
     CHECK_TRUE(ActivityFor(4) == Activity::Gather);
     CHECK_TRUE(ActivityFor(5) == Activity::Guide);
+    CHECK_TRUE(ActivityFor(6) == Activity::Craft);  // World of Craft (Plan 6a): the crafting focus
+    CHECK_TRUE(ActivityFor(7) == Activity::Guide);
     CHECK_TRUE(!TeleportStalled(3, 4));
     CHECK_TRUE(TeleportStalled(3, 5));
     CHECK_TRUE(!RideTimedOut(25 * 60000 - 1, 25));
