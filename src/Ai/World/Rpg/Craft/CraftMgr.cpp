@@ -7,18 +7,23 @@
 #include "CraftMgr.h"
 
 #include <algorithm>
+#include <cstdint>
 #include <map>
+#include <utility>
 
 #include "AiObjectContext.h"
+#include "AuctionHouseMgr.h"
 #include "DBCStores.h"
 #include "DatabaseEnv.h"
 #include "EarnedTraining.h"
+#include "FixedPopulation.h"
 #include "GameObjectData.h"
 #include "GuideMgr.h"
 #include "HubAuctioneers.h"
 #include "Item.h"
 #include "ItemUsageValue.h"
 #include "Log.h"
+#include "Mail.h"
 #include "MapMgr.h"
 #include "MarketRules.h"
 #include "NewRpgInfo.h"
@@ -508,8 +513,12 @@ bool CraftMgr::IsSupply(ItemTemplate const* proto)
                 ItemUsage const usage = context->GetValue<ItemUsage>("item usage", r->product)->Get();
                 bool const upgrade = usage == ITEM_USAGE_EQUIP || usage == ITEM_USAGE_REPLACE;
                 bool const supply = IsSupply(proto) && bot->CanUseItem(proto) == EQUIP_ERR_OK;
-                uint32 const pct = upgrade ? ::Craft::GearPricePct(proto->ItemLevel) : s.materialPricePct;
-                c.value = static_cast<uint32>(uint64(proto->SellPrice) * r->productCount * pct / 100);
+                // Valued at the start price an auction visit asks for it (Task 10: gear by item level, the same
+                // rule as AuctionVisitOperation::List), so a gear extra is not undervalued at the material rate.
+                bool const gear = upgrade || proto->InventoryType != INVTYPE_NON_EQUIP;
+                c.value = static_cast<uint32>(std::min<uint64>(
+                    ::Craft::StartPrice(proto->SellPrice, r->productCount, gear, proto->ItemLevel, s.materialPricePct),
+                    UINT32_MAX));
                 // An extra only when it is worth something when sold (Task 2 ruling: PlanBatch does not filter it).
                 bool const sells = c.value > 0 && proto->Bonding != BIND_WHEN_PICKED_UP;
                 uint32 const have = held(r->product);
@@ -613,4 +622,86 @@ bool CraftMgr::StartTrip(PlayerbotAI* botAI, Player* bot) const
         GuideMgr::instance().Unseat(bot->GetGUID().GetCounter());  // its step's seat is for working bots
     info.ChangeToCraft(std::move(plan), info.craft.pendingGuided);
     return true;
+}
+
+std::vector<Item*> CraftMgr::HeldForAuction(PlayerbotAI* botAI, Player* /*bot*/) const
+{
+    NewRpgInfo::CraftState const& state = botAI->rpgInfo.craft;
+    ::Craft::Settings const& s = sPlayerbotAIConfig.crafting;
+    AiObjectContext* context = botAI->GetAiObjectContext();
+    std::vector<std::pair<uint64, Item*>> listable;
+    for (Item* item : botAI->GetInventoryItems())
+    {
+        ItemTemplate const* proto = item->GetTemplate();
+        // What the core's sell handler refuses is never held (soulbound, untradable, conjured, timed).
+        if (!proto->SellPrice || item->IsSoulBound() || !item->CanBeTraded() || proto->HasFlag(ITEM_FLAG_CONJURED) ||
+            item->GetUInt32Value(ITEM_FIELD_DURATION))
+            continue;
+        auto const back = state.returned.find(proto->ItemId);
+        if (back != state.returned.end() && ::Craft::OnReturn(back->second) == ::Craft::AfterReturn::Vendor)
+            continue;  // back twice, or not worth listing: the vendor gets it
+        // ITEM_USAGE_AH: tradable and nothing it needs (gear, supplies, the materials its recipes use are kept).
+        if (context->GetValue<ItemUsage>("item usage", proto->ItemId)->Get() != ITEM_USAGE_AH)
+            continue;
+        listable.push_back({uint64(proto->SellPrice) * item->GetCount(), item});
+    }
+    std::stable_sort(listable.begin(), listable.end(), [](auto const& a, auto const& b) { return a.first > b.first; });
+    std::vector<Item*> held;
+    for (uint32 rank = 0; rank < listable.size(); ++rank)
+        if (::Craft::HoldForAuction(rank, state.liveListings, s.maxListings))
+            held.push_back(listable[rank].second);
+    return held;
+}
+
+uint32 CraftMgr::ListableCount(PlayerbotAI* botAI, Player* bot) const
+{
+    NewRpgInfo::CraftState& state = botAI->rpgInfo.craft;
+    uint32 const now = getMSTime();
+    if (!state.listableAtMs || getMSTimeDiff(state.listableAtMs, now) > LISTABLE_EVERY_MS)
+    {
+        std::vector<Item*> const held = HeldForAuction(botAI, bot);
+        state.listable = static_cast<uint32>(held.size());
+        state.heldItems.clear();
+        for (Item* item : held)
+            state.heldItems.insert(item->GetGUID());
+        state.listableAtMs = std::max<uint32>(1, now);
+    }
+    return state.listable;
+}
+
+GuidSet CraftMgr::HeldGuids(PlayerbotAI* botAI, Player* bot) const
+{
+    if (!Crafting(bot))
+        return {};
+    ListableCount(botAI, bot);  // refreshes the cache when it is a minute old
+    return botAI->rpgInfo.craft.heldItems;
+}
+
+void CraftMgr::NoteAuctionMail(Player* bot, Mail const* mail) const
+{
+    if (!mail || mail->messageType != MAIL_AUCTION || !Crafting(bot))
+        return;  // crafting off: nothing is counted or noted (ruling P4)
+    PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
+    if (!botAI)
+        return;
+    NewRpgInfo::CraftState& state = botAI->rpgInfo.craft;
+    // The core's subject: "<item>:0:<answer>:<auction id>:<count>" (AuctionEntry::BuildAuctionMailSubject).
+    uint32_t item = 0;
+    uint32_t answer = 0;
+    if (!::Craft::ReadAuctionMailSubject(mail->subject, item, answer))
+        return;
+    if (answer != AUCTION_SUCCESSFUL && answer != AUCTION_EXPIRED)
+        return;  // won items, outbid refunds, pending-sale notes: nothing to count
+    if (!state.notedMails.insert(mail->messageID).second)
+        return;  // noted at an earlier mailbox (its item did not fit then)
+    if (answer == AUCTION_SUCCESSFUL)
+    {
+        FixedPopulation::Count(EconomyCounter::AuctionsSold);
+        FixedPopulation::Count(EconomyCounter::AuctionGoldIn, mail->money);  // the price (no cut on this server)
+        state.returned.erase(item);
+    }
+    else
+        ++state.returned[item];  // spec §4: relisted once at RelistPct, then the vendor's
+    if (state.liveListings)
+        --state.liveListings;
 }

@@ -5,9 +5,11 @@
  */
 
 #include <algorithm>
+#include <utility>
 
 #include "SellAction.h"
 #include "ChatHelper.h"
+#include "CraftMgr.h"
 #include "Event.h"
 #include "ItemPackets.h"
 #include "ItemUsageValue.h"
@@ -76,12 +78,18 @@ private:
 class SellVendorItemsVisitor : public SellItemsVisitor
 {
 public:
-    SellVendorItemsVisitor(SellAction* action, AiObjectContext* con) : SellItemsVisitor(action) { context = con; }
+    SellVendorItemsVisitor(SellAction* action, AiObjectContext* con, GuidSet heldItems)
+        : SellItemsVisitor(action), context(con), held(std::move(heldItems))
+    {
+    }
 
     AiObjectContext* context;
+    GuidSet held;  // World of Craft: kept for the next auction visit (empty when not crafting)
 
     bool Visit(Item* item) override
     {
+        if (held.count(item->GetGUID()))
+            return true;
         ItemUsage usage = context->GetValue<ItemUsage>("item usage", item->GetEntry())->Get();
         if (usage != ITEM_USAGE_VENDOR && usage != ITEM_USAGE_AH)
             return true;
@@ -103,7 +111,9 @@ bool SellAction::Execute(Event event)
 
     if (text == "vendor")
     {
-        SellVendorItemsVisitor visitor(this, context);
+        // World of Craft (Plan 6a): what it holds back for its next auction visit is not sold here. Crafting off:
+        // nothing is held, exactly as before.
+        SellVendorItemsVisitor visitor(this, context, CraftMgr::instance().HeldGuids(botAI, bot));
         IterateItems(&visitor);
         botAI->ConsolidateItems();  // re-stack what the partial sells fragmented
         return true;

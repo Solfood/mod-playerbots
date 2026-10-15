@@ -22,7 +22,8 @@ enum TownErrand : uint8
     TOWN_ERRAND_REPAIR = 0x01,
     TOWN_ERRAND_SELL = 0x02,
     TOWN_ERRAND_AMMO = 0x04,
-    TOWN_ERRAND_MAIL = 0x08
+    TOWN_ERRAND_MAIL = 0x08,
+    TOWN_ERRAND_AUCTION = 0x10  // World of Craft (Plan 6a): something to list, or a material its plan misses
 };
 
 class TownErrands
@@ -50,6 +51,9 @@ public:
     // Where a repair errand walks to: the nearest repairer of the bot's faction on its map in a zone not above its
     // level, passing over `avoid` (the target of a trip it gave up) while another is in reach; else NearestTown.
     static WorldPosition RepairTrip(Player* bot, WorldPosition const& avoid);
+    // World of Craft (Plan 6a): where an auction trip walks to: the nearest auctioneer it may use on its map in a zone
+    // not above its level (TOWN_MAX_DISTANCE), else NearestTown.
+    static WorldPosition AuctionTrip(Player* bot);
     // On the way to town (honest world, GO_CAMP) with worn-out gear (PlaySafe) or through a zone above the bot's
     // level: fight back, but pick no fights.
     static bool AvoidFights(PlayerbotAI* botAI, Player* bot);

@@ -24,6 +24,7 @@ class Item;
 class Player;
 class PlayerbotAI;
 struct ItemTemplate;
+struct Mail;
 
 // One trade-skill recipe: a spell that creates an item or enchants one, from the core's spell and skill data.
 struct CraftRecipeInfo
@@ -116,6 +117,19 @@ public:
     // a bot of its level. 0 = anything.
     uint16 GatherAimFor(Player* bot) const;
     void NoteSeenPrice(uint32 item, uint32 perUnit);
+    // What it holds back for its next auction visit (spec §4 "What it lists"), best value first, at most one stack per
+    // free listing slot. Map or world thread (the bot's own data).
+    std::vector<Item*> HeldForAuction(PlayerbotAI* botAI, Player* bot) const;
+    // HeldForAuction's size, counted at most once a minute (the errand check runs every few seconds); the held items
+    // are kept with it (CraftState::heldItems).
+    uint32 ListableCount(PlayerbotAI* botAI, Player* bot) const;
+    // The items held back (once-a-minute cache, ruling P19); empty when the bot is not crafting. The vendor
+    // (SellAction) and JunkValue pass them over (ruling P17).
+    GuidSet HeldGuids(PlayerbotAI* botAI, Player* bot) const;
+    // At a mailbox (TownErrands::CollectMail): a sale is counted with its money, a return is noted for the relist.
+    // Nothing when the bot is not crafting (ruling P4).
+    void NoteAuctionMail(Player* bot, Mail const* mail) const;
+    static constexpr uint32 LISTABLE_EVERY_MS = MINUTE * IN_MILLISECONDS;
     size_t RecipeCount() const { return _recipes.size(); }
     size_t StationCount() const { return _stationCount; }
     size_t VendorCount() const { return _vendorCount; }

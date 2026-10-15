@@ -1140,8 +1140,10 @@ bool NewRpgBaseAction::GoRunErrands(bool repairOnly)
     WorldPosition camp;
     if (!servedHere)
     {
-        camp = (errands & TOWN_ERRAND_REPAIR) ? TownErrands::RepairTrip(bot, info.abandonedTrip)
-                                              : TownErrands::NearestTown(bot);
+        // World of Craft (Plan 6a): a trip with an auction errand (and no repair) walks to an auctioneer.
+        camp = (errands & TOWN_ERRAND_REPAIR)    ? TownErrands::RepairTrip(bot, info.abandonedTrip)
+               : (errands & TOWN_ERRAND_AUCTION) ? TownErrands::AuctionTrip(bot)
+                                                 : TownErrands::NearestTown(bot);
         if (camp == WorldPosition())
             return false;  // no town within reach: keep playing, try again later
     }

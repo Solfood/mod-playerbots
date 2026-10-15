@@ -7,6 +7,7 @@
 #include "TownErrands.h"
 
 #include "BudgetValues.h"
+#include "CraftMgr.h"
 #include "Creature.h"
 #include "FixedPopulation.h"
 #include "ItemUsageValue.h"
@@ -74,6 +75,17 @@ uint8 TownErrands::Needed(PlayerbotAI* botAI, Player* bot)
         CanAffordRepair(botAI, bot))
         errands |= TOWN_ERRAND_REPAIR;
 
+    // World of Craft (Plan 6a, decision 6): something worth listing, or a material its plan misses, once per town trip
+    // (a trip it already visited an auctioneer on, and that is still running, asks for none). Crafting off: never.
+    if (CraftMgr::instance().Crafting(bot))
+    {
+        NewRpgInfo const& info = botAI->rpgInfo;
+        bool const visitedThisTrip = info.craft.auctionTripMs && info.craft.auctionTripMs == info.lastErrandMs &&
+                                     CooldownLeftMs(info.lastErrandMs);
+        if (!visitedThisTrip && (!info.craft.missing.empty() || CraftMgr::instance().ListableCount(botAI, bot)))
+            errands |= TOWN_ERRAND_AUCTION;
+    }
+
     return errands;
 }
 
@@ -84,6 +96,8 @@ bool TownErrands::Serves(Creature const* npc, uint8 errands)
     if ((errands & TOWN_ERRAND_SELL) && npc->HasNpcFlag(UNIT_NPC_FLAG_VENDOR))
         return true;
     if ((errands & TOWN_ERRAND_AMMO) && npc->HasNpcFlag(UNIT_NPC_FLAG_VENDOR_AMMO))
+        return true;
+    if ((errands & TOWN_ERRAND_AUCTION) && npc->HasNpcFlag(UNIT_NPC_FLAG_AUCTIONEER))
         return true;
     return false;
 }
@@ -143,6 +157,7 @@ uint32 TownErrands::CollectMail(Player* bot, ObjectGuid mailbox)
         Mail* mail = bot->GetMail(mailId);
         if (!mail)
             continue;
+        CraftMgr::instance().NoteAuctionMail(bot, mail);  // World of Craft: sales and returns (crafting off: nothing)
 
         if (mail->money)
         {
@@ -208,6 +223,13 @@ WorldPosition TownErrands::RepairTrip(Player* bot, WorldPosition const& avoid)
     return repairer != WorldPosition() ? repairer : NearestTown(bot);
 }
 
+WorldPosition TownErrands::AuctionTrip(Player* bot)
+{
+    float const maxDistance = bot->GetLevel() <= 5 ? TOWN_MAX_DISTANCE_LOW_LEVEL : TOWN_MAX_DISTANCE;
+    CraftSpot const* auctioneer = CraftMgr::instance().NearestAuctioneer(bot, maxDistance);
+    return auctioneer ? auctioneer->pos : NearestTown(bot);
+}
+
 bool TownErrands::AvoidFights(PlayerbotAI* botAI, Player* bot)
 {
     return botAI->rpgInfo.GetStatus() == RPG_GO_CAMP &&
@@ -255,9 +277,12 @@ bool TownErrands::RepairWeaponNow(PlayerbotAI* botAI, Player* bot)
 uint32 TownErrands::JunkValue(PlayerbotAI* botAI, Player* bot)
 {
     AiObjectContext* context = botAI->GetAiObjectContext();
+    GuidSet const held = CraftMgr::instance().HeldGuids(botAI, bot);  // empty when not crafting; cached a minute
     uint32 value = 0;
     for (Item* item : botAI->GetInventoryItems())
     {
+        if (held.count(item->GetGUID()))
+            continue;  // World of Craft: held for the auction house, not for the vendor
         ItemUsage const usage = context->GetValue<ItemUsage>("item usage", item->GetEntry())->Get();
         if (usage == ITEM_USAGE_VENDOR || usage == ITEM_USAGE_AH)
             value += item->GetTemplate()->SellPrice * item->GetCount();

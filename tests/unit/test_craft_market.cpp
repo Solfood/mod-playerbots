@@ -153,5 +153,27 @@ int main()
     CHECK_TRUE(!SkinHuntFilters(9000, 5000, false));
     CHECK_TRUE(!SkinHuntFilters(5000, 9000, true));
     CHECK_TRUE(!SkinHuntFilters(0, 5000, true));
+    // Task 10: the price a visit asks. A first listing: ListPrice of StartPrice (gear by item level); a returned item
+    // it asked a price for before: RelistPrice of that price. Callers still check WorthListing (it can equal vendor).
+    CHECK_EQ(300u, AskPrice(false, 0, 10, 10, false, 0, 0, 300, 2, 80));     // material, nobody else lists it
+    CHECK_EQ(195u, AskPrice(false, 0, 10, 10, false, 0, 20, 300, 2, 80));    // undercut theirs
+    CHECK_EQ(500u, AskPrice(false, 0, 1, 100, true, 25, 0, 300, 2, 80));     // gear: x5 at item level 25
+    CHECK_EQ(240u, AskPrice(true, 30, 10, 10, false, 0, 20, 300, 2, 80));    // relist: 80 % of 300, theirs ignored
+    CHECK_EQ(100u, AskPrice(true, 11, 10, 10, false, 0, 0, 300, 2, 80));     // relist floor: the vendor value...
+    CHECK_TRUE(!WorthListing(AskPrice(true, 11, 10, 10, false, 0, 0, 300, 2, 80), 10, 10));  // ...not worth listing
+
+    // Task 10: the core's auction mail subject, "<item>:0:<answer>:<auction id>:<count>"
+    uint32_t item = 0, answer = 0;
+    CHECK_TRUE(ReadAuctionMailSubject("2589:0:2:1234:20", item, answer));
+    CHECK_EQ(2589u, item);
+    CHECK_EQ(2u, answer);
+    CHECK_TRUE(ReadAuctionMailSubject("774:0:3:99:1", item, answer));
+    CHECK_EQ(774u, item);
+    CHECK_EQ(3u, answer);
+    CHECK_TRUE(!ReadAuctionMailSubject("", item, answer));
+    CHECK_TRUE(!ReadAuctionMailSubject("Hello there", item, answer));
+    CHECK_TRUE(!ReadAuctionMailSubject("2589:0", item, answer));
+    CHECK_TRUE(!ReadAuctionMailSubject("2589:1:2:5:1", item, answer));  // the second field is always 0
+    CHECK_TRUE(!ReadAuctionMailSubject(":0:2:5:1", item, answer));
     return UnitFailures();
 }

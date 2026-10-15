@@ -10,6 +10,7 @@
 #define PLAYERBOTS_CRAFTMARKETRULES_H
 
 #include <cstdint>
+#include <string>
 
 // World of Craft part 1 §4 (spec 2026-10-14): the basic two-sided auction house. A bot lists extras and spare
 // materials, buys an upgrade or a missing material, and never buys to resell or spends its repair reserve. The core's
@@ -112,6 +113,40 @@ inline bool BuyMaterial(bool missing, uint64_t buyout, uint64_t otherCost, uint6
 inline bool HoldForAuction(uint32_t rankByValue, uint32_t live, uint32_t maxListings)
 {
     return rankByValue < ListSlots(live, maxListings);
+}
+// The buyout a visit asks for a stack (Task 10): a returned item it asked `lastPerUnit` for before is relisted at
+// relistPct of that price (spec §4); anything else gets ListPrice of its StartPrice (gear by item level). Never below
+// the vendor value, so it can equal it: callers check WorthListing.
+inline uint64_t AskPrice(bool relist, uint64_t lastPerUnit, uint32_t count, uint32_t vendorSell, bool gear,
+                         uint32_t itemLevel, uint64_t cheapestPerUnit, uint32_t materialPct, uint32_t undercutPct,
+                         uint32_t relistPct)
+{
+    if (relist)
+        return RelistPrice(lastPerUnit * count, relistPct, vendorSell, count);
+    return ListPrice(StartPrice(vendorSell, count, gear, itemLevel, materialPct), cheapestPerUnit, count, vendorSell,
+                     undercutPct);
+}
+
+// The core's auction mail subject (AuctionEntry::BuildAuctionMailSubject): "<item>:0:<answer>:<auction id>:<count>".
+// Reads the item and the answer (the core's MailAuctionAnswers: 2 sold, 3 expired). False when it is not that form.
+inline bool ReadAuctionMailSubject(std::string const& subject, uint32_t& item, uint32_t& answer)
+{
+    uint64_t fields[3] = {0, 0, 0};
+    size_t pos = 0;
+    for (uint64_t& field : fields)
+    {
+        size_t const start = pos;
+        while (pos < subject.size() && subject[pos] >= '0' && subject[pos] <= '9' && pos - start < 10)
+            field = field * 10 + uint64_t(subject[pos++] - '0');
+        if (pos == start || pos >= subject.size() || subject[pos] != ':' || field > 0xFFFFFFFFu)
+            return false;
+        ++pos;
+    }
+    if (fields[1] != 0)
+        return false;
+    item = static_cast<uint32_t>(fields[0]);
+    answer = static_cast<uint32_t>(fields[2]);
+    return true;
 }
 }  // namespace Craft
 

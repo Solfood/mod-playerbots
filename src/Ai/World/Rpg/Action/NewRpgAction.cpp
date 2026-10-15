@@ -6,6 +6,7 @@
 
 #include "NewRpgAction.h"
 #include "AreaDefines.h"
+#include "AuctionOps.h"
 #include "BroadcastHelper.h"
 #include "ChatHelper.h"
 #include "CraftMgr.h"
@@ -29,6 +30,7 @@
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "PlayerbotTextMgr.h"
+#include "PlayerbotWorldThreadProcessor.h"
 #include "ProfessionPicker.h"
 #include "RouteSurvivalRules.h"
 #include "Playerbots.h"
@@ -672,6 +674,16 @@ bool NewRpgWanderNpcAction::Execute(Event /*event*/)
                 {
                     bot->SetSelection(data.npcOrGo);
                     botAI->DoSpecificAction("repair", Event("repair"));
+                }
+
+                // World of Craft (Plan 6a): at an auctioneer, all its auction business in one step, on the world
+                // thread (decision 4), once per town trip (decision 6). Crafting off: nothing.
+                if ((npcFlags & UNIT_NPC_FLAG_AUCTIONEER) && CraftMgr::instance().Crafting(bot) &&
+                    Craft::AuctionVisitDue(info.craft.auctionTripMs, info.lastErrandMs))
+                {
+                    info.craft.auctionTripMs = info.lastErrandMs;
+                    PlayerbotWorldThreadProcessor::instance().QueueOperation(
+                        std::make_unique<AuctionVisitOperation>(bot->GetGUID(), creature->GetGUID()));
                 }
 
                 // Honest world: any trainer visit catches up on spells skipped at level-up for lack of gold,

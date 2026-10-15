@@ -204,6 +204,7 @@ struct NewRpgInfo
         std::map<uint32, uint32> missingValue;  // ... and what the recipe they were missing for is worth
         std::map<uint32, uint64> missingOtherCost;  // ... and the vendor cost of that recipe's other materials
         GuidSet heldItems;          // the items it holds back for the auction house (refreshed with `listable`)
+        std::unordered_set<uint32> notedMails;  // auction mails already noted (CraftMgr::NoteAuctionMail)
     };
     CraftState craft;
     WorldPosition abandonedTrip;  // where the last town trip given up was going (the next repair trip avoids it)

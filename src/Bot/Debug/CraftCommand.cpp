@@ -7,6 +7,7 @@
 #include "CraftCommand.h"
 
 #include <algorithm>
+#include <cstdlib>
 #include <sstream>
 #include <string>
 #include <unordered_set>
@@ -28,6 +29,9 @@
 
 namespace
 {
+// Numbers from the console: strtoul as in GuideCommand (a typo gives 0, never an exception that stops the server).
+uint32 Num(std::string const& s) { return static_cast<uint32>(std::strtoul(s.c_str(), nullptr, 10)); }
+
 std::vector<std::string> Words(char const* args)
 {
     std::vector<std::string> out;
@@ -76,7 +80,9 @@ void PrintBot(ChatHandler* handler, Player* bot)
             ore += bot->GetItemCount(r->reagents[0].item, false);
     out << " step=" << (trip ? trip->step : 0) << " steps=" << (trip ? trip->batch.size() : 0)
         << " made=" << (trip ? trip->made : 0) << " worn_own=" << wornOwn << " ore=" << ore
-        << " aim=" << CraftMgr::instance().GatherAimFor(bot);
+        << " aim=" << CraftMgr::instance().GatherAimFor(bot)
+        << " listable=" << CraftMgr::instance().ListableCount(botAI, bot) << " live=" << info.craft.liveListings
+        << " missing=" << info.craft.missing.size();
     handler->PSendSysMessage("{}", out.str());
 }
 }  // namespace
@@ -86,7 +92,8 @@ bool CraftCommand::Handle(ChatHandler* handler, char const* args)
     std::vector<std::string> const words = Words(args);
     if (words.empty())
     {
-        handler->PSendSysMessage("CRAFTERR usage: craft stats | hubs | on|off|bot|plan|trip|gather <name>");
+        handler->PSendSysMessage("CRAFTERR usage: craft stats | hubs | on|off|bot|plan|trip|gather|visit <name> | want "
+                                 "<name> <item> <count> <value>");
         return false;
     }
     CraftMgr& crafts = CraftMgr::instance();
@@ -206,6 +213,34 @@ bool CraftCommand::Handle(ChatHandler* handler, char const* args)
         }
         info.ChangeToDoGather(aim);
         handler->PSendSysMessage("CRAFTOK gather {} aim={}", bot->GetName(), aim);
+        return true;
+    }
+    if (sub == "visit")
+    {
+        // Test seam: a town trip to the nearest auctioneer it may use, now (one auction visit on it). Real walking,
+        // real prices: the seam only starts the trip.
+        CraftSpot const* auctioneer =
+            crafts.NearestAuctioneer(bot, static_cast<float>(sPlayerbotAIConfig.crafting.stationYards));
+        if (!crafts.Crafting(bot) || !auctioneer)
+        {
+            handler->PSendSysMessage("CRAFTERR {} is not crafting, or no auctioneer within {} yards", bot->GetName(),
+                                     sPlayerbotAIConfig.crafting.stationYards);
+            return false;
+        }
+        info.lastErrandMs = std::max<uint32>(1, getMSTime());
+        info.ChangeToGoCamp(auctioneer->pos);
+        handler->PSendSysMessage("CRAFTOK visit {} yards={:.0f}", bot->GetName(), bot->GetExactDist(auctioneer->pos));
+        return true;
+    }
+    if (sub == "want" && words.size() == 5)
+    {
+        // Test seam: as if its last plan missed `count` of `item` for a recipe worth `value` copper. A visit may then
+        // buy it with the bot's own gold, through the core's handler.
+        uint32 const item = Num(words[2]);
+        info.craft.missing[item] = std::max<uint32>(1, Num(words[3]));
+        info.craft.missingValue[item] = Num(words[4]);
+        info.craft.missingOtherCost[item] = 0;
+        handler->PSendSysMessage("CRAFTOK want {} item={}", bot->GetName(), item);
         return true;
     }
     handler->PSendSysMessage("CRAFTERR unknown sub-command {}", sub);
