@@ -112,6 +112,9 @@ public:
     static constexpr uint32 PLAN_REUSE_MS = 5 * IN_MILLISECONDS;
     // Copper a node or skin of that kind is worth to a bot of `level` (vendor value, or the auction price last seen).
     uint32 GatherValue(uint16 skill, uint32 level) const;
+    // What its gathering trip looks for (spec §2, Craft::GatherAim): what its recipes need, else what is worth most to
+    // a bot of its level. 0 = anything.
+    uint16 GatherAimFor(Player* bot) const;
     void NoteSeenPrice(uint32 item, uint32 perUnit);
     size_t RecipeCount() const { return _recipes.size(); }
     size_t StationCount() const { return _stationCount; }

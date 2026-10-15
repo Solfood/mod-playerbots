@@ -86,6 +86,7 @@ struct NewRpgInfo
         ObjectGuid::LowType nodeSpawnId{0};
         WorldPosition nodePos{};
         std::unordered_set<ObjectGuid::LowType> visited;
+        uint16 aim{0};  // World of Craft: the node kind it looks for (0 = any)
         uint32 lastReach{0};
         uint32 lastPassiveCheck{0};
         ObjectGuid::LowType lastSwitchedFrom{0};
@@ -271,7 +272,7 @@ struct NewRpgInfo
     void ChangeToDoQuest(uint32 questId, Quest const* quest);
     void ChangeToTravelFlight(uint32 flightMasterEntry, WorldPosition flightMasterPos, std::vector<uint32> path);
     void ChangeToOutdoorPvp(ObjectGuid::LowType capturePointSpawnId = 0);
-    void ChangeToDoGather();
+    void ChangeToDoGather(uint16 aim = 0);
     void ChangeToRest();
     void ChangeToIdle();
     void ChangeToFollowRoute(uint32 hubId, uint32 fromArea = 0, bool arrived = false);

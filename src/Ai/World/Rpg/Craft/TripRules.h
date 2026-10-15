@@ -125,6 +125,12 @@ inline GuidedPick GuidedIdlePick(uint32_t guideWeight, uint32_t gatherWeight, ui
 // An empty plan starts the cooldown (decision 10). For a guided bot only in town (a station or a material vendor within
 // TownYards; ruling P2): away from town it had nothing to plan with, and it must still craft when it gets there.
 inline bool EmptyPlanCooldown(bool guided, bool inTown) { return !guided || inTown; }
+
+// A skin hunt (Plan 6a decision 12) runs until `untilMs` (getMSTime(); 0 = none). Wraps like getMSTime().
+inline bool SkinHuntOn(uint32_t untilMs, uint32_t nowMs)
+{
+    return untilMs && static_cast<int32_t>(untilMs - nowMs) > 0;
+}
 }  // namespace Craft
 
 #endif

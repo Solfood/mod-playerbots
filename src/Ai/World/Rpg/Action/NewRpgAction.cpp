@@ -178,6 +178,15 @@ bool TellRpgStatusAction::Execute(Event event)
     }
     else if (status == RPG_DO_GATHER)
     {
+        // World of Craft (Plan 6a, spec §2): an aimed trip; an aim at skins is a skin hunt (decision 12). Crafting
+        // off: aim 0, exactly as before.
+        bool const crafting = CraftMgr::instance().Crafting(bot);
+        uint16 const aim = crafting ? CraftMgr::instance().GatherAimFor(bot) : 0;
+        if (aim == SKILL_SKINNING && StartSkinHunt())
+        {
+            WhisperStatusChange(owner, "GO_GRIND (skins)");
+            return true;
+        }
         if (!botAI->HasSkill(SKILL_HERBALISM) && !botAI->HasSkill(SKILL_MINING))
         {
             std::string msg = PlayerbotTextMgr::instance().GetBotTextOrDefault(
@@ -185,7 +194,7 @@ bool TellRpgStatusAction::Execute(Event event)
             bot->Whisper(msg, LANG_UNIVERSAL, owner);
             return false;
         }
-        info.ChangeToDoGather();
+        info.ChangeToDoGather(aim);
         WhisperStatusChange(owner, "DO_GATHER");
         return true;
     }

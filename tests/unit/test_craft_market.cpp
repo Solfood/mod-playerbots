@@ -141,5 +141,12 @@ int main()
     for (char const* named : {"Goldshire", "Lakeshire", "Southshore", "Auberdine", "The Crossroads", "Tarren Mill",
                               "Hammerfall"})
         CHECK_EQ(1u, hubs.count(named));  // the spec's examples
+
+    // the skin hunt's clock (getMSTime() wraps)
+    CHECK_TRUE(!SkinHuntOn(0, 5000));
+    CHECK_TRUE(SkinHuntOn(9000, 5000));
+    CHECK_TRUE(!SkinHuntOn(5000, 9000));
+    CHECK_TRUE(SkinHuntOn(100, 0xFFFFFF00u));   // ends just after the clock wraps; read just before: still on
+    CHECK_TRUE(!SkinHuntOn(0xFFFFFF00u, 100));  // ended just before the wrap; read just after: over
     return UnitFailures();
 }

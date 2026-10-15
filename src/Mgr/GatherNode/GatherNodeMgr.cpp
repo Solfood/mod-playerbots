@@ -156,7 +156,8 @@ bool GatherNodeMgr::HasUsableNodes(Player* bot)
     return false;
 }
 
-GatherNodeSpawn const* GatherNodeMgr::GetNextNode(Player* bot, std::unordered_set<ObjectGuid::LowType> const& visited)
+GatherNodeSpawn const* GatherNodeMgr::GetNextNode(Player* bot, std::unordered_set<ObjectGuid::LowType> const& visited,
+                                                 uint32 aimSkill)
 {
     std::vector<GatherNodeSpawn> const* nodes = GetZoneNodes(bot->GetMapId(), bot->GetZoneId());
     if (!nodes)
@@ -186,6 +187,13 @@ GatherNodeSpawn const* GatherNodeMgr::GetNextNode(Player* bot, std::unordered_se
 
     if (candidates.empty())
         return nullptr;
+
+    // World of Craft (Plan 6a, spec §2): a trip with an aim takes nodes of that kind when the zone has any.
+    if (aimSkill && std::any_of(candidates.begin(), candidates.end(),
+                                [aimSkill](auto const& c) { return c.second->skillId == aimSkill; }))
+        candidates.erase(std::remove_if(candidates.begin(), candidates.end(),
+                                        [aimSkill](auto const& c) { return c.second->skillId != aimSkill; }),
+                         candidates.end());
 
     uint32 nearestCount = std::min<uint32>(4, candidates.size());
     std::partial_sort(candidates.begin(), candidates.begin() + nearestCount, candidates.end(),

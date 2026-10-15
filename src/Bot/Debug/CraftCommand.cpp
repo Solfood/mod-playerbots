@@ -75,7 +75,8 @@ void PrintBot(ChatHandler* handler, Player* bot)
         if (r->oreSmelt && ores.insert(r->reagents[0].item).second)
             ore += bot->GetItemCount(r->reagents[0].item, false);
     out << " step=" << (trip ? trip->step : 0) << " steps=" << (trip ? trip->batch.size() : 0)
-        << " made=" << (trip ? trip->made : 0) << " worn_own=" << wornOwn << " ore=" << ore;
+        << " made=" << (trip ? trip->made : 0) << " worn_own=" << wornOwn << " ore=" << ore
+        << " aim=" << CraftMgr::instance().GatherAimFor(bot);
     handler->PSendSysMessage("{}", out.str());
 }
 }  // namespace
@@ -85,7 +86,7 @@ bool CraftCommand::Handle(ChatHandler* handler, char const* args)
     std::vector<std::string> const words = Words(args);
     if (words.empty())
     {
-        handler->PSendSysMessage("CRAFTERR usage: craft stats | hubs | on|off|bot|plan|trip <name>");
+        handler->PSendSysMessage("CRAFTERR usage: craft stats | hubs | on|off|bot|plan|trip|gather <name>");
         return false;
     }
     CraftMgr& crafts = CraftMgr::instance();
@@ -191,6 +192,20 @@ bool CraftCommand::Handle(ChatHandler* handler, char const* args)
             return false;
         }
         handler->PSendSysMessage("CRAFTOK trip {} steps={}", bot->GetName(), steps);
+        return true;
+    }
+    if (sub == "gather")
+    {
+        // Test seam: a node gathering trip with its aim now (the roll decides skin hunts).
+        uint16 const aim = crafts.GatherAimFor(bot);
+        if (!crafts.Crafting(bot) || aim == SKILL_SKINNING ||
+            (!bot->HasSkill(SKILL_MINING) && !bot->HasSkill(SKILL_HERBALISM)))
+        {
+            handler->PSendSysMessage("CRAFTERR {} gathers no nodes (aim {})", bot->GetName(), aim);
+            return false;
+        }
+        info.ChangeToDoGather(aim);
+        handler->PSendSysMessage("CRAFTOK gather {} aim={}", bot->GetName(), aim);
         return true;
     }
     handler->PSendSysMessage("CRAFTERR unknown sub-command {}", sub);

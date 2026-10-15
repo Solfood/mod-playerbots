@@ -46,7 +46,8 @@ public:
 
     // Random pick among the 4 nearest unvisited usable nodes in the bot's
     // current zone (jitter keeps co-located bots from herding on one route).
-    GatherNodeSpawn const* GetNextNode(Player* bot, std::unordered_set<ObjectGuid::LowType> const& visited);
+    GatherNodeSpawn const* GetNextNode(Player* bot, std::unordered_set<ObjectGuid::LowType> const& visited,
+                                       uint32 aimSkill = 0);
 
     // Live (spawned + GO_STATE_READY) object for a spawn point, nullptr if
     // none. Only meaningful when the grid at the spawn position is loaded.

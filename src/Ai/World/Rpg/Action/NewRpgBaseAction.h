@@ -89,6 +89,14 @@ protected:
     // World of Craft (Plan 6a): CraftMgr::ReadyToCraft and CraftMgr::StartTrip for this bot.
     bool CraftReady(bool guided);
     bool ChangeToCraftPlan();
+    // World of Craft (decision 12): a gathering trip for skins: GO_GRIND to a grind spot, where the grind target takes
+    // only skinnable beasts at or below its level until SKIN_HUNT_MS have passed. False = no grind spot.
+    bool StartSkinHunt();
+    static constexpr uint32 SKIN_HUNT_MS = 15 * MINUTE * IN_MILLISECONDS;
+    // World of Craft (Plan 6a, spec §2): the gathering trip with its aim. A crafting bot gathers what its recipes need,
+    // a pure gatherer what is worth most; an aim at skins is a skin hunt (false = no grind spot). Crafting off: aim 0,
+    // a plain DO_GATHER exactly as before (always true). The caller checks CheckRpgStatusAvailable(RPG_DO_GATHER).
+    bool ChangeToAimedGather();
 
 protected:
     /* FOR MOVE FAR */

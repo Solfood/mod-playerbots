@@ -5,6 +5,7 @@
  */
 
 #include "GrindTargetValue.h"
+#include "CraftMgr.h"
 #include "NewRpgInfo.h"
 #include "Playerbots.h"
 #include "ReputationMgr.h"
@@ -13,7 +14,9 @@
 #include "ServerFacade.h"
 #include "Survival.h"
 #include "SharedDefines.h"
+#include "Timer.h"
 #include "TownErrands.h"
+#include "TripRules.h"
 
 Unit* GrindTargetValue::Calculate()
 {
@@ -70,6 +73,9 @@ Unit* GrindTargetValue::FindTargetForGrinding(uint32 assistCount)
     bool const routed = SurvivalRulesOn(bot);  // routed or guided (Plan 5c)
     bool const retreating = routed && botAI->rpgInfo.route.retreating;
     Routes::Settings const& routeRules = sPlayerbotAIConfig.questRoutes;
+    // World of Craft (Plan 6a, decision 12): on a skin hunt, only skinnable beasts at or below its level.
+    bool const skinHunt = Craft::SkinHuntOn(botAI->rpgInfo.craft.skinHuntUntilMs, getMSTime()) &&
+                          CraftMgr::instance().Crafting(bot);
 
     for (ObjectGuid const guid : targets)
     {
@@ -119,6 +125,11 @@ Unit* GrindTargetValue::FindTargetForGrinding(uint32 assistCount)
                                    routeRules.safeFightLevelGap) ||
              (retreating && unit->GetLevel() > bot->GetLevel())))
             continue;
+
+        if (skinHunt && !unit->GetGUID().IsPlayer())
+            if (Creature* creature = unit->ToCreature())
+                if (!creature->GetCreatureTemplate()->SkinLootId || unit->GetLevel() > bot->GetLevel())
+                    continue;
 
         if (Creature* creature = unit->ToCreature())
             if (CreatureTemplate const* CreatureTemplate = creature->GetCreatureTemplate())

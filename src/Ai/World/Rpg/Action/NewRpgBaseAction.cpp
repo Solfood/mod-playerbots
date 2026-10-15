@@ -1335,10 +1335,7 @@ bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> candidateSta
             return false;
         }
         case RPG_DO_GATHER:
-        {
-            botAI->rpgInfo.ChangeToDoGather();
-            return true;
-        }
+            return ChangeToAimedGather();
         case RPG_FOLLOW_ROUTE:
             return ChangeToRouteChoice(route);
         case RPG_FOLLOW_GUIDE:  // never rolled (guided bots skip the roll); keeps the switch complete
@@ -1377,6 +1374,27 @@ bool NewRpgBaseAction::ChangeToRouteChoice()
     return ChangeToRouteChoice(RouteMgr::instance().Choose(bot));
 }
 
+bool NewRpgBaseAction::StartSkinHunt()
+{
+    WorldPosition const pos = SelectRandomGrindPos(bot);
+    if (pos == WorldPosition())
+        return false;
+    botAI->rpgInfo.craft.skinHuntUntilMs = std::max<uint32>(1, getMSTime() + SKIN_HUNT_MS);
+    botAI->rpgInfo.ChangeToGoGrind(pos);
+    return true;
+}
+
+bool NewRpgBaseAction::ChangeToAimedGather()
+{
+    // World of Craft (Plan 6a, spec §2): a crafting bot gathers what its recipes need, or what is worth most; skins
+    // are a skin hunt. Crafting off: aim 0, exactly as before.
+    uint16 const aim = CraftMgr::instance().Crafting(bot) ? CraftMgr::instance().GatherAimFor(bot) : 0;
+    if (aim == SKILL_SKINNING)
+        return StartSkinHunt();
+    botAI->rpgInfo.ChangeToDoGather(aim);
+    return true;
+}
+
 bool NewRpgBaseAction::GoGrindNear()
 {
     WorldPosition const pos = SelectRandomGrindPos(bot);
@@ -1395,11 +1413,8 @@ bool NewRpgBaseAction::ChangeToGuideChoice()
     switch (crowded ? Guides::Activity::Gather : Guides::ActivityFor(info.focus))
     {
         case Guides::Activity::Gather:
-            if (CheckRpgStatusAvailable(RPG_DO_GATHER))
-            {
-                info.ChangeToDoGather();
+            if (CheckRpgStatusAvailable(RPG_DO_GATHER) && ChangeToAimedGather())
                 return true;
-            }
             if (crowded && GoGrindNear())
                 return true;
             break;
@@ -1538,6 +1553,12 @@ bool NewRpgBaseAction::CheckRpgStatusAvailable(NewRpgStatus status)
         }
         case RPG_DO_GATHER:
         {
+            // World of Craft (Plan 6a): a crafting bot whose trip aims at skins may hunt (decision 12), never while
+            // it retreats. This is what lets a skinning-only bot gather at all.
+            if (CraftMgr::instance().Crafting(bot) && CraftMgr::instance().GatherAimFor(bot) == SKILL_SKINNING)
+                return !botAI->rpgInfo.route.retreating && AI_VALUE(uint8, "bag space") <= 80 &&
+                       TownErrands::MayGatherIn(botAI, bot, bot->GetZoneId()) &&
+                       SelectRandomGrindPos(bot) != WorldPosition();
             if (!botAI->HasSkill(SKILL_HERBALISM) && !botAI->HasSkill(SKILL_MINING))
                 return false;
 

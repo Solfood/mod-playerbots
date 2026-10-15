@@ -149,7 +149,7 @@ bool NewRpgDoGatherAction::Execute(Event /*event*/)
         // Prefer a node we can already see to be up over an unverified pick.
         GatherNodeSpawn const* node = sGatherNodeMgr.GetNearestLiveNode(bot, data.visited, nodeSwitchDistance);
         if (!node)
-            node = sGatherNodeMgr.GetNextNode(bot, data.visited);
+            node = sGatherNodeMgr.GetNextNode(bot, data.visited, data.aim);
         if (!node)
         {
             // nothing (left) to gather in this zone

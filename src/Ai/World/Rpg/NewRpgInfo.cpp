@@ -60,10 +60,12 @@ void NewRpgInfo::ChangeToOutdoorPvp(ObjectGuid::LowType capturePointSpawnId)
     data = pvp;
 }
 
-void NewRpgInfo::ChangeToDoGather()
+void NewRpgInfo::ChangeToDoGather(uint16 aim)
 {
     startT = getMSTime();
-    data = DoGather{};
+    DoGather gather;
+    gather.aim = aim;
+    data = gather;
 }
 
 void NewRpgInfo::ChangeToRest()

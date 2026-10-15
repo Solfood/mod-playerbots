@@ -395,6 +395,17 @@ uint32 CraftMgr::GatherValue(uint16 skill, uint32 level) const
     return n ? static_cast<uint32>(sum / n) : 0;
 }
 
+uint16 CraftMgr::GatherAimFor(Player* bot) const
+{
+    std::vector<uint16> skills;
+    for (uint16 skill : {SKILL_MINING, SKILL_HERBALISM, SKILL_SKINNING, SKILL_BLACKSMITHING, SKILL_ALCHEMY,
+                         SKILL_LEATHERWORKING})
+        if (bot->HasSkill(skill))
+            skills.push_back(skill);
+    uint32 const level = bot->GetLevel();
+    return Craft::GatherAim(skills, [this, level](uint16 skill) { return GatherValue(skill, level); });
+}
+
 void CraftMgr::NoteSeenPrice(uint32 item, uint32 perUnit)
 {
     std::lock_guard<std::mutex> guard(_seenLock);
