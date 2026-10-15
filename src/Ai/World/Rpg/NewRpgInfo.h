@@ -128,6 +128,7 @@ struct NewRpgInfo
         Guides::Approach approach{};          // no 5 yards closer in 60 s of walking: the trip is given up
         uint32 lastTickMs{0};                 // the approach clock's last tick (0 = none yet)
         bool guided{false};                   // planned as a guided bot: stations and vendors in town only
+        std::unordered_set<uint32> tried;     // items it tried to disenchant (item guid counters; each once a trip)
     };
     struct Idle
     {

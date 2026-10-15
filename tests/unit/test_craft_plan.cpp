@@ -143,6 +143,29 @@ int main()
         CHECK_EQ(0u, p.missingOtherCost.at(COPPER_BAR));
     }
 
+    // enchanting (Task 8): the core's item level rule (Spell::CheckItems, SPELL_FAILED_LOWLEVEL): the piece's required
+    // level, or its item level when it has none, must reach the enchant's base level, unless the spell allows low
+    {
+        CHECK_TRUE(EnchantLevelOk(10, 15, 10, false));   // required level 10 reaches base 10
+        CHECK_TRUE(!EnchantLevelOk(5, 15, 10, false));   // required level 5 is below base 10 (item level not used)
+        CHECK_TRUE(EnchantLevelOk(0, 12, 10, false));    // no required level: item level 12 counts
+        CHECK_TRUE(!EnchantLevelOk(0, 8, 10, false));    // ... item level 8 is below
+        CHECK_TRUE(EnchantLevelOk(0, 8, 10, true));      // the spell allows low-level targets
+        CHECK_TRUE(EnchantLevelOk(1, 1, 0, false));      // base level 0: anything
+    }
+    // an enchant is gear (product 0): one cast, its vendor materials bought, nothing added to the bags
+    {
+        constexpr uint32_t DUST = 10940, ROD = 6218;
+        Recipe e = R(7418, Want::Gear, 1, {{DUST, 1}, {THREAD, 2}});
+        Plan p = PlanBatch({e, R(50, Want::SkillUp, 1, {{ROD, 1}}, ROD)}, {{DUST, 1}}, {{THREAD, 10}}, 1000, 0);
+        CHECK_EQ(1u, p.batch.size());  // the rod skill-up has no materials and no vendor
+        CHECK_EQ(7418u, p.batch[0].spell);
+        CHECK_EQ(static_cast<int>(Want::Gear), static_cast<int>(p.batch[0].want));
+        CHECK_EQ(1u, p.batch[0].casts);
+        CHECK_EQ(2u, p.buy.at(THREAD));
+        CHECK_EQ(20u, static_cast<uint32_t>(p.cost));
+    }
+
     // at most 5 recipes a trip
     std::vector<Recipe> many;
     for (uint32_t s = 100; s < 108; ++s)

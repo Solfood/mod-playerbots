@@ -20,6 +20,7 @@
 #include "ObjectGuid.h"
 #include "TravelMgr.h"
 
+class Item;
 class Player;
 class PlayerbotAI;
 struct ItemTemplate;
@@ -95,6 +96,9 @@ public:
     // and the vendor prices of materials it may walk to; then Craft::PlanBatch.
     ::Craft::Plan PlanFor(PlayerbotAI* botAI, Player* bot, bool guided) const;
     bool HasTools(Player* bot, CraftRecipeInfo const& recipe) const;
+    // A worn piece without a permanent enchant that `spell` fits (Item::IsFitToSpellRequirements) and that the core's
+    // item level rule allows (Craft::EnchantLevelOk); nullptr = none.
+    Item* EnchantTarget(Player* bot, uint32 spell) const;
     static bool IsSupply(ItemTemplate const* proto);
     // May it start a craft trip now? Crafting on for it, not fighting, dead or in a group run, no cooldown, and the
     // planner finds something worth making. Plans once per roll (the plan is kept for the roll that follows; decision

@@ -453,6 +453,8 @@ bool CraftMgr::IsSupply(ItemTemplate const* proto)
 
     std::vector<::Craft::Recipe> candidates;
     std::map<uint32, uint32> prices;
+    // Enchants: per worn piece only the best one that fits (the highest skill to learn), as gear (spec §3).
+    std::unordered_map<ObjectGuid::LowType, CraftRecipeInfo const*> bestEnchant;
     for (uint16 skill : PLAN_SKILLS)
     {
         if (!bot->HasSkill(skill))
@@ -478,7 +480,15 @@ bool CraftMgr::IsSupply(ItemTemplate const* proto)
                 c.casts = ::Craft::CastsWanted(c.want, color, ore, 0, r->reagents.empty() ? 1 : r->reagents[0].count);
             }
             else if (r->enchant)
-                continue;  // Task 8: enchanting its own gear
+            {
+                if (Item* piece = EnchantTarget(bot, r->spell))
+                {
+                    CraftRecipeInfo const*& best = bestEnchant[piece->GetGUID().GetCounter()];
+                    if (!best || r->minRank > best->minRank)
+                        best = r;
+                }
+                continue;
+            }
             else
             {
                 ItemTemplate const* proto = sObjectMgr->GetItemTemplate(r->product);
@@ -503,8 +513,39 @@ bool CraftMgr::IsSupply(ItemTemplate const* proto)
             candidates.push_back(std::move(c));
         }
     }
+    for (auto const& [piece, r] : bestEnchant)
+    {
+        ::Craft::Recipe c;
+        c.spell = r->spell;
+        c.reagents = r->reagents;
+        c.station = r->station;
+        c.want = ::Craft::Want::Gear;
+        c.casts = 1;
+        for (::Craft::Reagent const& g : c.reagents)
+            if (vendorOk(g.item))
+                prices[g.item] = VendorUnitPrice(g.item);
+        candidates.push_back(std::move(c));
+    }
     return ::Craft::PlanBatch(std::move(candidates), std::move(inventory), prices, bot->GetMoney(),
                               EarnedTraining::RepairReserve(bot));
+}
+
+Item* CraftMgr::EnchantTarget(Player* bot, uint32 spell) const
+{
+    SpellInfo const* info = sSpellMgr->GetSpellInfo(spell);
+    if (!info)
+        return nullptr;
+    bool const allowLow = info->HasAttribute(SPELL_ATTR2_ALLOW_LOW_LEVEL_BUFF);
+    for (uint8 slot = EQUIPMENT_SLOT_START; slot < EQUIPMENT_SLOT_END; ++slot)
+    {
+        Item* item = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slot);
+        if (!item || item->GetEnchantmentId(PERM_ENCHANTMENT_SLOT) || !item->IsFitToSpellRequirements(info))
+            continue;
+        ItemTemplate const* proto = item->GetTemplate();
+        if (::Craft::EnchantLevelOk(proto->RequiredLevel, proto->ItemLevel, info->BaseLevel, allowLow))
+            return item;
+    }
+    return nullptr;
 }
 
 bool CraftMgr::InCraftTown(Player* bot) const

@@ -106,6 +106,15 @@ inline bool OreToBar(bool smelt, std::vector<Reagent> const& reagents,
     return smelt && !reagents.empty() && !smeltProducts.count(reagents[0].item);
 }
 
+// Enchanting (Task 8): may this enchant go on a piece? The core's item level rule (Spell::CheckItems,
+// SPELL_FAILED_LOWLEVEL): the piece's required level, or its item level when it has none, must reach the spell's base
+// level, unless the spell allows low-level targets. A piece the core would refuse is never planned (its materials
+// would be bought for nothing).
+inline bool EnchantLevelOk(uint32_t requiredLevel, uint32_t itemLevel, uint32_t baseLevel, bool allowLow)
+{
+    return allowLow || (requiredLevel ? requiredLevel : itemLevel) >= baseLevel;
+}
+
 struct Recipe
 {
     uint32_t spell = 0;

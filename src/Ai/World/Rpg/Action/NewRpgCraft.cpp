@@ -14,6 +14,7 @@
 #include "EarnedTraining.h"
 #include "FixedPopulation.h"
 #include "Item.h"
+#include "ItemUsageValue.h"
 #include "MarketRules.h"
 #include "ObjectMgr.h"
 #include "Player.h"
@@ -28,6 +29,7 @@ namespace
 constexpr float VENDOR_ARRIVE_YARDS = 4.0f;   // inside INTERACTION_DISTANCE (5.5)
 constexpr float VENDOR_LOOK_YARDS = 40.0f;    // near its spot: look for the vendor itself (it may step about)
 constexpr uint32 APPROACH_MS = 60 * IN_MILLISECONDS;
+constexpr uint32 SPELL_DISENCHANT = 13262;
 
 Creature* SpawnedCreature(Player* bot, ObjectGuid::LowType spawnId)
 {
@@ -236,7 +238,13 @@ bool NewRpgCraftAction::Make(NewRpgInfo::CraftTrip& trip)
         }
         if (!ReadyToCast())
             return true;  // stopped, stood up or dismounted this tick: it casts on the next one
-        Item* target = nullptr;  // Task 8: the piece an enchant goes on
+        // An enchant goes on the piece it was planned for (the first worn one it fits that has no permanent enchant).
+        Item* target = nullptr;
+        if (recipe->enchant && !(target = crafts.EnchantTarget(bot, recipe->spell)))
+        {
+            NextStep(trip);  // the piece was replaced or enchanted meanwhile
+            continue;
+        }
         if (!botAI->CastSpell(recipe->spell, bot, target))
         {
             NextStep(trip);  // the core refused (no tool, no focus in reach, full bags): skip the step
@@ -267,7 +275,21 @@ bool NewRpgCraftAction::UseResults(NewRpgInfo::CraftTrip& trip)
 {
     if (bot->IsNonMeleeSpellCast(false))
         return true;
-    // Task 8: an enchanter disenchants here first.
+    // spec §3: an enchanter disenchants the green items it can neither use nor sell, one a tick, each tried once. The
+    // core destroys the item when the bot's loot handler ("store loot") takes the dust and releases the loot.
+    if (bot->HasSkill(SKILL_ENCHANTING))
+        for (Item* item : botAI->GetInventoryItems())
+        {
+            if (item->GetTemplate()->Quality != ITEM_QUALITY_UNCOMMON || trip.tried.count(item->GetGUID().GetCounter()))
+                continue;
+            if (AI_VALUE2(ItemUsage, "item usage", item->GetEntry()) != ITEM_USAGE_DISENCHANT)
+                continue;
+            if (!ReadyToCast())
+                return true;  // stopped, stood up or dismounted this tick: it disenchants on the next one
+            trip.tried.insert(item->GetGUID().GetCounter());
+            if (botAI->CastSpell(SPELL_DISENCHANT, bot, item))
+                return true;
+        }
     // Wear what it made that beats what it wears (the same upgrade test the equip action uses), then count it.
     botAI->DoSpecificAction("equip upgrade", Event(), true);
     for (uint32 product : trip.products)
