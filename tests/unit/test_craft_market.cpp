@@ -135,6 +135,16 @@ int main()
     CHECK_TRUE(GuidedCraftFirst(false, true, true));
     CHECK_TRUE(!GuidedCraftFirst(true, true, false));
     CHECK_TRUE(!GuidedCraftFirst(false, false, true));
+    // fix round 1, M1: the roll comes first; a craft option is offered unchecked unless a plan was already made this roll
+    CHECK_TRUE(GuidedRollCraftOption(GuidedRole::Crafter, false, false));
+    CHECK_TRUE(GuidedRollCraftOption(GuidedRole::Crafter, true, true));
+    CHECK_TRUE(!GuidedRollCraftOption(GuidedRole::Crafter, true, false));
+    CHECK_TRUE(!GuidedRollCraftOption(GuidedRole::Gatherer, false, false));
+    CHECK_TRUE(!GuidedRollCraftOption(GuidedRole::None, true, true));
+    // fix round 1, I1: a plan's missing materials are kept only where it could see the vendors (unguided, or in town)
+    CHECK_TRUE(PlanKeepsMissing(false, false));
+    CHECK_TRUE(PlanKeepsMissing(true, true));
+    CHECK_TRUE(!PlanKeepsMissing(true, false));
     // an empty plan: the cooldown always for an unguided bot, for a guided one only in town
     CHECK_TRUE(EmptyPlanCooldown(false, false));
     CHECK_TRUE(EmptyPlanCooldown(true, true));

@@ -141,6 +141,14 @@ inline GuidedRole GuidedRoleOf(bool hasPartOneCraft, uint32_t gatheringSkills)
 
 inline bool GuidedRollMayCraft(GuidedRole role) { return role == GuidedRole::Crafter; }
 
+// The roll comes first and only the winner is checked (fix round 1, M1: no plan or grind-spot search for an option that
+// lost). A crafter is offered a craft trip unchecked, unless this roll already planned (town trip, crafting focus):
+// then only when that plan found something.
+inline bool GuidedRollCraftOption(GuidedRole role, bool planned, bool canCraft)
+{
+    return GuidedRollMayCraft(role) && (!planned || canCraft);
+}
+
 // Before that roll (spec §5 "Guides"): on its town trip, or with the crafting focus (6), a guided bot that has
 // something to make crafts first.
 inline bool GuidedCraftFirst(bool onTownTrip, bool craftFocus, bool canCraft)
@@ -151,6 +159,11 @@ inline bool GuidedCraftFirst(bool onTownTrip, bool craftFocus, bool canCraft)
 // An empty plan starts the cooldown (decision 10). For a guided bot only in town (a station or a material vendor within
 // TownYards; ruling P2): away from town it had nothing to plan with, and it must still craft when it gets there.
 inline bool EmptyPlanCooldown(bool guided, bool inTown) { return !guided || inTown; }
+
+// A plan's missing materials (what an auction visit may buy, Task 10) are kept only from a plan that could see the
+// vendors: unguided (StationYards), or guided in town (fix round 1, I1). A guided plan away from town counts only
+// vendors within TownYards, so thread, vials or flux would look missing and send it to buy them at auction.
+inline bool PlanKeepsMissing(bool guided, bool inTown) { return !guided || inTown; }
 
 // A skin hunt (Plan 6a decision 12) runs until `untilMs` (getMSTime(); 0 = none). Wraps like getMSTime().
 inline bool SkinHuntOn(uint32_t untilMs, uint32_t nowMs)

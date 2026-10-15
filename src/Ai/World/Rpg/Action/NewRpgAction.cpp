@@ -395,33 +395,34 @@ bool NewRpgStatusUpdateAction::GuidedCraftOrGather()
     // (CraftReady(false): stations in StationYards), as ChangeToGuideChoice does, so the plan is made once per roll.
     bool const onTownTrip = info.lastErrandMs && TownErrands::CooldownLeftMs(info.lastErrandMs);
     bool const craftFocus = Guides::ActivityFor(info.focus) == Guides::Activity::Craft;
-    bool canCraft = false;
-    if (onTownTrip || craftFocus || Craft::GuidedRollMayCraft(role))
-        canCraft = CraftReady(!craftFocus);  // an empty plan away from town starts no cooldown (EmptyPlanCooldown)
+    bool const planned = onTownTrip || craftFocus;
+    bool const canCraft = planned && CraftReady(!craftFocus);  // empty away from town: no cooldown (EmptyPlanCooldown)
     if (Craft::GuidedCraftFirst(onTownTrip, craftFocus, canCraft) && ChangeToCraftPlan())
         return true;
     if (role == Craft::GuidedRole::None)
         return false;
     // The roll: its guide (RpgStatusProbWeight.DoQuest, 60) against an aimed gathering trip (.DoGather, 15) and, for a
-    // crafter, a craft trip in town (.Craft, 15): about a quarter of its idle choices (Craft::GuidedIdlePick).
+    // crafter, a craft trip in town (.Craft, 15): about a quarter of its idle choices (Craft::GuidedIdlePick). Fix
+    // round 1 (M1): it rolls first and checks only the option that won; one it cannot take now means its guide.
     auto& weight = sPlayerbotAIConfig.RpgStatusProbWeight;
     uint32 const guideW = weight[RPG_DO_QUEST], gatherW = weight[RPG_DO_GATHER], craftW = weight[RPG_CRAFT];
-    bool const rollCraft = Craft::GuidedRollMayCraft(role) && canCraft;
-    bool const canGather = gatherW && CheckRpgStatusAvailable(RPG_DO_GATHER);
-    uint32 const total = Craft::GuidedIdleTotal(guideW, gatherW, craftW, canGather, rollCraft);
+    bool const craftOption = Craft::GuidedRollCraftOption(role, planned, canCraft);
+    uint32 const total = Craft::GuidedIdleTotal(guideW, gatherW, craftW, true, craftOption);
     if (!total)
         return false;
-    switch (Craft::GuidedIdlePick(guideW, gatherW, craftW, canGather, rollCraft, urand(1, total)))
+    switch (Craft::GuidedIdlePick(guideW, gatherW, craftW, true, craftOption, urand(1, total)))
     {
         case Craft::GuidedPick::Gather:
-            if (ChangeToAimedGather())  // CheckRpgStatusAvailable(RPG_DO_GATHER) said yes just above
+            if (CheckRpgStatusAvailable(RPG_DO_GATHER) && ChangeToAimedGather())
             {
                 GuideMgr::instance().Unseat(bot->GetGUID().GetCounter());  // its step's seat is for working bots
                 return true;
             }
             return false;
         case Craft::GuidedPick::Craft:
-            return ChangeToCraftPlan();  // StartTrip gives up the step seat; the guide place is kept
+            // Planned already this roll (and found something): the craft-first step above took it, so only plan here
+            // when it has not. StartTrip gives up the step seat; the guide place is kept.
+            return !planned && CraftReady(true) && ChangeToCraftPlan();
         default:
             return false;
     }

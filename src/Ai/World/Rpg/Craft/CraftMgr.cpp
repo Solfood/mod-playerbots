@@ -599,12 +599,17 @@ bool CraftMgr::ReadyToCraft(PlayerbotAI* botAI, Player* bot, bool guided) const
         info.craft.pending = PlanFor(botAI, bot, guided);
         info.craft.pendingAtMs = std::max<uint32>(1, now);
         info.craft.pendingGuided = guided;
-        info.craft.missing = info.craft.pending.missing;  // what an auction visit may buy (Task 10)
-        info.craft.missingValue = info.craft.pending.missingValue;
-        info.craft.missingOtherCost = info.craft.pending.missingOtherCost;
+        bool const inTown = guided && InCraftTown(bot);
+        // What an auction visit may buy (Task 10), only from a plan that could see the vendors (fix round 1, I1).
+        if (Craft::PlanKeepsMissing(guided, inTown))
+        {
+            info.craft.missing = info.craft.pending.missing;
+            info.craft.missingValue = info.craft.pending.missingValue;
+            info.craft.missingOtherCost = info.craft.pending.missingOtherCost;
+        }
         // Nothing worth making (decision 10): the cooldown runs. A guided bot away from town planned without a station
         // or vendor in reach: no cooldown, so it still crafts when it gets to one (ruling P2).
-        if (info.craft.pending.Empty() && Craft::EmptyPlanCooldown(guided, guided && InCraftTown(bot)))
+        if (info.craft.pending.Empty() && Craft::EmptyPlanCooldown(guided, inTown))
             info.craft.emptyAtMs = std::max<uint32>(1, now);
     }
     return !info.craft.pending.Empty();
