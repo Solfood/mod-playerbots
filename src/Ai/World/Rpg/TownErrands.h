@@ -79,7 +79,8 @@ public:
     static bool PlaySafe(PlayerbotAI* botAI, Player* bot);
     // Honest world random bot in a zone whose level range starts above the bot's level.
     static bool ZoneAboveBot(Player* bot, uint32 zoneId);
-    // Honest world: may the bot gather nodes in `zoneId`? Not in zones above its level, not while it plays safe.
+    // Honest world: may the bot gather nodes in `zoneId`? Not in zones above its level, not while it plays safe
+    // (World of Craft: unless it is a crafting bot in retreat, decision 11).
     static bool MayGatherIn(PlayerbotAI* botAI, Player* bot, uint32 zoneId);
 };
 

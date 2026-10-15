@@ -352,8 +352,11 @@ bool NewRpgStatusUpdateAction::CheckWornGearAndTownTrip(NewRpgStatus status)
 
     // Worn out and can't repair yet: stop gathering and grind trips and quests above the bot's level...
     auto const* quest = std::get_if<NewRpgInfo::DoQuest>(&info.data);
+    // World of Craft (decision 11): a crafting bot in retreat keeps gathering (TownErrands::MayGatherIn); crafting off,
+    // MayGatherIn is false whenever playSafe is, so this is the old rule exactly.
     if (playSafe &&
-        (status == RPG_DO_GATHER || status == RPG_GO_GRIND || (quest && IsQuestTooHardForWornGear(quest->questId))))
+        ((status == RPG_DO_GATHER && !TownErrands::MayGatherIn(botAI, bot, bot->GetZoneId())) ||
+         status == RPG_GO_GRIND || (quest && IsQuestTooHardForWornGear(quest->questId))))
     {
         info.ChangeToIdle();
         return true;
@@ -374,6 +377,54 @@ bool NewRpgStatusUpdateAction::CheckWornGearAndTownTrip(NewRpgStatus status)
         return true;
     }
     return false;
+}
+
+bool NewRpgStatusUpdateAction::GuidedCraftOrGather()
+{
+    NewRpgInfo& info = botAI->rpgInfo;
+    // Rulings P2, P2b: who rolls. A part 1 crafter gathers for its recipes or crafts; a pure gatherer gathers what
+    // sells best (Craft::GatherAim). Smelting alone (mining) is not a craft here.
+    bool const partOneCraft = bot->HasSkill(SKILL_BLACKSMITHING) || bot->HasSkill(SKILL_LEATHERWORKING) ||
+                              bot->HasSkill(SKILL_ALCHEMY) || bot->HasSkill(SKILL_TAILORING) ||
+                              bot->HasSkill(SKILL_ENCHANTING);
+    uint32 const gatheringSkills = (bot->HasSkill(SKILL_MINING) ? 1 : 0) + (bot->HasSkill(SKILL_HERBALISM) ? 1 : 0) +
+                                   (bot->HasSkill(SKILL_SKINNING) ? 1 : 0);
+    Craft::GuidedRole const role = Craft::GuidedRoleOf(partOneCraft, gatheringSkills);
+    // spec §5 "Guides": on its town trip (an errand trip still in its cooldown window) it crafts first when the town has
+    // what it needs (CraftReady(true): stations and vendors in TownYards). The crafting focus (6) plans wider
+    // (CraftReady(false): stations in StationYards), as ChangeToGuideChoice does, so the plan is made once per roll.
+    bool const onTownTrip = info.lastErrandMs && TownErrands::CooldownLeftMs(info.lastErrandMs);
+    bool const craftFocus = Guides::ActivityFor(info.focus) == Guides::Activity::Craft;
+    bool canCraft = false;
+    if (onTownTrip || craftFocus || Craft::GuidedRollMayCraft(role))
+        canCraft = CraftReady(!craftFocus);  // an empty plan away from town starts no cooldown (EmptyPlanCooldown)
+    if (Craft::GuidedCraftFirst(onTownTrip, craftFocus, canCraft) && ChangeToCraftPlan())
+        return true;
+    if (role == Craft::GuidedRole::None)
+        return false;
+    // The roll: its guide (RpgStatusProbWeight.DoQuest, 60) against an aimed gathering trip (.DoGather, 15) and, for a
+    // crafter, a craft trip in town (.Craft, 15): about a quarter of its idle choices (Craft::GuidedIdlePick).
+    auto& weight = sPlayerbotAIConfig.RpgStatusProbWeight;
+    uint32 const guideW = weight[RPG_DO_QUEST], gatherW = weight[RPG_DO_GATHER], craftW = weight[RPG_CRAFT];
+    bool const rollCraft = Craft::GuidedRollMayCraft(role) && canCraft;
+    bool const canGather = gatherW && CheckRpgStatusAvailable(RPG_DO_GATHER);
+    uint32 const total = Craft::GuidedIdleTotal(guideW, gatherW, craftW, canGather, rollCraft);
+    if (!total)
+        return false;
+    switch (Craft::GuidedIdlePick(guideW, gatherW, craftW, canGather, rollCraft, urand(1, total)))
+    {
+        case Craft::GuidedPick::Gather:
+            if (ChangeToAimedGather())  // CheckRpgStatusAvailable(RPG_DO_GATHER) said yes just above
+            {
+                GuideMgr::instance().Unseat(bot->GetGUID().GetCounter());  // its step's seat is for working bots
+                return true;
+            }
+            return false;
+        case Craft::GuidedPick::Craft:
+            return ChangeToCraftPlan();  // StartTrip gives up the step seat; the guide place is kept
+        default:
+            return false;
+    }
 }
 
 bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
@@ -399,15 +450,20 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
                 if (Guides::GuidedIdle(info.route.retreating) == Guides::IdleChoice::Earn)
                 {
                     GuideMgr::instance().Unseat(bot->GetGUID().GetCounter());  // its step's seat is for working bots
-                    return RandomChangeStatus({RPG_WANDER_RANDOM, RPG_WANDER_NPC, RPG_REST});
+                    // World of Craft (spec §5): gathering, crafting or the auction house; crafting off: as before.
+                    return EarnRoll({RPG_WANDER_RANDOM, RPG_WANDER_NPC, RPG_REST});
                 }
+                // World of Craft. Its guide place is kept whatever it does here (the step lives in info.guide).
+                // Crafting off: straight to its guide, as before.
+                if (CraftMgr::instance().Crafting(bot) && GuidedCraftOrGather())
+                    return true;
                 return ChangeToGuideChoice();
             }
             // Retreating (quest routes, spec §6): earn near town. Quests at or below its level on its own hub (the
             // route keeps it only there), mobs at or below its level (the fight rule), townsfolk to sell to; no
-            // trips away.
+            // trips away. World of Craft: gathering, crafting or the auction house first, when it can.
             if (RouteMgr::instance().Routed(bot) && info.route.retreating)
-                return RandomChangeStatus({RPG_FOLLOW_ROUTE, RPG_WANDER_RANDOM, RPG_WANDER_NPC, RPG_REST});
+                return EarnRoll({RPG_FOLLOW_ROUTE, RPG_WANDER_RANDOM, RPG_WANDER_NPC, RPG_REST});
             std::vector<NewRpgStatus> candidates = {RPG_GO_CAMP,       RPG_GO_GRIND, RPG_WANDER_RANDOM,
                                                     RPG_WANDER_NPC,    RPG_DO_QUEST, RPG_TRAVEL_FLIGHT,
                                                     RPG_REST,          RPG_OUTDOOR_PVP, RPG_DO_GATHER};

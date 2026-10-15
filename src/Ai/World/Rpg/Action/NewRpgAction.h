@@ -67,6 +67,11 @@ protected:
     // Quest routes, spec §6 retreat and earn (routed bots only): starts and ends the retreat. True if it changed the
     // status.
     bool UpdateRetreat();
+    // World of Craft (Plan 6a spec §5 "Guides", rulings P2, P2b), from IDLE, for a guided crafting bot that is not
+    // retreating: a craft trip first on its town trip or with the crafting focus, else the guided idle roll (its guide
+    // against an aimed gathering trip and, for a crafter, a craft trip in town). True if it changed the status; false =
+    // its guide (ChangeToGuideChoice). The caller checks CraftMgr::Crafting first.
+    bool GuidedCraftOrGather();
 
     const uint32 wearCheckInterval = 5 * IN_MILLISECONDS;
     // static NewRpgStatusTransitionProb transitionMat;

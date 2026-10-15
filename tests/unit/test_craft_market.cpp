@@ -120,6 +120,21 @@ int main()
     CHECK_EQ(static_cast<int>(GuidedPick::Guide), static_cast<int>(GuidedIdlePick(60, 15, 15, true, false, 60)));
     CHECK_EQ(static_cast<int>(GuidedPick::Gather), static_cast<int>(GuidedIdlePick(60, 15, 15, true, false, 61)));
     CHECK_EQ(static_cast<int>(GuidedPick::Gather), static_cast<int>(GuidedIdlePick(60, 15, 15, true, false, 75)));
+    // who takes that roll (rulings P2, P2b): a part 1 crafter, or a pure gatherer (two gathering professions, no craft)
+    CHECK_EQ(static_cast<int>(GuidedRole::Crafter), static_cast<int>(GuidedRoleOf(true, 1)));
+    CHECK_EQ(static_cast<int>(GuidedRole::Crafter), static_cast<int>(GuidedRoleOf(true, 0)));
+    CHECK_EQ(static_cast<int>(GuidedRole::Gatherer), static_cast<int>(GuidedRoleOf(false, 2)));
+    CHECK_EQ(static_cast<int>(GuidedRole::None), static_cast<int>(GuidedRoleOf(false, 1)));
+    CHECK_EQ(static_cast<int>(GuidedRole::None), static_cast<int>(GuidedRoleOf(false, 0)));
+    // only a crafter rolls a craft trip; a pure gatherer rolls gathering only
+    CHECK_TRUE(GuidedRollMayCraft(GuidedRole::Crafter));
+    CHECK_TRUE(!GuidedRollMayCraft(GuidedRole::Gatherer));
+    CHECK_TRUE(!GuidedRollMayCraft(GuidedRole::None));
+    // a guided bot crafts first (no roll) on its town trip, or with the crafting focus, when there is something to make
+    CHECK_TRUE(GuidedCraftFirst(true, false, true));
+    CHECK_TRUE(GuidedCraftFirst(false, true, true));
+    CHECK_TRUE(!GuidedCraftFirst(true, true, false));
+    CHECK_TRUE(!GuidedCraftFirst(false, false, true));
     // an empty plan: the cooldown always for an unguided bot, for a guided one only in town
     CHECK_TRUE(EmptyPlanCooldown(false, false));
     CHECK_TRUE(EmptyPlanCooldown(true, true));

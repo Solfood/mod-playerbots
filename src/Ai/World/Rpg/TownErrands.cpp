@@ -317,5 +317,8 @@ bool TownErrands::ZoneAboveBot(Player* bot, uint32 zoneId)
 
 bool TownErrands::MayGatherIn(PlayerbotAI* botAI, Player* bot, uint32 zoneId)
 {
-    return !ZoneAboveBot(bot, zoneId) && !PlaySafe(botAI, bot);
+    // World of Craft (Plan 6a, decision 11): a crafting bot in retreat gathers on worn gear: a node is not a fight,
+    // and gathering is one of the ways it earns its repair. Crafting off: exactly as before.
+    bool const retreatGather = botAI->rpgInfo.route.retreating && CraftMgr::instance().Crafting(bot);
+    return !ZoneAboveBot(bot, zoneId) && (!PlaySafe(botAI, bot) || retreatGather);
 }

@@ -1386,6 +1386,43 @@ bool NewRpgBaseAction::StartSkinHunt()
     return true;
 }
 
+bool NewRpgBaseAction::EarnRoll(std::vector<NewRpgStatus> const& oldRoll)
+{
+    // Crafting off: no new check runs and `oldRoll` rolls exactly as before (Craft::EarnChoices(false, ...) is the old
+    // roll alone).
+    bool const crafting = CraftMgr::instance().Crafting(bot);
+    bool const gather = crafting && CheckRpgStatusAvailable(RPG_DO_GATHER);  // nodes only: no skin hunt in a retreat
+    bool const craft = crafting && CraftReady(GuideMgr::instance().Guided(bot));
+    bool const market = crafting && CraftMgr::instance().ListableCount(botAI, bot) > 0;
+    std::vector<Craft::Earn> const choices = Craft::EarnChoices(crafting, gather, craft, market);
+    Craft::Earn const pick =
+        choices.size() == 1 ? choices[0] : choices[urand(0, static_cast<uint32>(choices.size()) - 1)];
+    switch (pick)
+    {
+        case Craft::Earn::Gather:
+            if (ChangeToAimedGather())  // CheckRpgStatusAvailable(RPG_DO_GATHER) said yes just above
+                return true;
+            return RandomChangeStatus(oldRoll);
+        case Craft::Earn::Craft:
+            if (ChangeToCraftPlan())  // CraftReady planned it just above
+                return true;
+            return RandomChangeStatus(oldRoll);
+        case Craft::Earn::Market:
+        {
+            // A town trip now, to list what it holds (one waiver of the errand cooldown); the cooldown is kept when no
+            // trip starts.
+            uint32 const lastErrandMs = botAI->rpgInfo.lastErrandMs;
+            botAI->rpgInfo.lastErrandMs = 0;
+            if (GoRunErrands())
+                return true;
+            botAI->rpgInfo.lastErrandMs = lastErrandMs;
+            return RandomChangeStatus(oldRoll);
+        }
+        default:
+            return RandomChangeStatus(oldRoll);
+    }
+}
+
 bool NewRpgBaseAction::ChangeToAimedGather()
 {
     // World of Craft (Plan 6a, spec §2): a crafting bot gathers what its recipes need, or what is worth most; skins
@@ -1428,7 +1465,11 @@ bool NewRpgBaseAction::ChangeToGuideChoice()
             if (CheckRpgStatusAvailable(RPG_OUTDOOR_PVP))
                 return RandomChangeStatus({RPG_OUTDOOR_PVP});
             break;
-        case Guides::Activity::Craft:  // Task 11: a craft trip when there is something worth making
+        case Guides::Activity::Craft:
+            // The crafting focus (6) is the user's nudge: a craft trip when there is something worth making
+            // (stations in StationYards, not only in town), else the guide. Crafting off: CraftReady is false.
+            if (CraftReady(false) && ChangeToCraftPlan())
+                return true;
             break;
         case Guides::Activity::Guide:
             break;

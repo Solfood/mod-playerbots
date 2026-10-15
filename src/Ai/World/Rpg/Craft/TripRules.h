@@ -122,6 +122,32 @@ inline GuidedPick GuidedIdlePick(uint32_t guideWeight, uint32_t gatherWeight, ui
     return GuidedPick::Guide;
 }
 
+// Who takes that roll (rulings P2, P2b): a bot with a part 1 craft (blacksmithing, leatherworking, alchemy, tailoring,
+// enchanting) gathers or crafts; a pure gatherer (two gathering professions, no craft) only gathers (aim: best seller).
+// Any other bot follows its guide as before. `gatheringSkills`: how many of mining, herbalism, skinning it has.
+enum class GuidedRole : uint8_t
+{
+    None = 0,
+    Crafter,
+    Gatherer,
+};
+
+inline GuidedRole GuidedRoleOf(bool hasPartOneCraft, uint32_t gatheringSkills)
+{
+    if (hasPartOneCraft)
+        return GuidedRole::Crafter;
+    return gatheringSkills >= 2 ? GuidedRole::Gatherer : GuidedRole::None;
+}
+
+inline bool GuidedRollMayCraft(GuidedRole role) { return role == GuidedRole::Crafter; }
+
+// Before that roll (spec §5 "Guides"): on its town trip, or with the crafting focus (6), a guided bot that has
+// something to make crafts first.
+inline bool GuidedCraftFirst(bool onTownTrip, bool craftFocus, bool canCraft)
+{
+    return (onTownTrip || craftFocus) && canCraft;
+}
+
 // An empty plan starts the cooldown (decision 10). For a guided bot only in town (a station or a material vendor within
 // TownYards; ruling P2): away from town it had nothing to plan with, and it must still craft when it gets there.
 inline bool EmptyPlanCooldown(bool guided, bool inTown) { return !guided || inTown; }
