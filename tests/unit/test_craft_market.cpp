@@ -1,4 +1,5 @@
 // tests/unit/test_craft_market.cpp
+#include <map>
 #include <set>
 #include <string>
 
@@ -175,5 +176,52 @@ int main()
     CHECK_TRUE(!ReadAuctionMailSubject("2589:0", item, answer));
     CHECK_TRUE(!ReadAuctionMailSubject("2589:1:2:5:1", item, answer));  // the second field is always 0
     CHECK_TRUE(!ReadAuctionMailSubject(":0:2:5:1", item, answer));
+    // Fix round 1, I1: "vendor it" lasts VENDOR_MARK_MS (a day), then the item may go back to the auction house
+    CHECK_TRUE(!VendorMarkOn(0, 5000));                               // never marked
+    CHECK_TRUE(VendorMarkOn(5000, 5000));
+    CHECK_TRUE(VendorMarkOn(5000, 5000 + VENDOR_MARK_MS - 1));
+    CHECK_TRUE(!VendorMarkOn(5000, 5000 + VENDOR_MARK_MS));          // a day later: over
+    CHECK_TRUE(VendorMarkOn(0xFFFFFF00u, 100));                       // marked just before the clock wrapped
+    CHECK_TRUE(!VendorMarkOn(0xFFFFFF00u, 0xFFFFFF00u + VENDOR_MARK_MS));
+
+    // Fix round 1, I3: a missing material sends a trip only when the missing set changed since the last visit looked,
+    // or EmptyCooldownMinutes (30) passed
+    std::map<uint32_t, uint32_t> none;
+    std::map<uint32_t, uint32_t> bars = {{2840, 4}};
+    std::map<uint32_t, uint32_t> moreBars = {{2840, 6}};
+    std::map<uint32_t, uint32_t> barsAndCloth = {{2840, 4}, {2589, 2}};
+    CHECK_EQ(0u, MissingSignature(none));
+    CHECK_TRUE(MissingSignature(bars) != 0);
+    CHECK_TRUE(MissingSignature(bars) != MissingSignature(moreBars));
+    CHECK_TRUE(MissingSignature(bars) != MissingSignature(barsAndCloth));
+    CHECK_EQ(MissingSignature(bars), MissingSignature(std::map<uint32_t, uint32_t>{{2840, 4}}));
+    uint64_t const sig = MissingSignature(bars);
+    uint32_t const min30 = 30u * 60u * 1000u;
+    CHECK_TRUE(!MissingTripDue(0, 0, 0, 5000, 30));                       // nothing missing
+    CHECK_TRUE(MissingTripDue(sig, 0, 0, 5000, 30));                      // never looked
+    CHECK_TRUE(!MissingTripDue(sig, sig, 5000, 5000 + min30 - 1, 30));    // same set, looked lately: no trip
+    CHECK_TRUE(MissingTripDue(sig, sig, 5000, 5000 + min30, 30));         // same set, 30 minutes later
+    CHECK_TRUE(MissingTripDue(MissingSignature(moreBars), sig, 5000, 6000, 30));  // the set changed
+    CHECK_TRUE(!MissingTripDue(sig, sig, 0xFFFFFF00u, 100, 30));          // across the clock wrap
+
+    // Fix round 1, I2 + I3: the auction errand needs an auctioneer in reach, then something to list or a due material
+    CHECK_TRUE(AuctionErrand(false, true, 3, false));
+    CHECK_TRUE(AuctionErrand(false, true, 0, true));
+    CHECK_TRUE(!AuctionErrand(false, true, 0, false));
+    CHECK_TRUE(!AuctionErrand(false, false, 3, true));  // no auctioneer it may walk to
+    CHECK_TRUE(!AuctionErrand(true, true, 3, true));    // visited on this trip
+
+    // Fix round 1 (promoted minor): at most one upgrade per equipment slot a visit
+    CHECK_EQ(GearSlot(5), GearSlot(20));    // chest and robe
+    CHECK_EQ(GearSlot(13), GearSlot(17));   // one-hand and two-hand weapons: the main hand
+    CHECK_EQ(GearSlot(13), GearSlot(21));
+    CHECK_EQ(GearSlot(14), GearSlot(22));   // shield, off-hand weapon and held item: the off hand
+    CHECK_EQ(GearSlot(14), GearSlot(23));
+    CHECK_EQ(GearSlot(15), GearSlot(25));   // bow, thrown, gun or wand, relic: the ranged slot
+    CHECK_EQ(GearSlot(15), GearSlot(26));
+    CHECK_EQ(GearSlot(15), GearSlot(28));
+    CHECK_TRUE(GearSlot(1) != GearSlot(5));  // head and chest differ
+    CHECK_TRUE(GearSlot(13) != GearSlot(14));
+    CHECK_EQ(11u, GearSlot(11));             // anything else: its own inventory type
     return UnitFailures();
 }

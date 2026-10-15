@@ -12,6 +12,7 @@
 #include "FixedPopulation.h"
 #include "ItemUsageValue.h"
 #include "Mail.h"
+#include "MarketRules.h"
 #include "MailAction.h"
 #include "ObjectAccessor.h"
 #include "Player.h"
@@ -82,7 +83,14 @@ uint8 TownErrands::Needed(PlayerbotAI* botAI, Player* bot)
         NewRpgInfo const& info = botAI->rpgInfo;
         bool const visitedThisTrip = info.craft.auctionTripMs && info.craft.auctionTripMs == info.lastErrandMs &&
                                      CooldownLeftMs(info.lastErrandMs);
-        if (!visitedThisTrip && (!info.craft.missing.empty() || CraftMgr::instance().ListableCount(botAI, bot)))
+        // Counted at most once a minute, with whether an auctioneer is in reach (fix round 1, I2).
+        uint32 const listable = CraftMgr::instance().ListableCount(botAI, bot);
+        // A missing material only when the set changed since the last visit looked, or EmptyCooldownMinutes passed
+        // (fix round 1, I3: an empty market must not send it every errand cooldown).
+        bool const missingDue = ::Craft::MissingTripDue(
+            ::Craft::MissingSignature(info.craft.missing), info.craft.missingCheckedSig, info.craft.missingCheckedMs,
+            getMSTime(), sPlayerbotAIConfig.crafting.emptyCooldownMinutes);
+        if (::Craft::AuctionErrand(visitedThisTrip, info.craft.auctioneerNear, listable, missingDue))
             errands |= TOWN_ERRAND_AUCTION;
     }
 
@@ -225,9 +233,13 @@ WorldPosition TownErrands::RepairTrip(Player* bot, WorldPosition const& avoid)
 
 WorldPosition TownErrands::AuctionTrip(Player* bot)
 {
-    float const maxDistance = bot->GetLevel() <= 5 ? TOWN_MAX_DISTANCE_LOW_LEVEL : TOWN_MAX_DISTANCE;
-    CraftSpot const* auctioneer = CraftMgr::instance().NearestAuctioneer(bot, maxDistance);
+    CraftSpot const* auctioneer = CraftMgr::instance().NearestAuctioneer(bot, TripYards(bot));
     return auctioneer ? auctioneer->pos : NearestTown(bot);
+}
+
+float TownErrands::TripYards(Player* bot)
+{
+    return bot->GetLevel() <= 5 ? TOWN_MAX_DISTANCE_LOW_LEVEL : TOWN_MAX_DISTANCE;
 }
 
 bool TownErrands::AvoidFights(PlayerbotAI* botAI, Player* bot)

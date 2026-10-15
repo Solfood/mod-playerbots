@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <iterator>
 #include <map>
 #include <utility>
 
@@ -38,6 +39,7 @@
 #include "SpellInfo.h"
 #include "SpellMgr.h"
 #include "Timer.h"
+#include "TownErrands.h"
 #include "TripRules.h"
 
 namespace
@@ -629,6 +631,7 @@ std::vector<Item*> CraftMgr::HeldForAuction(PlayerbotAI* botAI, Player* /*bot*/)
     NewRpgInfo::CraftState const& state = botAI->rpgInfo.craft;
     ::Craft::Settings const& s = sPlayerbotAIConfig.crafting;
     AiObjectContext* context = botAI->GetAiObjectContext();
+    uint32 const now = getMSTime();
     std::vector<std::pair<uint64, Item*>> listable;
     for (Item* item : botAI->GetInventoryItems())
     {
@@ -637,9 +640,9 @@ std::vector<Item*> CraftMgr::HeldForAuction(PlayerbotAI* botAI, Player* /*bot*/)
         if (!proto->SellPrice || item->IsSoulBound() || !item->CanBeTraded() || proto->HasFlag(ITEM_FLAG_CONJURED) ||
             item->GetUInt32Value(ITEM_FIELD_DURATION))
             continue;
-        auto const back = state.returned.find(proto->ItemId);
-        if (back != state.returned.end() && ::Craft::OnReturn(back->second) == ::Craft::AfterReturn::Vendor)
-            continue;  // back twice, or not worth listing: the vendor gets it
+        auto const mark = state.vendorAtMs.find(proto->ItemId);
+        if (mark != state.vendorAtMs.end() && ::Craft::VendorMarkOn(mark->second, now))
+            continue;  // back twice, not worth listing or refused, within the day: the vendor gets it
         // ITEM_USAGE_AH: tradable and nothing it needs (gear, supplies, the materials its recipes use are kept).
         if (context->GetValue<ItemUsage>("item usage", proto->ItemId)->Get() != ITEM_USAGE_AH)
             continue;
@@ -659,7 +662,11 @@ uint32 CraftMgr::ListableCount(PlayerbotAI* botAI, Player* bot) const
     uint32 const now = getMSTime();
     if (!state.listableAtMs || getMSTimeDiff(state.listableAtMs, now) > LISTABLE_EVERY_MS)
     {
-        std::vector<Item*> const held = HeldForAuction(botAI, bot);
+        for (auto it = state.vendorAtMs.begin(); it != state.vendorAtMs.end();)
+            it = ::Craft::VendorMarkOn(it->second, now) ? std::next(it) : state.vendorAtMs.erase(it);  // a day is up
+        // Fix round 1, I2: with no auctioneer it may walk to, nothing is held back (the vendor takes it as before).
+        state.auctioneerNear = NearestAuctioneer(bot, TownErrands::TripYards(bot)) != nullptr;
+        std::vector<Item*> const held = state.auctioneerNear ? HeldForAuction(botAI, bot) : std::vector<Item*>{};
         state.listable = static_cast<uint32>(held.size());
         state.heldItems.clear();
         for (Item* item : held)
@@ -700,8 +707,15 @@ void CraftMgr::NoteAuctionMail(Player* bot, Mail const* mail) const
         FixedPopulation::Count(EconomyCounter::AuctionGoldIn, mail->money);  // the price (no cut on this server)
         state.returned.erase(item);
     }
-    else
-        ++state.returned[item];  // spec §4: relisted once at RelistPct, then the vendor's
+    else if (::Craft::OnReturn(++state.returned[item]) == ::Craft::AfterReturn::Vendor)
+        MarkForVendor(botAI, item);  // spec §4: relisted once at RelistPct, then the vendor's (for a day)
     if (state.liveListings)
         --state.liveListings;
+}
+
+void CraftMgr::MarkForVendor(PlayerbotAI* botAI, uint32 entry)
+{
+    NewRpgInfo::CraftState& state = botAI->rpgInfo.craft;
+    state.vendorAtMs[entry] = std::max<uint32>(1, getMSTime());
+    state.returned.erase(entry);  // after the day it is priced afresh
 }

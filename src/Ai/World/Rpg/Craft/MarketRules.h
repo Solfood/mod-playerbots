@@ -10,6 +10,7 @@
 #define PLAYERBOTS_CRAFTMARKETRULES_H
 
 #include <cstdint>
+#include <map>
 #include <string>
 
 // World of Craft part 1 §4 (spec 2026-10-14): the basic two-sided auction house. A bot lists extras and spare
@@ -147,6 +148,76 @@ inline bool ReadAuctionMailSubject(std::string const& subject, uint32_t& item, u
     item = static_cast<uint32_t>(fields[0]);
     answer = static_cast<uint32_t>(fields[2]);
     return true;
+}
+// "Vendor it" (not worth listing, back twice, or refused by the core) lasts a day; then the item may be listed again
+// (fix round 1, I1: a permanent mark would empty the market of common materials as prices fall to the vendor value).
+constexpr uint32_t VENDOR_MARK_MS = 24u * 60u * 60u * 1000u;
+
+// The mark set at `markedMs` (getMSTime(); 0 = none) still holds at `nowMs` (the clock wraps; the unsigned difference
+// is right across the wrap).
+inline bool VendorMarkOn(uint32_t markedMs, uint32_t nowMs)
+{
+    return markedMs && static_cast<uint32_t>(nowMs - markedMs) < VENDOR_MARK_MS;
+}
+
+// A fingerprint of the materials its plan misses (item -> count); 0 = none missing. FNV-1a over the pairs.
+inline uint64_t MissingSignature(std::map<uint32_t, uint32_t> const& missing)
+{
+    if (missing.empty())
+        return 0;
+    uint64_t h = 1469598103934665603ull;
+    for (auto const& [item, count] : missing)
+        for (uint32_t v : {item, count})
+            for (int shift = 0; shift < 32; shift += 8)
+            {
+                h ^= (v >> shift) & 0xFFu;
+                h *= 1099511628211ull;
+            }
+    return h ? h : 1;
+}
+
+// Fix round 1, I3: a missing material sends an auction trip only when the missing set changed since the last visit
+// looked (`checkedSig` at `checkedMs`; 0 = never), or `cooldownMinutes` (EmptyCooldownMinutes) passed: an empty market
+// must not send it every errand cooldown.
+inline bool MissingTripDue(uint64_t signature, uint64_t checkedSig, uint32_t checkedMs, uint32_t nowMs,
+                           uint32_t cooldownMinutes)
+{
+    if (!signature)
+        return false;
+    if (signature != checkedSig || !checkedMs)
+        return true;
+    return static_cast<uint32_t>(nowMs - checkedMs) >= cooldownMinutes * 60u * 1000u;
+}
+
+// The auction errand (decision 6; fix round 1, I2 + I3): not twice on a trip, only with an auctioneer it may walk to,
+// and only for something to list or a missing material that is due.
+inline bool AuctionErrand(bool visitedThisTrip, bool auctioneerNear, uint32_t listable, bool missingDue)
+{
+    return !visitedThisTrip && auctioneerNear && (listable > 0 || missingDue);
+}
+
+// The equipment slot an item of this inventory type goes to (the core's InventoryType numbers), so a visit buys at
+// most one upgrade per slot: chest and robe share one; one-hand, two-hand and main-hand weapons the main hand; shield,
+// off-hand weapon and held item the off hand; ranged, thrown, ranged-right and relic the ranged slot.
+inline uint32_t GearSlot(uint32_t inventoryType)
+{
+    switch (inventoryType)
+    {
+        case 20:  // INVTYPE_ROBE
+            return 5;  // INVTYPE_CHEST
+        case 17:  // INVTYPE_2HWEAPON
+        case 21:  // INVTYPE_WEAPONMAINHAND
+            return 13;  // INVTYPE_WEAPON
+        case 22:  // INVTYPE_WEAPONOFFHAND
+        case 23:  // INVTYPE_HOLDABLE
+            return 14;  // INVTYPE_SHIELD
+        case 25:  // INVTYPE_THROWN
+        case 26:  // INVTYPE_RANGEDRIGHT
+        case 28:  // INVTYPE_RELIC
+            return 15;  // INVTYPE_RANGED
+        default:
+            return inventoryType;
+    }
 }
 }  // namespace Craft
 

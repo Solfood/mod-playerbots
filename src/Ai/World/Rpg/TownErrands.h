@@ -54,6 +54,8 @@ public:
     // World of Craft (Plan 6a): where an auction trip walks to: the nearest auctioneer it may use on its map in a zone
     // not above its level (TOWN_MAX_DISTANCE), else NearestTown.
     static WorldPosition AuctionTrip(Player* bot);
+    // How far a town trip may walk (levels 1-5 stay closer).
+    static float TripYards(Player* bot);
     // On the way to town (honest world, GO_CAMP) with worn-out gear (PlaySafe) or through a zone above the bot's
     // level: fight back, but pick no fights.
     static bool AvoidFights(PlayerbotAI* botAI, Player* bot);

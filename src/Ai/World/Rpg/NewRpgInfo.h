@@ -205,6 +205,10 @@ struct NewRpgInfo
         std::map<uint32, uint64> missingOtherCost;  // ... and the vendor cost of that recipe's other materials
         GuidSet heldItems;          // the items it holds back for the auction house (refreshed with `listable`)
         std::unordered_set<uint32> notedMails;  // auction mails already noted (CraftMgr::NoteAuctionMail)
+        std::unordered_map<uint32, uint32> vendorAtMs;  // item entry -> when it was marked "vendor it" (a day)
+        bool auctioneerNear{false};    // an auctioneer it may walk to, counted with `listable` (fix round 1, I2)
+        uint64 missingCheckedSig{0};   // the missing set (Craft::MissingSignature) its last auction visit looked for
+        uint32 missingCheckedMs{0};    // ... and when (fix round 1, I3)
     };
     CraftState craft;
     WorldPosition abandonedTrip;  // where the last town trip given up was going (the next repair trip avoids it)

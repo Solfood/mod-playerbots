@@ -129,6 +129,9 @@ public:
     // At a mailbox (TownErrands::CollectMail): a sale is counted with its money, a return is noted for the relist.
     // Nothing when the bot is not crafting (ruling P4).
     void NoteAuctionMail(Player* bot, Mail const* mail) const;
+    // "Vendor it" for a day (Craft::VENDOR_MARK_MS): not worth listing, back twice, or refused by the core. Its return
+    // count starts again (fix round 1, I1).
+    static void MarkForVendor(PlayerbotAI* botAI, uint32 entry);
     static constexpr uint32 LISTABLE_EVERY_MS = MINUTE * IN_MILLISECONDS;
     size_t RecipeCount() const { return _recipes.size(); }
     size_t StationCount() const { return _stationCount; }

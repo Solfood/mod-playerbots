@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <unordered_set>
 #include <vector>
 
 #include "AuctionHouseMgr.h"
@@ -25,6 +26,7 @@
 #include "PlayerbotAI.h"
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
+#include "Timer.h"
 #include "WorldPacket.h"
 #include "WorldSession.h"
 
@@ -68,6 +70,10 @@ bool AuctionVisitOperation::Execute()
     state.liveListings = live;
     List(bot, botAI, npc, cheapest, live);
     Buy(bot, botAI, npc, auctions);
+    // What is still missing now was looked for here: no new trip for it until the set changes or EmptyCooldownMinutes
+    // pass (fix round 1, I3).
+    state.missingCheckedSig = ::Craft::MissingSignature(state.missing);
+    state.missingCheckedMs = std::max<uint32>(1, getMSTime());
     state.listableAtMs = 0;  // counted again at the next look
     return true;
 }
@@ -100,7 +106,7 @@ void AuctionVisitOperation::List(Player* bot, PlayerbotAI* botAI, Creature* npc,
                               theirs, s.materialPricePct, s.undercutPct, s.relistPct);
         if (price > MAX_MONEY_AMOUNT || !::Craft::WorthListing(price, proto->SellPrice, count))
         {
-            state.returned[entry] = 2;  // not worth listing now: the vendor gets it (HeldForAuction drops it)
+            CraftMgr::MarkForVendor(botAI, entry);  // not worth listing now: the vendor gets it, for a day
             continue;
         }
         // Listing is free on this server (decision 16); were a deposit charged, the core would refuse a bot that
@@ -112,9 +118,9 @@ void AuctionVisitOperation::List(Player* bot, PlayerbotAI* botAI, Creature* npc,
         bot->GetSession()->HandleAuctionSellItem(packet);
         if (bot->GetItemByGuid(guid))
         {
-            // The core refused (nothing moved, nothing paid). It would refuse this item again: the vendor gets it,
-            // so the bot does not hold it back from the vendor for ever.
-            state.returned[entry] = 2;
+            // The core refused (nothing moved, nothing paid). It would likely refuse it again: the vendor gets it for
+            // a day, so the bot does not keep holding it back from the vendor.
+            CraftMgr::MarkForVendor(botAI, entry);
             continue;
         }
         ++live;
@@ -132,6 +138,7 @@ void AuctionVisitOperation::Buy(Player* bot, PlayerbotAI* botAI, Creature* npc, 
     AiObjectContext* context = botAI->GetAiObjectContext();
     uint64 const reserve = EarnedTraining::RepairReserve(bot);
     std::unordered_map<uint32, bool> upgrade;      // item -> the upgrade test, judged once a visit
+    std::unordered_set<uint32> slots;              // equipment slots it picked an upgrade for (Craft::GearSlot)
     struct Pick
     {
         uint32 id;        // the auction
@@ -167,8 +174,9 @@ void AuctionVisitOperation::Buy(Player* bot, PlayerbotAI* botAI, Creature* npc, 
         }
         ItemTemplate const* proto = sObjectMgr->GetItemTemplate(entry);
         if (!proto || proto->InventoryType == INVTYPE_NON_EQUIP || proto->RequiredLevel > bot->GetLevel() ||
-            proto->RequiredLevel + 10 < bot->GetLevel() || bot->CanUseItem(proto) != EQUIP_ERR_OK)
-            continue;
+            proto->RequiredLevel + 10 < bot->GetLevel() || slots.count(::Craft::GearSlot(proto->InventoryType)) ||
+            bot->CanUseItem(proto) != EQUIP_ERR_OK)
+            continue;  // ... or it already picked an upgrade for that slot this visit (one per slot)
         auto [it, fresh] = upgrade.emplace(entry, false);
         if (fresh)
         {
@@ -184,6 +192,7 @@ void AuctionVisitOperation::Buy(Player* bot, PlayerbotAI* botAI, Creature* npc, 
         if (::Craft::BuyGear(it->second, auction->buyout, bot->GetMoney(), reserve))
         {
             picks.push_back({id, auction->buyout, 0});
+            slots.insert(::Craft::GearSlot(proto->InventoryType));
             it->second = false;
         }
     }
