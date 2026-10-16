@@ -100,6 +100,8 @@ public:
     // A worn piece without a permanent enchant that `spell` fits (Item::IsFitToSpellRequirements) and that the core's
     // item level rule allows (Craft::EnchantLevelOk); nullptr = none.
     Item* EnchantTarget(Player* bot, uint32 spell) const;
+    // Holds every material `recipe` uses, in its bags (the craft action and the CRAFTTRIP diagnostic).
+    static bool HasReagents(Player* bot, CraftRecipeInfo const& recipe);
     static bool IsSupply(ItemTemplate const* proto);
     // May it start a craft trip now? Crafting on for it, not fighting, dead or in a group run, no cooldown, and the
     // planner finds something worth making. Plans once per roll (the plan is kept for the roll that follows; decision

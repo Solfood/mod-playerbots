@@ -135,7 +135,11 @@ bool CheckMountStateAction::Execute(Event /*event*/)
     // No real master (random bot or SelfBot) OR bot in BG
     if ((noRealMaster || inBattleground) && !bot->IsMounted() &&
         noAttackers && shouldMount && !bot->IsInCombat())
+    {
+        if (HoldMountForCraft(noRealMaster && !inBattleground, currentTarget))
+            return false;
         return Mount();
+    }
 
     if (!bot->IsFlying() && shouldDismount && bot->IsMounted() &&
         (enemy || dps || (!noAttackers && bot->IsInCombat())))
@@ -147,23 +151,33 @@ bool CheckMountStateAction::Execute(Event /*event*/)
     return false;
 }
 
+bool CheckMountStateAction::HoldMountForCraft(bool noRealMaster, Unit* currentTarget)
+{
+    // GM-BOTAI-0125/0127: a bot crafting where it stands on a craft trip stays on foot. The craft action dismounts it
+    // to cast; the dismount's SMSG_FORCE_RUN_SPEED_CHANGE fires this action at relevance 100, and with no target a
+    // random bot mounted again, so the craft never cast (outdoor forges: 15 minutes, nothing made). The hold lasts only
+    // while it is still at that spot, has no real master to follow and no fight; otherwise it lapses for good (the
+    // craft action sets it again at its next cast). No craft trip exists with crafting off.
+    auto* trip = std::get_if<NewRpgInfo::CraftTrip>(&botAI->rpgInfo.data);
+    if (!trip || !trip->atWork)
+        return false;
+    bool const fighting = bot->IsInCombat() || botAI->GetState() == BOT_STATE_COMBAT || currentTarget ||
+                          AI_VALUE(uint8, "attacker count");
+    if (!noRealMaster || fighting || bot->GetExactDist(trip->atWorkPos) > 10.0f)
+    {
+        trip->atWork = false;
+        return false;
+    }
+    ++trip->mountHeld;
+    return true;
+}
+
 bool CheckMountStateAction::isUseful()
 {
     // Not useful when:
     if (botAI->IsInVehicle() || bot->isDead() || bot->HasUnitState(UNIT_STATE_IN_FLIGHT) ||
         !bot->IsOutdoors() || bot->InArena())
         return false;
-
-    // GM-BOTAI-0125: a bot crafting where it stands on a craft trip stays on foot. The craft action dismounts it to
-    // cast; the dismount's SMSG_FORCE_RUN_SPEED_CHANGE fires this action at relevance 100, and with no target a random
-    // bot mounted again, so the craft never cast (outdoor forges: 15 minutes, nothing made). No craft trip exists with
-    // crafting off.
-    if (auto* trip = std::get_if<NewRpgInfo::CraftTrip>(&botAI->rpgInfo.data);
-        trip && trip->atWork && !bot->IsInCombat())
-    {
-        ++trip->mountHeld;
-        return false;
-    }
 
     master = GetMaster();
 

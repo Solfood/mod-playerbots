@@ -171,14 +171,6 @@ bool NewRpgCraftAction::Shop(NewRpgInfo::CraftTrip& trip)
     return true;
 }
 
-bool NewRpgCraftAction::HasReagents(CraftRecipeInfo const& recipe) const
-{
-    for (Craft::Reagent const& g : recipe.reagents)
-        if (bot->GetItemCount(g.item, false) < g.count)
-            return false;
-    return true;
-}
-
 void NewRpgCraftAction::NextStep(NewRpgInfo::CraftTrip& trip)
 {
     ++trip.step;
@@ -209,7 +201,7 @@ bool NewRpgCraftAction::ReadyToCast(NewRpgInfo::CraftTrip& trip, uint32 spell)
     }
     // GM-BOTAI-0125: the dismount sends the bot SMSG_FORCE_RUN_SPEED_CHANGE, which fires "check mount state" at
     // relevance 100 on the next tick (PlayerbotAI.cpp:125, WorldPacketHandlerStrategy); with no target a random bot
-    // mounts again. trip.atWork (set by the caller) makes that action not useful, so it stays on foot this time.
+    // mounts again. trip.atWork (set by the caller) makes that action hold the mount, so it stays on foot this time.
     if (bot->IsMounted())
     {
         bot->RemoveAurasByType(SPELL_AURA_MOUNTED);
@@ -257,7 +249,7 @@ bool NewRpgCraftAction::Make(NewRpgInfo::CraftTrip& trip)
     {
         Craft::Step const& step = trip.batch[trip.step];
         CraftRecipeInfo const* recipe = crafts.Recipe(step.spell);
-        if (!recipe || trip.castsDone >= step.casts || !HasReagents(*recipe))
+        if (!recipe || trip.castsDone >= step.casts || !CraftMgr::HasReagents(bot, *recipe))
         {
             NextStep(trip);  // done, or its materials are gone (sold, used, never bought)
             continue;
@@ -276,6 +268,7 @@ bool NewRpgCraftAction::Make(NewRpgInfo::CraftTrip& trip)
         }
         // Where it crafts: from here on the mount check leaves it on foot (GM-BOTAI-0125).
         trip.atWork = true;
+        trip.atWorkPos = WorldPosition(bot);
         if (!ReadyToCast(trip, recipe->spell))
             return true;  // stopped, stood up or dismounted this tick: it casts on the next one
         // An enchant goes on the piece it was planned for (the first worn one it fits that has no permanent enchant).
@@ -329,6 +322,7 @@ bool NewRpgCraftAction::UseResults(NewRpgInfo::CraftTrip& trip)
             if (AI_VALUE2(ItemUsage, "item usage", item->GetEntry()) != ITEM_USAGE_DISENCHANT)
                 continue;
             trip.atWork = true;  // GM-BOTAI-0125: on foot while it disenchants
+            trip.atWorkPos = WorldPosition(bot);
             if (!ReadyToCast(trip, SPELL_DISENCHANT))
                 return true;  // stopped, stood up or dismounted this tick: it disenchants on the next one
             trip.tried.insert(item->GetGUID().GetCounter());

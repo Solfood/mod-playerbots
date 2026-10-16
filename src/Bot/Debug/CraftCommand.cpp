@@ -95,10 +95,7 @@ void PrintBot(ChatHandler* handler, Player* bot)
     if (trip->step < trip->batch.size())
         if (CraftRecipeInfo const* r = CraftMgr::instance().Recipe(trip->batch[trip->step].spell))
         {
-            hasReagents = 1;
-            for (Craft::Reagent const& g : r->reagents)
-                if (bot->GetItemCount(g.item, false) < g.count)
-                    hasReagents = 0;
+            hasReagents = CraftMgr::HasReagents(bot, *r) ? 1 : 0;
             if (r->station)
                 if (CraftSpot const* st = CraftMgr::instance().NearestStation(bot, r->station, trip->guided))
                 {
@@ -120,8 +117,7 @@ void PrintBot(ChatHandler* handler, Player* bot)
       << " best=" << trip->approach.best << " still_ms=" << trip->approach.stillMs
       << " trip_s=" << GetMSTimeDiffToNow(info.startT) / IN_MILLISECONDS
       // GM-BOTAI-0125: why it does not cast. ticks: craft action runs; not_ready/why: ReadyToCast refusals and the
-      // last one's reasons (1 moving, 2 mounted, 4 form, 8 sitting); dismounts; mount_held: mount checks held off at
-      // work; last_cast: 0 none, 1 cast, 2 refused by PlayerbotAI::CastSpell (spell last_spell).
+      // last one's reasons (1 moving, 2 mounted, 4 form, 8 sitting); dismounts; mount_held: mounts held off at work; last_cast: 0 none, 1 cast, 2 refused by PlayerbotAI::CastSpell (spell last_spell).
       << " has_reagents=" << hasReagents << " at_work=" << (trip->atWork ? 1 : 0) << " ticks=" << trip->ticks
       << " not_ready=" << trip->notReady << " why=" << uint32(trip->notReadyWhy) << " dismounts=" << trip->dismounts
       << " mount_held=" << trip->mountHeld << " cast_fails=" << trip->castFails

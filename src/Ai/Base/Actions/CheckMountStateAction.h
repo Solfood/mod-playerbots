@@ -50,6 +50,8 @@ private:
     ShapeshiftForm masterInShapeshiftForm;
     ShapeshiftForm botInShapeshiftForm;
     static std::unordered_map<uint32, PreferredMountCache> mountCache;
+    // GM-BOTAI-0127: true when a craft trip at work keeps it on foot (counted); clears a hold that has lapsed.
+    bool HoldMountForCraft(bool noRealMaster, Unit* currentTarget);
     float CalculateDismountDistance() const;
     float CalculateMountDistance() const;
     void Dismount();

@@ -552,6 +552,14 @@ bool CraftMgr::IsSupply(ItemTemplate const* proto)
                               EarnedTraining::RepairReserve(bot));
 }
 
+bool CraftMgr::HasReagents(Player* bot, CraftRecipeInfo const& recipe)
+{
+    for (::Craft::Reagent const& g : recipe.reagents)
+        if (bot->GetItemCount(g.item, false) < g.count)
+            return false;
+    return true;
+}
+
 Item* CraftMgr::EnchantTarget(Player* bot, uint32 spell) const
 {
     SpellInfo const* info = sSpellMgr->GetSpellInfo(spell);
