@@ -91,13 +91,21 @@ void PrintBot(ChatHandler* handler, Player* bot)
     // station_d/arrive: the current step's nearest station and the distance that counts as there (-1: no station);
     // target_d: the place WalkTo walks to (-1: none); still_ms: the walk guard's clock (gives up at 60000).
     float stationDist = -1.0f, arrive = -1.0f;
+    int32 hasReagents = -1;  // GM-BOTAI-0125: the current step's materials in its bags (-1: no step)
     if (trip->step < trip->batch.size())
-        if (CraftRecipeInfo const* r = CraftMgr::instance().Recipe(trip->batch[trip->step].spell); r && r->station)
-            if (CraftSpot const* st = CraftMgr::instance().NearestStation(bot, r->station, trip->guided))
-            {
-                stationDist = bot->GetExactDist(st->pos);
-                arrive = Craft::StationArriveYards(st->focusDist);
-            }
+        if (CraftRecipeInfo const* r = CraftMgr::instance().Recipe(trip->batch[trip->step].spell))
+        {
+            hasReagents = 1;
+            for (Craft::Reagent const& g : r->reagents)
+                if (bot->GetItemCount(g.item, false) < g.count)
+                    hasReagents = 0;
+            if (r->station)
+                if (CraftSpot const* st = CraftMgr::instance().NearestStation(bot, r->station, trip->guided))
+                {
+                    stationDist = bot->GetExactDist(st->pos);
+                    arrive = Craft::StationArriveYards(st->focusDist);
+                }
+        }
     std::ostringstream t;
     t << "CRAFTTRIP name=" << bot->GetName() << " phase=" << uint32(trip->phase) << " step=" << trip->step
       << " casts=" << trip->castsDone << " class=" << uint32(bot->getClass())
@@ -110,7 +118,14 @@ void PrintBot(ChatHandler* handler, Player* bot)
       << " station_d=" << stationDist << " arrive=" << arrive
       << " target_d=" << (trip->target ? bot->GetExactDist(trip->target) : -1.0f)
       << " best=" << trip->approach.best << " still_ms=" << trip->approach.stillMs
-      << " trip_s=" << GetMSTimeDiffToNow(info.startT) / IN_MILLISECONDS;
+      << " trip_s=" << GetMSTimeDiffToNow(info.startT) / IN_MILLISECONDS
+      // GM-BOTAI-0125: why it does not cast. ticks: craft action runs; not_ready/why: ReadyToCast refusals and the
+      // last one's reasons (1 moving, 2 mounted, 4 form, 8 sitting); dismounts; mount_held: mount checks held off at
+      // work; last_cast: 0 none, 1 cast, 2 refused by PlayerbotAI::CastSpell (spell last_spell).
+      << " has_reagents=" << hasReagents << " at_work=" << (trip->atWork ? 1 : 0) << " ticks=" << trip->ticks
+      << " not_ready=" << trip->notReady << " why=" << uint32(trip->notReadyWhy) << " dismounts=" << trip->dismounts
+      << " mount_held=" << trip->mountHeld << " cast_fails=" << trip->castFails
+      << " last_cast=" << uint32(trip->lastCast) << " last_spell=" << trip->lastCastSpell;
     handler->PSendSysMessage("{}", t.str());
 }
 }  // namespace

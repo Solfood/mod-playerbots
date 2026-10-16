@@ -154,6 +154,17 @@ bool CheckMountStateAction::isUseful()
         !bot->IsOutdoors() || bot->InArena())
         return false;
 
+    // GM-BOTAI-0125: a bot crafting where it stands on a craft trip stays on foot. The craft action dismounts it to
+    // cast; the dismount's SMSG_FORCE_RUN_SPEED_CHANGE fires this action at relevance 100, and with no target a random
+    // bot mounted again, so the craft never cast (outdoor forges: 15 minutes, nothing made). No craft trip exists with
+    // crafting off.
+    if (auto* trip = std::get_if<NewRpgInfo::CraftTrip>(&botAI->rpgInfo.data);
+        trip && trip->atWork && !bot->IsInCombat())
+    {
+        ++trip->mountHeld;
+        return false;
+    }
+
     master = GetMaster();
 
     // Get shapeshift states, only applicable when there's a master

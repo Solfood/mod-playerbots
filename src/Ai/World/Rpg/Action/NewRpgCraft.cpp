@@ -60,6 +60,7 @@ bool NewRpgCraftAction::Execute(Event /*event*/)
     // Dead or fighting: the trip waits (its clock keeps running); the death and combat strategies act first.
     if (!bot->IsAlive() || bot->IsInCombat())
         return false;
+    ++trip->ticks;
     if (Craft::TripOver(GetMSTimeDiffToNow(info.startT), sPlayerbotAIConfig.crafting.tripMinutes))
         return End(trip->phase != PHASE_USE);
     switch (trip->phase)
@@ -76,6 +77,7 @@ bool NewRpgCraftAction::Execute(Event /*event*/)
 bool NewRpgCraftAction::WalkTo(NewRpgInfo::CraftTrip& trip, WorldPosition const& pos, WorldPosition const* goal)
 {
     WorldPosition const& key = goal ? *goal : pos;
+    trip.atWork = false;  // on its way: it may ride again
     if (trip.target != key)
     {
         trip.target = key;
@@ -184,9 +186,10 @@ void NewRpgCraftAction::NextStep(NewRpgInfo::CraftTrip& trip)
     trip.target = WorldPosition();
 }
 
-bool NewRpgCraftAction::ReadyToCast(uint32 spell)
+bool NewRpgCraftAction::ReadyToCast(NewRpgInfo::CraftTrip& trip, uint32 spell)
 {
     bool ready = true;
+    uint8 why = 0;
     if (bot->isMoving())
     {
         // isMoving() reads the movement flags, and a bot has no client to clear them. With no spline running (it is
@@ -202,12 +205,18 @@ bool NewRpgCraftAction::ReadyToCast(uint32 spell)
         else
             bot->StopMoving();
         ready = false;
+        why |= 1;
     }
+    // GM-BOTAI-0125: the dismount sends the bot SMSG_FORCE_RUN_SPEED_CHANGE, which fires "check mount state" at
+    // relevance 100 on the next tick (PlayerbotAI.cpp:125, WorldPacketHandlerStrategy); with no target a random bot
+    // mounts again. trip.atWork (set by the caller) makes that action not useful, so it stays on foot this time.
     if (bot->IsMounted())
     {
         bot->RemoveAurasByType(SPELL_AURA_MOUNTED);
         bot->Dismount();
         ready = false;
+        why |= 2;
+        ++trip.dismounts;
     }
     // Leave a form only when it blocks this cast (the spell's own stance rules, as the gather action does). A warrior's
     // stance, Shadowform or Stealth never blocks a craft, and PlayerbotAI::RemoveShapeshift only removes druid forms
@@ -220,15 +229,21 @@ bool NewRpgCraftAction::ReadyToCast(uint32 spell)
         {
             bot->RemoveAurasByType(SPELL_AURA_MOD_SHAPESHIFT);
             ready = false;
+            why |= 4;
         }
     }
     if (!bot->IsStandState())
     {
         bot->SetStandState(UNIT_STAND_STATE_STAND);
         ready = false;
+        why |= 8;
     }
     if (!ready)
+    {
+        ++trip.notReady;
+        trip.notReadyWhy = why;
         botAI->SetNextCheckDelay(sPlayerbotAIConfig.reactDelay);
+    }
     return ready;
 }
 
@@ -259,7 +274,9 @@ bool NewRpgCraftAction::Make(NewRpgInfo::CraftTrip& trip)
             if (bot->GetExactDist(station->pos) > Craft::StationArriveYards(station->focusDist))
                 return WalkTo(trip, station->pos);
         }
-        if (!ReadyToCast(recipe->spell))
+        // Where it crafts: from here on the mount check leaves it on foot (GM-BOTAI-0125).
+        trip.atWork = true;
+        if (!ReadyToCast(trip, recipe->spell))
             return true;  // stopped, stood up or dismounted this tick: it casts on the next one
         // An enchant goes on the piece it was planned for (the first worn one it fits that has no permanent enchant).
         Item* target = nullptr;
@@ -268,11 +285,15 @@ bool NewRpgCraftAction::Make(NewRpgInfo::CraftTrip& trip)
             NextStep(trip);  // the piece was replaced or enchanted meanwhile
             continue;
         }
+        trip.lastCastSpell = recipe->spell;
         if (!botAI->CastSpell(recipe->spell, bot, target))
         {
+            trip.lastCast = 2;
+            ++trip.castFails;
             NextStep(trip);  // the core refused (no tool, no focus in reach, full bags): skip the step
             continue;
         }
+        trip.lastCast = 1;
         ++trip.castsDone;
         ++trip.made;
         FixedPopulation::Count(recipe->smelt ? EconomyCounter::Smelts : EconomyCounter::CraftsMade);
@@ -307,7 +328,8 @@ bool NewRpgCraftAction::UseResults(NewRpgInfo::CraftTrip& trip)
                 continue;
             if (AI_VALUE2(ItemUsage, "item usage", item->GetEntry()) != ITEM_USAGE_DISENCHANT)
                 continue;
-            if (!ReadyToCast(SPELL_DISENCHANT))
+            trip.atWork = true;  // GM-BOTAI-0125: on foot while it disenchants
+            if (!ReadyToCast(trip, SPELL_DISENCHANT))
                 return true;  // stopped, stood up or dismounted this tick: it disenchants on the next one
             trip.tried.insert(item->GetGUID().GetCounter());
             if (botAI->CastSpell(SPELL_DISENCHANT, bot, item))

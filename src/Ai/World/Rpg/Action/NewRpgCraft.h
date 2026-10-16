@@ -42,7 +42,7 @@ private:
     // Ready to cast `spell` where it stands: not moving, standing, not mounted, and in no form that blocks `spell`.
     // False: it fixed one of them this tick, and casts on a later tick (PlayerbotAI::CastSpell refuses a cast while it
     // moves or sits; that is no refusal by the core, so the step must not be skipped for it).
-    bool ReadyToCast(uint32 spell);
+    bool ReadyToCast(NewRpgInfo::CraftTrip& trip, uint32 spell);
     static void NextStep(NewRpgInfo::CraftTrip& trip);
 };
 

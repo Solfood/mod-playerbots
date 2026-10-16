@@ -130,6 +130,18 @@ struct NewRpgInfo
         uint32 lastTickMs{0};                 // the approach clock's last tick (0 = none yet)
         bool guided{false};                   // planned as a guided bot: stations and vendors in town only
         std::unordered_set<uint32> tried;     // items it tried to disenchant (item guid counters; each once a trip)
+        // GM-BOTAI-0125: at the place it crafts (its station, or where it stands for a recipe that needs none) and
+        // about to cast: CheckMountStateAction leaves it on foot. Cleared when it walks again (WalkTo).
+        bool atWork{false};
+        // Diagnostics for the CRAFTTRIP line (craft trip <name>): no effect on the trip.
+        uint32 ticks{0};          // NewRpgCraftAction::Execute runs on this trip
+        uint32 notReady{0};       // ReadyToCast refusals
+        uint8 notReadyWhy{0};     // the last refusal's reasons: 1 moving, 2 mounted, 4 form, 8 not standing
+        uint32 dismounts{0};      // ReadyToCast dismounts
+        uint32 mountHeld{0};      // mount checks held off by atWork
+        uint32 castFails{0};      // PlayerbotAI::CastSpell refusals
+        uint32 lastCastSpell{0};  // the last spell it tried to cast (0 = none yet)
+        uint8 lastCast{0};        // its result: 0 none yet, 1 cast, 2 refused
     };
     struct Idle
     {
