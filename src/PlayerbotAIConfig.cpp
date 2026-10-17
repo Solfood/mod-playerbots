@@ -688,6 +688,19 @@ bool PlayerbotAIConfig::Initialize()
     fixedPopulationSafeBelow = sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.PlaySafeBelowDurability", 20);
     fixedPopulationTownTripTimeout =
         sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.TownTripTimeoutSeconds", 1200);
+    supplies.supplies = sConfigMgr->GetOption<bool>("AiPlayerbot.FixedPopulation.Supplies", true);
+    supplies.below = sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.SuppliesBelow", 5);
+    supplies.stack = sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.SuppliesStack", 20);
+    supplies.moneyPct =
+        std::min<uint32>(100, sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.SuppliesMoneyPct", 25));
+    supplies.rest = sConfigMgr->GetOption<bool>("AiPlayerbot.FixedPopulation.RestBeforePull", true);
+    supplies.restHealth = sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.RestBelowHealth", 70);
+    supplies.restMana = sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.RestBelowMana", 50);
+    supplies.untilHealth = std::max(supplies.restHealth,
+                                    sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.RestUntilHealth", 85));
+    supplies.untilMana = std::max(supplies.restMana,
+                                  sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.RestUntilMana", 80));
+    supplies.restSeconds = sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.RestMaxSeconds", 90);
     questRoutes.enabled = sConfigMgr->GetOption<bool>("AiPlayerbot.QuestRoutes", false);
     questRoutes.hubSoftCap = sConfigMgr->GetOption<uint32>("AiPlayerbot.QuestRoutes.HubSoftCap", 15);
     questRoutes.safeFightUntilLevel = sConfigMgr->GetOption<uint32>("AiPlayerbot.QuestRoutes.SafeFightUntilLevel", 10);

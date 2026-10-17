@@ -7,6 +7,7 @@
 #include "NewRpgAction.h"
 #include "AreaDefines.h"
 #include "AuctionOps.h"
+#include "BotSupplies.h"
 #include "BroadcastHelper.h"
 #include "ChatHelper.h"
 #include "CraftMgr.h"
@@ -732,6 +733,10 @@ bool NewRpgWanderNpcAction::Execute(Event /*event*/)
                     bot->SetSelection(data.npcOrGo);
                     botAI->DoSpecificAction("repair", Event("repair"));
                 }
+
+                // Honest world: food and drink with its own money, after selling and repairing (no food cheat).
+                if (npcFlags & UNIT_NPC_FLAG_VENDOR)
+                    BotSupplies::Shop(botAI, bot, creature);
 
                 // World of Craft (Plan 6a): at an auctioneer, all its auction business in one step, on the world
                 // thread (decision 4), once per town trip (decision 6). Crafting off: nothing.

@@ -1151,6 +1151,8 @@ bool NewRpgBaseAction::GoRunErrands(bool repairOnly)
     info.lastErrandMs = getMSTime();
     info.abandonedTrip = WorldPosition();
     FixedPopulation::Count(EconomyCounter::ErrandsStarted);
+    if (errands & TOWN_ERRAND_SUPPLIES)
+        FixedPopulation::Count(EconomyCounter::SuppliesTrips);
     if (servedHere)
         info.ChangeToWanderNpc();
     else

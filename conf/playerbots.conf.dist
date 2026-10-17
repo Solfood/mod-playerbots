@@ -828,6 +828,32 @@ AiPlayerbot.FixedPopulation.ErrandCooldownSeconds = 600
 AiPlayerbot.FixedPopulation.PlaySafeBelowDurability = 20
 AiPlayerbot.FixedPopulation.TownTripTimeoutSeconds = 1200
 
+# Honest world food and drink (only with FixedPopulation = 1). Without the "food" bot cheat a bot eats and drinks
+# only what it carries. Supplies: when it carries fewer than SuppliesBelow food (or drink, for a class with mana) that
+# suits its level, and SuppliesMoneyPct percent of its money pays for the cheapest food that still suits it, a town
+# errand takes it to a vendor that sells food or drink. At any vendor it tops up each kind it holds fewer than half of
+# SuppliesStack of: the best food and drink it may use that it can pay for (never above its level), about
+# SuppliesStack of each, spending at most SuppliesMoneyPct percent of its money on one visit (a mana user splits it
+# between food and drink). It buys no potions on this path. Food 20 levels below the bot no longer counts.
+# Defaults: 1, 5, 20, 25
+AiPlayerbot.FixedPopulation.Supplies = 1
+AiPlayerbot.FixedPopulation.SuppliesBelow = 5
+AiPlayerbot.FixedPopulation.SuppliesStack = 20
+AiPlayerbot.FixedPopulation.SuppliesMoneyPct = 25
+
+# Honest world rest before a fight (only with FixedPopulation = 1; random bots with no real master, not grouped, not
+# in a dungeon or battleground). Out of combat and below RestBelowHealth percent health (or RestBelowMana percent mana,
+# for a class with mana), a bot picks no new fight: it eats or drinks if it carries food or drink, otherwise it sits
+# until RestUntilHealth / RestUntilMana percent (natural regeneration only). A rest ends after RestMaxSeconds whatever
+# it reached; then no rest again until it fights or is back above the RestBelow levels. It always fights back.
+# Defaults: 1, 70, 50, 85, 80, 90
+AiPlayerbot.FixedPopulation.RestBeforePull = 1
+AiPlayerbot.FixedPopulation.RestBelowHealth = 70
+AiPlayerbot.FixedPopulation.RestBelowMana = 50
+AiPlayerbot.FixedPopulation.RestUntilHealth = 85
+AiPlayerbot.FixedPopulation.RestUntilMana = 80
+AiPlayerbot.FixedPopulation.RestMaxSeconds = 90
+
 # Honest world professions (only with FixedPopulation = 1). Each bot picks two primary professions from a
 # gathering-heavy, class-weighted table at one level between ProfessionMinLevel and ProfessionMaxLevel
 # (spread by bot), then learns them at its own cost. A pick preset in the bot's firstSkill/secondSkill

@@ -67,6 +67,12 @@ enum class EconomyCounter : uint8
     AuctionGoldIn,        // copper from sale mails collected (the price: no cut on this server, our own rule)
     AuctionGoldOut,       // copper paid in buyouts (and deposits, were a server to charge them)
     CraftTripsAbandoned,  // craft trips ended by the clock or an unreachable vendor or station
+    FoodBought,           // food items bought with its own money (honest world supplies)
+    DrinkBought,          // drink items bought
+    SuppliesCopper,       // copper spent on them
+    SuppliesTrips,        // errand trips that included the supplies errand
+    RestsBeforePull,      // rests begun instead of a new fight (low health or mana)
+    RestsGaveUp,          // rests that ran out of time (RestMaxSeconds)
     Count
 };
 

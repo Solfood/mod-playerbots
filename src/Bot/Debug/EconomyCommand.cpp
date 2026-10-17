@@ -7,6 +7,7 @@
 #include "EconomyCommand.h"
 
 #include "Bag.h"
+#include "BotSupplies.h"
 #include "CharacterCache.h"
 #include "Chat.h"
 #include "DatabaseEnv.h"
@@ -103,10 +104,14 @@ void Show(ChatHandler* handler, Player* bot)
             if (bot->HasSpell(spell))
                 ++mounts;
 
+    uint32 food = 0;
+    uint32 drink = 0;
+    BotSupplies::Carried(botAI, bot, food, drink);  // food and drink that suit its level
+
     handler->PSendSysMessage(
         "ECON name={} guid={} level={} money={} durability={} bags={} dead={} ghost={} sick={} riding={} prof={} "
         "deaths={} rpg={} spells={} randomize={} teleport={} revive={} mounts={} mail={} tools={} map={} zone={} "
-        "held={} focus={} stucktp={}",
+        "held={} focus={} stucktp={} food={} drink={} resting={}",
         bot->GetName(), botId, bot->GetLevel(), bot->GetMoney(), context->GetValue<uint8>("durability")->Get(),
         context->GetValue<uint8>("bag space")->Get(), bot->isDead() ? 1 : 0,
         bot->HasPlayerFlag(PLAYER_FLAGS_GHOST) ? 1 : 0, bot->HasAura(SPELL_RESURRECTION_SICKNESS) ? 1 : 0, riding,
@@ -117,7 +122,7 @@ void Show(ChatHandler* handler, Player* bot)
         bot->GetItemCount(EarnedTraining::ITEM_MINING_PICK, true) +
             bot->GetItemCount(EarnedTraining::ITEM_SKINNING_KNIFE, true),
         bot->GetMapId(), bot->GetZoneId(), sRandomPlayerbotMgr.IsHeld(botId) ? 1 : 0, botAI->rpgInfo.focus,
-        botAI->rpgInfo.stuckTeleports);
+        botAI->rpgInfo.stuckTeleports, food, drink, botAI->rpgInfo.rest.startMs ? 1 : 0);
 }
 
 void Active(ChatHandler* handler)
@@ -545,7 +550,7 @@ bool EconomyCommand::Handle(ChatHandler* handler, char const* args)
         handler->PSendSysMessage(
             "ECONERRANDS name={} mask={} repair={} sell={} ammo={} mail={} cooldown={} town={} own_town={} "
             "bill={} weapon_cost={} junk={} afford={} weapon={} safe={} gather={} zone_above={} trip={} "
-            "trip_at={},{} camp={} avoid_fights={}",
+            "trip_at={},{} camp={} avoid_fights={} supplies={}",
             bot->GetName(), errands, (errands & TOWN_ERRAND_REPAIR) ? 1 : 0, (errands & TOWN_ERRAND_SELL) ? 1 : 0,
             (errands & TOWN_ERRAND_AMMO) ? 1 : 0, (errands & TOWN_ERRAND_MAIL) ? 1 : 0,
             TownErrands::CooldownLeftMs(botAI->rpgInfo.lastErrandMs) / IN_MILLISECONDS,
@@ -561,7 +566,7 @@ bool EconomyCommand::Handle(ChatHandler* handler, char const* args)
             trip == WorldPosition() ? 0 : static_cast<uint32>(bot->GetExactDist(trip)),
             static_cast<int32>(trip.GetPositionX()), static_cast<int32>(trip.GetPositionY()),
             camp ? static_cast<uint32>(bot->GetExactDist(camp->pos)) : 0,
-            TownErrands::AvoidFights(botAI, bot) ? 1 : 0);
+            TownErrands::AvoidFights(botAI, bot) ? 1 : 0, (errands & TOWN_ERRAND_SUPPLIES) ? 1 : 0);
         return true;
     }
     if (sub == "wander")

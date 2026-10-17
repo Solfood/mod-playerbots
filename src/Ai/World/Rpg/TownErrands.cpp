@@ -6,6 +6,7 @@
 
 #include "TownErrands.h"
 
+#include "BotSupplies.h"
 #include "BudgetValues.h"
 #include "CraftMgr.h"
 #include "Creature.h"
@@ -67,6 +68,10 @@ uint8 TownErrands::Needed(PlayerbotAI* botAI, Player* bot)
     if (CollectableMailCount(bot))
         errands |= TOWN_ERRAND_MAIL;
 
+    // Without the food cheat a bot eats only what it bought (FixedPopulation.Supplies*).
+    if (BotSupplies::NeedTrip(botAI, bot))
+        errands |= TOWN_ERRAND_SUPPLIES;
+
     // Quest routes (spec §6, routed bots only: only they ever retreat). A retreating bot sells its junk toward the
     // weapon repair; a broken weapon it can pay for is repaired even while the rest of its gear is above
     // RepairBelowDurability (else the retreat would end and the weapon stay broken).
@@ -106,6 +111,8 @@ bool TownErrands::Serves(Creature const* npc, uint8 errands)
     if ((errands & TOWN_ERRAND_AMMO) && npc->HasNpcFlag(UNIT_NPC_FLAG_VENDOR_AMMO))
         return true;
     if ((errands & TOWN_ERRAND_AUCTION) && npc->HasNpcFlag(UNIT_NPC_FLAG_AUCTIONEER))
+        return true;
+    if ((errands & TOWN_ERRAND_SUPPLIES) && BotSupplies::SellsSupplies(npc))
         return true;
     return false;
 }

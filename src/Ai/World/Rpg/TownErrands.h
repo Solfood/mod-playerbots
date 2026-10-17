@@ -23,7 +23,8 @@ enum TownErrand : uint8
     TOWN_ERRAND_SELL = 0x02,
     TOWN_ERRAND_AMMO = 0x04,
     TOWN_ERRAND_MAIL = 0x08,
-    TOWN_ERRAND_AUCTION = 0x10  // World of Craft (Plan 6a): something to list, or a material its plan misses
+    TOWN_ERRAND_AUCTION = 0x10,  // World of Craft (Plan 6a): something to list, or a material its plan misses
+    TOWN_ERRAND_SUPPLIES = 0x20  // short of food (or drink) and able to pay: a vendor that sells them
 };
 
 class TownErrands

@@ -21,6 +21,7 @@
 #include "GuideStepRules.h"
 #include "RouteSafetyRules.h"
 #include "Strategy.h"
+#include "SuppliesRules.h"
 #include "Timer.h"
 #include "TravelMgr.h"
 
@@ -225,6 +226,7 @@ struct NewRpgInfo
         uint32 missingCheckedMs{0};    // ... and when (fix round 1, I3)
     };
     CraftState craft;
+    Supplies::RestState rest;  // honest world rest before a fight (BotSupplies::ShouldRest); cleared by combat
     WorldPosition abandonedTrip;  // where the last town trip given up was going (the next repair trip avoids it)
 
     // Guildmaster bridge focus (0 none, 1 questing, 2 grinding, 3 pvp, 4 gathering, 5 resting, 6 crafting; the bridge's
