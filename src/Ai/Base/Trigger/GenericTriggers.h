@@ -289,6 +289,15 @@ public:
     bool IsActive() override;
 };
 
+// Honest world: low health or mana out of combat, no new fight until it has rested (BotSupplies::ShouldRest).
+class RestBeforePullTrigger : public Trigger
+{
+public:
+    RestBeforePullTrigger(PlayerbotAI* botAI) : Trigger(botAI, "rest before pull") {}
+
+    bool IsActive() override;
+};
+
 class LightAoeTrigger : public AoeTrigger
 {
 public:

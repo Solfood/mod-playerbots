@@ -31,4 +31,16 @@ public:
     bool isPossible() override;
 };
 
+// Honest world: sit and regenerate (natural regeneration only) before a new fight when it has no food or drink to
+// use; the rest's clock and limits are BotSupplies::ShouldRest's.
+class RestBeforePullAction : public Action
+{
+public:
+    RestBeforePullAction(PlayerbotAI* botAI) : Action(botAI, "rest before pull") {}
+
+    bool Execute(Event event) override;
+    bool isUseful() override;
+    bool isPossible() override;
+};
+
 #endif

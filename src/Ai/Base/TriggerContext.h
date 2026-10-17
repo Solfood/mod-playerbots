@@ -145,6 +145,7 @@ public:
 
         creators["no drink"] = &TriggerContext::no_drink;
         creators["no food"] = &TriggerContext::no_food;
+        creators["rest before pull"] = &TriggerContext::rest_before_pull;
 
         creators["panic"] = &TriggerContext::panic;
         creators["outnumbered"] = &TriggerContext::outnumbered;
@@ -310,6 +311,7 @@ private:
     static Trigger* outnumbered(PlayerbotAI* botAI) { return new OutNumberedTrigger(botAI); }
     static Trigger* no_drink(PlayerbotAI* botAI) { return new NoDrinkTrigger(botAI); }
     static Trigger* no_food(PlayerbotAI* botAI) { return new NoFoodTrigger(botAI); }
+    static Trigger* rest_before_pull(PlayerbotAI* botAI) { return new RestBeforePullTrigger(botAI); }
     static Trigger* LightAoe(PlayerbotAI* botAI) { return new LightAoeTrigger(botAI); }
     static Trigger* MediumAoe(PlayerbotAI* botAI) { return new MediumAoeTrigger(botAI); }
     static Trigger* HighAoe(PlayerbotAI* botAI) { return new HighAoeTrigger(botAI); }

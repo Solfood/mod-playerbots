@@ -21,4 +21,7 @@ void UseFoodStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         triggers.push_back(new TriggerNode("low health", { NextAction("food", 3.0f) }));
         triggers.push_back(new TriggerNode("low mana", { NextAction("drink", 3.0f) }));
     }
+    // Honest world only (the trigger is off otherwise). Above "attack anything" (4.0, grind) and below the grind
+    // strategy's default food and drink (4.1, 4.2): it eats or drinks if it can, else sits.
+    triggers.push_back(new TriggerNode("rest before pull", { NextAction("rest before pull", 4.05f) }));
 }

@@ -5,6 +5,7 @@
  */
 
 #include "GenericTriggers.h"
+#include "BotSupplies.h"
 #include "Corpse.h"
 #include "CreatureAI.h"
 #include "GenericBuffUtils.h"
@@ -268,6 +269,8 @@ bool NoDrinkTrigger::IsActive()
 
     return AI_VALUE2(std::vector<Item*>, "inventory items", "conjured water").empty();
 }
+
+bool RestBeforePullTrigger::IsActive() { return BotSupplies::ShouldRest(botAI, bot); }
 
 bool TargetInSightTrigger::IsActive() { return AI_VALUE(Unit*, "grind target"); }
 

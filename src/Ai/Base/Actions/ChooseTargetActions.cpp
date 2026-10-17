@@ -5,6 +5,7 @@
  */
 
 #include "ChooseTargetActions.h"
+#include "BotSupplies.h"
 #include "ChooseRpgTargetAction.h"
 #include "Event.h"
 #include "LootObjectStack.h"
@@ -131,6 +132,10 @@ bool AttackAnythingAction::isUseful()
         return false;
 
     if (bot->IsInCombat())
+        return false;
+
+    // Honest world: low health or mana, no new fight until it has rested (attackers are never blocked).
+    if (BotSupplies::ShouldRest(botAI, bot))
         return false;
 
     Unit* target = GetTarget();

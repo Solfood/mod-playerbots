@@ -1496,6 +1496,8 @@ void PlayerbotAI::ChangeEngine(BotState type)
 
 void PlayerbotAI::ChangeEngineOnCombat()
 {
+    rpgInfo.rest = Supplies::RestState{};  // a fight ends a rest and clears a rest that ran out of time
+
     if (HasStrategy("wait for attack", BOT_STATE_COMBAT))
         aiObjectContext->GetValue<time_t>("combat start time")->Set(time(nullptr));
 

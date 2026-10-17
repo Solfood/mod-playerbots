@@ -5,11 +5,14 @@
  */
 
 #include "NonCombatActions.h"
+#include "BotSupplies.h"
 #include "Event.h"
+#include "MotionMaster.h"
 #include "Playerbots.h"
 
 namespace
 {
+constexpr uint32 REST_CHECK_DELAY_MS = 2000;  // a resting bot looks again this often (it reacts to an attack then)
 constexpr uint32 BG_WS_SPELL_WARSONG_FLAG = 23333;
 constexpr uint32 BG_WS_SPELL_SILVERWING_FLAG = 23335;
 constexpr uint32 BG_EY_NETHERSTORM_FLAG_SPELL = 34976;
@@ -145,4 +148,25 @@ bool EatAction::isPossible()
     }
 
     return botAI->HasCheat(BotCheatMask::food) || UseItemAction::isPossible();
+}
+
+bool RestBeforePullAction::Execute(Event /*event*/)
+{
+    bot->ClearUnitState(UNIT_STATE_CHASE);
+    bot->ClearUnitState(UNIT_STATE_FOLLOW);
+    if (bot->isMoving())
+        bot->StopMoving();
+    bot->GetMotionMaster()->Clear();
+    if (!bot->IsSitState())
+        bot->SetStandState(UNIT_STAND_STATE_SIT);
+    botAI->SetNextCheckDelay(REST_CHECK_DELAY_MS);
+    return true;
+}
+
+bool RestBeforePullAction::isUseful() { return BotSupplies::ShouldRest(botAI, bot); }
+
+bool RestBeforePullAction::isPossible()
+{
+    return !bot->IsInCombat() && !bot->IsMounted() && !bot->IsInFlight() && !bot->IsInWater() &&
+           !bot->IsNonMeleeSpellCast(true);
 }
