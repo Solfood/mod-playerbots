@@ -25,7 +25,8 @@ constexpr std::array<char const*, static_cast<std::size_t>(EconomyCounter::Count
     "guide_steps_done", "guide_steps_blocked", "guide_steps_stalled", "guide_steps_crowded", "guides_paused",
     "guide_rides_failed", "guide_rides_teleported", "crafts_made", "crafts_equipped", "gather_yield", "smelts",
     "ah_listed", "ah_sold", "ah_bought", "ah_gold_in", "ah_gold_out", "craft_trips_abandoned", "food_bought",
-    "drink_bought", "supplies_copper", "supplies_trips", "rests_before_pull", "rests_gave_up"};
+    "drink_bought", "supplies_copper", "supplies_trips", "rests_before_pull", "rests_gave_up",
+    "short_of_money", "short_of_money_ended", "greys_sold_short"};
 // A std::array fills missing names with nullptr (no compile error), so check the last one is there.
 static_assert(COUNTER_NAMES.back() != nullptr, "COUNTER_NAMES needs a name for every EconomyCounter");
 }  // namespace

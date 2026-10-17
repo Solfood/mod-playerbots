@@ -5,6 +5,7 @@
  */
 
 #include "AuctionOps.h"
+#include "BotSupplies.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -84,9 +85,11 @@ void AuctionVisitOperation::List(Player* bot, PlayerbotAI* botAI, Creature* npc,
     ::Craft::Settings const& s = sPlayerbotAIConfig.crafting;
     NewRpgInfo::CraftState& state = botAI->rpgInfo.craft;
     CraftMgr& crafts = CraftMgr::instance();
+    uint32 const maxListings = ::Supplies::ListingCap(s.maxListings, BotSupplies::ShortCached(botAI),
+                                                      sPlayerbotAIConfig.supplies.shortListPct);
     for (Item* item : crafts.HeldForAuction(botAI, bot))
     {
-        if (!::Craft::ListSlots(live, s.maxListings))
+        if (!::Craft::ListSlots(live, maxListings))
             break;
         ItemTemplate const* proto = item->GetTemplate();
         uint32 const entry = proto->ItemId;

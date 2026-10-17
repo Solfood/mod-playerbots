@@ -5,6 +5,7 @@
  */
 
 #include "CraftMgr.h"
+#include "BotSupplies.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -663,8 +664,11 @@ std::vector<Item*> CraftMgr::HeldForAuction(PlayerbotAI* botAI, Player* /*bot*/)
     }
     std::stable_sort(listable.begin(), listable.end(), [](auto const& a, auto const& b) { return a.first > b.first; });
     std::vector<Item*> held;
+    // Short of money (honest world): more listings at once; still only ITEM_USAGE_AH items (nothing it needs).
+    uint32 const maxListings = ::Supplies::ListingCap(s.maxListings, BotSupplies::ShortCached(botAI),
+                                                      sPlayerbotAIConfig.supplies.shortListPct);
     for (uint32 rank = 0; rank < listable.size(); ++rank)
-        if (::Craft::HoldForAuction(rank, state.liveListings, s.maxListings))
+        if (::Craft::HoldForAuction(rank, state.liveListings, maxListings))
             held.push_back(listable[rank].second);
     return held;
 }

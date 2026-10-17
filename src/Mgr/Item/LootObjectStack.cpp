@@ -5,9 +5,11 @@
  */
 
 #include "LootObjectStack.h"
+#include "BotSupplies.h"
 #include "LootMgr.h"
 #include "Object.h"
 #include "ObjectAccessor.h"
+#include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
 #include "Unit.h"
 
@@ -406,6 +408,12 @@ LootObject LootObjectStack::GetNearest(float maxDistance)
 
     LootObject nearest;
     float nearestDistance = std::numeric_limits<float>::max();
+    // Honest world, short of money with crafting on: gathering nodes count from farther away (corpses do not).
+    PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
+    float const nodeDistance =
+        maxDistance && botAI ? Supplies::NodeReach(maxDistance, BotSupplies::CraftLean(botAI, bot),
+                                                   sPlayerbotAIConfig.supplies.shortNodeReachPct)
+                             : maxDistance;
 
     LootTargetList safeCopy(availableLoot);
     for (LootTargetList::iterator i = safeCopy.begin(); i != safeCopy.end(); i++)
@@ -418,13 +426,17 @@ LootObject LootObjectStack::GetNearest(float maxDistance)
 
         float distance = bot->GetDistance(worldObj);
 
-        if (distance >= nearestDistance || (maxDistance && distance > maxDistance))
+        if (distance >= nearestDistance || (nodeDistance && distance > nodeDistance))
+            continue;
+        if (maxDistance && distance > maxDistance && !guid.IsGameObject())
             continue;
 
         LootObject lootObject(bot, guid);
 
         if (!lootObject.IsLootPossible(bot))
             continue;
+        if (maxDistance && distance > maxDistance && lootObject.skillId == SKILL_NONE)
+            continue;  // only a gathering node is reached for from beyond maxDistance
 
         nearestDistance = distance;
         nearest = lootObject;

@@ -701,6 +701,12 @@ bool PlayerbotAIConfig::Initialize()
     supplies.untilMana = std::max(supplies.restMana,
                                   sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.RestUntilMana", 80));
     supplies.restSeconds = sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.RestMaxSeconds", 90);
+    supplies.shortOfMoney = sConfigMgr->GetOption<bool>("AiPlayerbot.FixedPopulation.ShortOfMoney", true);
+    supplies.shortStackPct = sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.ShortOfMoneyStackPct", 100);
+    supplies.shortBoost = sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.ShortOfMoneyBoost", 3);
+    supplies.shortListPct = sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.ShortOfMoneyListPct", 200);
+    supplies.shortNodeReachPct =
+        sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.ShortOfMoneyNodeReachPct", 300);
     questRoutes.enabled = sConfigMgr->GetOption<bool>("AiPlayerbot.QuestRoutes", false);
     questRoutes.hubSoftCap = sConfigMgr->GetOption<uint32>("AiPlayerbot.QuestRoutes.HubSoftCap", 15);
     questRoutes.safeFightUntilLevel = sConfigMgr->GetOption<uint32>("AiPlayerbot.QuestRoutes.SafeFightUntilLevel", 10);

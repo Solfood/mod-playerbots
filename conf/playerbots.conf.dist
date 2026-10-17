@@ -854,6 +854,22 @@ AiPlayerbot.FixedPopulation.RestUntilHealth = 85
 AiPlayerbot.FixedPopulation.RestUntilMana = 80
 AiPlayerbot.FixedPopulation.RestMaxSeconds = 90
 
+# Honest world "short of money" (only with FixedPopulation = 1; random bots with no real master). A bot whose money is
+# below its repair reserve (the full repair bill of its gear) plus ShortOfMoneyStackPct percent of what a supplies
+# stack of its level costs (SuppliesStack food, and as much drink for a class with mana, at vendor prices) is short of
+# money. It still quests and fights; it only leans toward earning: on every town visit it sells its grey items to a
+# vendor (not only when its bags are full); with AiPlayerbot.Crafting on, gathering and craft trips weigh
+# ShortOfMoneyBoost times more in its idle choices, it may hold ShortOfMoneyListPct percent of Crafting.MaxListings
+# auctions (still never what it needs: worn gear, supplies, its recipes' materials), and it reaches for gathering
+# nodes it passes up to ShortOfMoneyNodeReachPct percent of LootDistance. A bot that retreats to earn its weapon
+# repair (broke) follows the retreat rules instead. Checked at most every 30 seconds.
+# Defaults: 1, 100, 3, 200, 300
+AiPlayerbot.FixedPopulation.ShortOfMoney = 1
+AiPlayerbot.FixedPopulation.ShortOfMoneyStackPct = 100
+AiPlayerbot.FixedPopulation.ShortOfMoneyBoost = 3
+AiPlayerbot.FixedPopulation.ShortOfMoneyListPct = 200
+AiPlayerbot.FixedPopulation.ShortOfMoneyNodeReachPct = 300
+
 # Honest world professions (only with FixedPopulation = 1). Each bot picks two primary professions from a
 # gathering-heavy, class-weighted table at one level between ProfessionMinLevel and ProfessionMaxLevel
 # (spread by bot), then learns them at its own cost. A pick preset in the bot's firstSkill/secondSkill

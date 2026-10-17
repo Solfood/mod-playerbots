@@ -406,7 +406,12 @@ bool NewRpgStatusUpdateAction::GuidedCraftOrGather()
     // crafter, a craft trip in town (.Craft, 15): about a quarter of its idle choices (Craft::GuidedIdlePick). Fix
     // round 1 (M1): it rolls first and checks only the option that won; one it cannot take now means its guide.
     auto& weight = sPlayerbotAIConfig.RpgStatusProbWeight;
-    uint32 const guideW = weight[RPG_DO_QUEST], gatherW = weight[RPG_DO_GATHER], craftW = weight[RPG_CRAFT];
+    // Honest world, short of money: gathering and craft trips weigh ShortOfMoneyBoost times more (crafting is on here).
+    bool const craftLean = BotSupplies::CraftLean(botAI, bot);
+    uint32 const boost = sPlayerbotAIConfig.supplies.shortBoost;
+    uint32 const guideW = weight[RPG_DO_QUEST];
+    uint32 const gatherW = Supplies::ShortWeight(weight[RPG_DO_GATHER], craftLean, boost);
+    uint32 const craftW = Supplies::ShortWeight(weight[RPG_CRAFT], craftLean, boost);
     bool const craftOption = Craft::GuidedRollCraftOption(role, planned, canCraft);
     uint32 const total = Craft::GuidedIdleTotal(guideW, gatherW, craftW, true, craftOption);
     if (!total)
@@ -712,6 +717,18 @@ bool NewRpgWanderNpcAction::Execute(Event /*event*/)
                 {
                     if (sRandomPlayerbotMgr.IsRandomBot(bot))
                     {
+                        // Honest world, short of money: every grey item goes first (counted), whatever the bags.
+                        if (BotSupplies::ShortOfMoney(botAI, bot))
+                        {
+                            uint32 const greys = BotSupplies::GreyCount(botAI);
+                            if (greys)
+                            {
+                                botAI->DoSpecificAction("sell", Event("sell", "gray"));
+                                uint32 const left = BotSupplies::GreyCount(botAI);
+                                if (left < greys)
+                                    FixedPopulation::Count(EconomyCounter::GreysSoldShort, greys - left);
+                            }
+                        }
                         botAI->DoSpecificAction("sell", Event("sell", "vendor"));
                         botAI->DoSpecificAction("buy", Event("buy", "vendor"));
                     }

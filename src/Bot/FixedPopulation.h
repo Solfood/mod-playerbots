@@ -73,6 +73,9 @@ enum class EconomyCounter : uint8
     SuppliesTrips,        // errand trips that included the supplies errand
     RestsBeforePull,      // rests begun instead of a new fight (low health or mana)
     RestsGaveUp,          // rests that ran out of time (RestMaxSeconds)
+    ShortOfMoney,         // times a bot became short of money (entries; minus the next one: short now, roughly)
+    ShortOfMoneyEnded,    // times a short bot became comfortable again (or retreated, or the check went off)
+    GreysSoldShort,       // grey items a short bot sold at a vendor visit
     Count
 };
 

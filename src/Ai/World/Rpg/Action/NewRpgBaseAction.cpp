@@ -9,6 +9,7 @@
 #include "ChatHelper.h"
 #include "CraftMgr.h"
 #include "Creature.h"
+#include "BotSupplies.h"
 #include "FixedPopulation.h"
 #include "GameObject.h"
 #include "GatherNodeMgr.h"
@@ -1200,11 +1201,15 @@ bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> candidateSta
     // A routed bot's style shifts the weights (steady: the route x3; curious: route, wander, gather x2; easygoing:
     // rest x3, grind x2). Unrouted: x1, as before.
     Routes::Style const style = routed ? routes.StyleOf(bot) : Routes::Style::Steady;
-    auto weightOf = [this, routed, style](NewRpgStatus status) -> uint32
+    // Honest world, short of money with crafting on: gathering and craft trips weigh more. Otherwise x1.
+    bool const craftLean = BotSupplies::CraftLean(botAI, bot);
+    auto weightOf = [this, routed, style, craftLean](NewRpgStatus status) -> uint32
     {
         // FOLLOW_ROUTE takes DO_QUEST's place and weight (guildmaster spec §3 part 2).
         NewRpgStatus const weightKey = status == RPG_FOLLOW_ROUTE ? RPG_DO_QUEST : status;
         uint32 base = sPlayerbotAIConfig.RpgStatusProbWeight[weightKey];
+        if (status == RPG_DO_GATHER || status == RPG_CRAFT)
+            base = Supplies::ShortWeight(base, craftLean, sPlayerbotAIConfig.supplies.shortBoost);
         if (routed)
             base *= Routes::StyleMultiplier(style, PaceOf(status));
         return NewRpgInfo::FocusBoosts(botAI->rpgInfo.focus, status, routed) ? base * sPlayerbotAIConfig.rpgFocusMultiplier

@@ -6,7 +6,9 @@
 
 #include "BotSupplies.h"
 
+#include "CraftMgr.h"
 #include "Creature.h"
+#include "EarnedTraining.h"
 #include "FixedPopulation.h"
 #include "Item.h"
 #include "Map.h"
@@ -22,11 +24,13 @@
 #include "SuppliesRules.h"
 #include "Timer.h"
 #include "WorldSession.h"
+#include <algorithm>
 
 namespace
 {
 constexpr uint32 SPELL_CATEGORY_FOOD = 11;
 constexpr uint32 SPELL_CATEGORY_DRINK = 59;
+constexpr uint32 SHORT_CHECK_MS = 30 * IN_MILLISECONDS;
 
 // The item's use spell applies `aura` (food: SPELL_AURA_MOD_REGEN, drink: SPELL_AURA_MOD_POWER_REGEN).
 bool UseSpellApplies(ItemTemplate const* proto, AuraType aura)
@@ -206,4 +210,44 @@ bool BotSupplies::ShouldRest(PlayerbotAI* botAI, Player* bot)
     else if (step == Supplies::RestStep::GiveUp)
         FixedPopulation::Count(EconomyCounter::RestsGaveUp);
     return Supplies::Resting(step);
+}
+
+bool BotSupplies::ShortOfMoney(PlayerbotAI* botAI, Player* bot)
+{
+    if (!botAI)
+        return false;
+    NewRpgInfo& info = botAI->rpgInfo;
+    uint32 const now = getMSTime();
+    if (info.shortCheckedMs && getMSTimeDiff(info.shortCheckedMs, now) < SHORT_CHECK_MS)
+        return info.shortOfMoney;
+    info.shortCheckedMs = std::max<uint32>(1, now);
+    bool const isShort = On(botAI, bot) &&
+                         Supplies::ShortOfMoney(bot->GetMoney(), EarnedTraining::RepairReserve(bot), bot->GetLevel(),
+                                                UsesMana(bot), info.route.retreating, sPlayerbotAIConfig.supplies);
+    if (isShort != info.shortOfMoney)
+        FixedPopulation::Count(isShort ? EconomyCounter::ShortOfMoney : EconomyCounter::ShortOfMoneyEnded);
+    info.shortOfMoney = isShort;
+    return isShort;
+}
+
+bool BotSupplies::ShortCached(PlayerbotAI* botAI)
+{
+    return botAI && sPlayerbotAIConfig.fixedPopulation && botAI->rpgInfo.shortOfMoney;
+}
+
+bool BotSupplies::CraftLean(PlayerbotAI* botAI, Player* bot)
+{
+    return CraftMgr::instance().Crafting(bot) && ShortOfMoney(botAI, bot);
+}
+
+uint32 BotSupplies::GreyCount(PlayerbotAI* botAI)
+{
+    uint32 count = 0;
+    for (Item* item : botAI->GetInventoryItems())
+    {
+        ItemTemplate const* proto = item->GetTemplate();
+        if (proto && proto->Quality == ITEM_QUALITY_POOR && proto->SellPrice)
+            count += item->GetCount();
+    }
+    return count;
 }

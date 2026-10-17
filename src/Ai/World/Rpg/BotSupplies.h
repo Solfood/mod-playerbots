@@ -35,6 +35,15 @@ public:
     // Rest before a new fight: out of combat, nothing attacking it, low health or mana, the rest not run out. Keeps
     // the rest clock (rpgInfo.rest) and counts rests; cheap (no scans).
     static bool ShouldRest(PlayerbotAI* botAI, Player* bot);
+
+    // Short of money (Supplies::ShortOfMoney): worked out at most every 30 s and kept in rpgInfo; counts entries and
+    // exits. Map thread only (it reads AI values); ShortCached reads the kept answer anywhere.
+    static bool ShortOfMoney(PlayerbotAI* botAI, Player* bot);
+    static bool ShortCached(PlayerbotAI* botAI);
+    // Short and crafting on: lean toward gathering, craft trips and the auction house.
+    static bool CraftLean(PlayerbotAI* botAI, Player* bot);
+    // Grey (poor) items a vendor buys, counted by stack size. Walks the bags.
+    static uint32 GreyCount(PlayerbotAI* botAI);
 };
 
 #endif

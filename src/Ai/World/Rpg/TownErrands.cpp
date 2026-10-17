@@ -72,6 +72,12 @@ uint8 TownErrands::Needed(PlayerbotAI* botAI, Player* bot)
     if (BotSupplies::NeedTrip(botAI, bot))
         errands |= TOWN_ERRAND_SUPPLIES;
 
+    // Short of money: on any town visit (a trip for something else, or among the townsfolk) a vendor for its greys,
+    // whatever its bags. Never a trip for greys alone.
+    if (!(errands & TOWN_ERRAND_SELL) && (errands || botAI->rpgInfo.GetStatus() == RPG_WANDER_NPC) &&
+        BotSupplies::ShortOfMoney(botAI, bot) && BotSupplies::GreyCount(botAI))
+        errands |= TOWN_ERRAND_SELL;
+
     // Quest routes (spec §6, routed bots only: only they ever retreat). A retreating bot sells its junk toward the
     // weapon repair; a broken weapon it can pay for is repaired even while the rest of its gear is above
     // RepairBelowDurability (else the retreat would end and the weapon stay broken).

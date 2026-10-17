@@ -120,5 +120,59 @@ int main()
     wrap.startMs = 0xFFFFF000u;
     CHECK_TRUE(RestTick(wrap, true, 0x00001000u, 90) == RestStep::Continue);  // 8 s later
     CHECK_TRUE(RestTick(wrap, true, 0x00001000u + 90000u, 90) == RestStep::GiveUp);
+
+    // Short of money defaults.
+    CHECK_EQ(true, s.shortOfMoney);
+    CHECK_EQ(100u, s.shortStackPct);
+    CHECK_EQ(3u, s.shortBoost);
+    CHECK_EQ(200u, s.shortListPct);
+    CHECK_EQ(300u, s.shortNodeReachPct);
+
+    // The tier it buys from.
+    CHECK_EQ(1u, BestTier(1));
+    CHECK_EQ(1u, BestTier(4));
+    CHECK_EQ(5u, BestTier(5));
+    CHECK_EQ(5u, BestTier(14));
+    CHECK_EQ(15u, BestTier(15));
+    CHECK_EQ(75u, BestTier(80));
+
+    // A stack of 20: 4 packs; drink doubles it for a mana user.
+    CHECK_EQ(100u, static_cast<uint32_t>(StackCost(1, 20, false)));   // level 1: 4 x 25 c
+    CHECK_EQ(200u, static_cast<uint32_t>(StackCost(1, 20, true)));
+    CHECK_EQ(500u, static_cast<uint32_t>(StackCost(12, 20, false)));  // level 12: 4 x 125 c
+    CHECK_EQ(1000u, static_cast<uint32_t>(StackCost(12, 20, true)));
+    CHECK_EQ(4u * 25u, static_cast<uint32_t>(StackCost(1, 18, false)));  // rounded up to whole packs
+
+    // The line: repair reserve + the stack cost x ShortOfMoneyStackPct.
+    CHECK_EQ(1300u, static_cast<uint32_t>(ComfortLine(300, 12, true, s)));
+    CHECK_EQ(800u, static_cast<uint32_t>(ComfortLine(300, 12, false, s)));
+    Settings half = s;
+    half.shortStackPct = 50;
+    CHECK_EQ(800u, static_cast<uint32_t>(ComfortLine(300, 12, true, half)));  // 300 + 1000 x 50 %
+
+    // Below, at and above the line; mana vs no mana; level 1 with no repair bill.
+    CHECK_TRUE(ShortOfMoney(1299, 300, 12, true, false, s));
+    CHECK_TRUE(!ShortOfMoney(1300, 300, 12, true, false, s));  // at the line: comfortable
+    CHECK_TRUE(!ShortOfMoney(5000, 300, 12, true, false, s));
+    CHECK_TRUE(ShortOfMoney(900, 300, 12, true, false, s));    // a caster needs the drink too
+    CHECK_TRUE(!ShortOfMoney(900, 300, 12, false, false, s));  // a warrior does not
+    CHECK_TRUE(ShortOfMoney(0, 0, 1, false, false, s));        // level 1, no money: short
+    CHECK_TRUE(ShortOfMoney(99, 0, 1, false, false, s));
+    CHECK_TRUE(!ShortOfMoney(100, 0, 1, false, false, s));
+    CHECK_TRUE(!ShortOfMoney(0, 300, 12, true, true, s));      // retreating ("broke") wins: not short
+    Settings noShort = s;
+    noShort.shortOfMoney = false;
+    CHECK_TRUE(!ShortOfMoney(0, 300, 12, true, false, noShort));
+
+    // Effects: weights x3, listings 10 -> 20, node reach 15 -> 45 yards; never lower than usual.
+    CHECK_EQ(45u, ShortWeight(15, true, 3));
+    CHECK_EQ(15u, ShortWeight(15, false, 3));
+    CHECK_EQ(15u, ShortWeight(15, true, 0));
+    CHECK_EQ(20u, ListingCap(10, true, 200));
+    CHECK_EQ(10u, ListingCap(10, false, 200));
+    CHECK_EQ(10u, ListingCap(10, true, 50));
+    CHECK_TRUE(NodeReach(15.0f, true, 300) == 45.0f);
+    CHECK_TRUE(NodeReach(15.0f, false, 300) == 15.0f);
+    CHECK_TRUE(NodeReach(15.0f, true, 50) == 15.0f);
     return UnitFailures();
 }

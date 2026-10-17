@@ -28,6 +28,11 @@ struct Settings
     uint32_t untilHealth = 85;   // .RestUntilHealth: once resting, until this % health
     uint32_t untilMana = 80;     // .RestUntilMana: ... and this % mana
     uint32_t restSeconds = 90;   // .RestMaxSeconds: a rest ends after this long, whatever it reached
+    bool shortOfMoney = true;    // .ShortOfMoney: below the comfortable line it leans toward earning
+    uint32_t shortStackPct = 100;     // .ShortOfMoneyStackPct: the line holds this % of one supplies stack's cost
+    uint32_t shortBoost = 3;          // .ShortOfMoneyBoost: gathering and craft trips weigh this many times more
+    uint32_t shortListPct = 200;      // .ShortOfMoneyListPct: auction listings allowed, % of Crafting.MaxListings
+    uint32_t shortNodeReachPct = 300;  // .ShortOfMoneyNodeReachPct: gathering nodes it passes, % of LootDistance
 };
 
 // Old food still counts until the bot is this many levels above the item's required level (vendor tiers are 10 apart:
@@ -172,6 +177,58 @@ inline RestStep RestTick(RestState& state, bool needs, uint32_t nowMs, uint32_t 
 }
 
 inline bool Resting(RestStep step) { return step == RestStep::Start || step == RestStep::Continue; }
+
+// "Short of money" (honest world): money below a comfortable line, its repair reserve plus what a supplies stack of
+// its level costs. Not "broke" (a retreat, which wins): it still quests and fights, it only leans toward earning.
+
+// The vendor tier a bot of `botLevel` buys from: the highest of 1, 5, 15, ... 75 at or below its level.
+inline uint32_t BestTier(uint32_t botLevel)
+{
+    constexpr uint32_t TIERS[] = {75, 65, 55, 45, 35, 25, 15, 5};
+    for (uint32_t tier : TIERS)
+        if (botLevel >= tier)
+            return tier;
+    return 1;
+}
+
+// What `stack` food (and as much drink for a mana user) of its level costs at vendor prices (packs of 5).
+inline uint64_t StackCost(uint32_t botLevel, uint32_t stack, bool usesMana)
+{
+    uint64_t const packs = stack / 5 + (stack % 5 ? 1 : 0);
+    uint64_t const kind = packs * TierPackPrice(BestTier(botLevel));
+    return usesMana ? kind * 2 : kind;
+}
+
+inline uint64_t ComfortLine(uint64_t repairReserve, uint32_t botLevel, bool usesMana, Settings const& s)
+{
+    return repairReserve + StackCost(botLevel, s.stack, usesMana) * s.shortStackPct / 100;
+}
+
+inline bool ShortOfMoney(uint64_t money, uint64_t repairReserve, uint32_t botLevel, bool usesMana, bool retreating,
+                         Settings const& s)
+{
+    return s.shortOfMoney && !retreating && money < ComfortLine(repairReserve, botLevel, usesMana, s);
+}
+
+// A roll weight (gathering, craft trips) while short.
+inline uint32_t ShortWeight(uint32_t weight, bool isShort, uint32_t boost)
+{
+    return isShort && boost ? weight * boost : weight;
+}
+
+// Auction listings it may hold while short (never fewer than usual).
+inline uint32_t ListingCap(uint32_t maxListings, bool isShort, uint32_t listPct)
+{
+    uint32_t const raised = maxListings * listPct / 100;
+    return isShort && raised > maxListings ? raised : maxListings;
+}
+
+// How far it reaches for a gathering node it passes while short (never less than usual).
+inline float NodeReach(float lootDistance, bool isShort, uint32_t reachPct)
+{
+    float const raised = lootDistance * float(reachPct) / 100.0f;
+    return isShort && raised > lootDistance ? raised : lootDistance;
+}
 }  // namespace Supplies
 
 #endif
