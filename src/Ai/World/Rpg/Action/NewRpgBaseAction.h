@@ -19,6 +19,8 @@
 #include "RouteMgr.h"
 #include "TravelMgr.h"
 
+class PathGenerator;
+
 struct POIInfo
 {
     G3D::Vector2 pos;
@@ -36,6 +38,9 @@ public:
 protected:
     /* MOVEMENT RELATED */
     bool MoveFarTo(WorldPosition dest);
+    // Honest world: a path through a death loop's spot (BotDeaths) steps round it where a path allows; true if it
+    // moved that way. Neither the bot nor `dest` may be inside the spot (it walks out of it, or to it).
+    bool DetourAvoided(PathGenerator const& path, WorldPosition const& dest);
     bool MoveWorldObjectTo(ObjectGuid guid, float distance = INTERACTION_DISTANCE);
     bool MoveRandomNear(float moveStep = 50.0f, MovementPriority priority = MovementPriority::MOVEMENT_NORMAL, WorldObject* center = nullptr);
     bool ForceToWait(uint32 duration, MovementPriority priority = MovementPriority::MOVEMENT_NORMAL);

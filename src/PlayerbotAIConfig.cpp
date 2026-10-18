@@ -707,6 +707,18 @@ bool PlayerbotAIConfig::Initialize()
     supplies.shortListPct = sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.ShortOfMoneyListPct", 200);
     supplies.shortNodeReachPct =
         sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.ShortOfMoneyNodeReachPct", 300);
+    deaths.loopBreaker = sConfigMgr->GetOption<bool>("AiPlayerbot.FixedPopulation.DeathLoopBreaker", true);
+    deaths.loopDeaths =
+        std::max<uint32>(2, sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.DeathLoopDeaths", 2));
+    deaths.loopSeconds = sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.DeathLoopSeconds", 900);
+    deaths.loopYards = sConfigMgr->GetOption<float>("AiPlayerbot.FixedPopulation.DeathLoopYards", 100.0f);
+    deaths.avoidMinutes = sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.AvoidSpotMinutes", 30);
+    deaths.avoidYards = sConfigMgr->GetOption<float>("AiPlayerbot.FixedPopulation.AvoidSpotYards", 100.0f);
+    deaths.avoidDetour = sConfigMgr->GetOption<bool>("AiPlayerbot.FixedPopulation.AvoidSpotDetour", true);
+    deaths.fullRestPct =
+        std::min<uint32>(100, sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.FullRestPct", 95));
+    deaths.fullRestSeconds = sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.FullRestMaxSeconds", 240);
+    deaths.deathLog = sConfigMgr->GetOption<bool>("AiPlayerbot.FixedPopulation.DeathLog", true);
     questRoutes.enabled = sConfigMgr->GetOption<bool>("AiPlayerbot.QuestRoutes", false);
     questRoutes.hubSoftCap = sConfigMgr->GetOption<uint32>("AiPlayerbot.QuestRoutes.HubSoftCap", 15);
     questRoutes.safeFightUntilLevel = sConfigMgr->GetOption<uint32>("AiPlayerbot.QuestRoutes.SafeFightUntilLevel", 10);

@@ -8,6 +8,7 @@
 
 #include <cmath>
 
+#include "BotDeaths.h"
 #include "DBCStores.h"
 #include "FixedPopulation.h"
 #include "GameObject.h"
@@ -133,12 +134,23 @@ bool NewRpgFollowGuideAction::WorkQuest(GuideMgr::Work const& w, Guides::Step co
     // A TURNIN whose quest is not complete: work the quest's objectives first (decision 13).
     bool const finishFirst = step.kind == Guides::StepKind::TurnIn && bot->GetQuestStatus(step.quest) != QUEST_STATUS_COMPLETE;
     std::vector<WorldPosition> const& points = finishFirst ? GuideMgr::instance().QuestSpots(step.quest) : in.points;
-    WorldPosition const where = GuideMgr::Ground(bot, GuideMgr::Nearest(bot, points));
-    if (where == WorldPosition() || where.GetMapId() != bot->GetMapId())
-        return GiveUp(w);
     int32 const job = step.kind == Guides::StepKind::Accept                 ? Routes::JOB_GIVER
                       : step.kind == Guides::StepKind::TurnIn && !finishFirst ? Routes::JOB_ENDER
                                                                             : static_cast<int32>(step.objective);
+    // Honest world: objective spots at a death loop's spot are left for later (BotDeaths); none left: other work now.
+    std::vector<WorldPosition> open;
+    bool const avoiding = job >= 0 && BotDeaths::Avoiding(botAI);
+    if (avoiding)
+    {
+        for (WorldPosition const& p : points)
+            if (!BotDeaths::Avoids(botAI, p))
+                open.push_back(p);
+        if (open.empty() && !points.empty())
+            return LeaveForLater();
+    }
+    WorldPosition const where = GuideMgr::Ground(bot, GuideMgr::Nearest(bot, avoiding ? open : points));
+    if (where == WorldPosition() || where.GetMapId() != bot->GetMapId())
+        return GiveUp(w);
     float const distance = bot->GetExactDist2d(where.GetPositionX(), where.GetPositionY());
     if (WatchQuest(w, step.quest, job, distance, elapsed))
         return true;
@@ -198,6 +210,19 @@ bool NewRpgFollowGuideAction::WalkTo(GuideMgr::Work const& w, WorldPosition cons
     if (bot->IsAlive() && Routes::HubWalkTick(botAI->rpgInfo.guide.step.walk, w.key, distance, elapsed))
         return GiveUp(w);
     return MoveFarTo(where) || MoveRandomNear(NUDGE_YARDS);
+}
+
+bool NewRpgFollowGuideAction::LeaveForLater()
+{
+    // As a full step does (Pick::Crowded): gather, grind near or wander for CrowdWaitMinutes, then look again.
+    NewRpgInfo& info = botAI->rpgInfo;
+    GuideMgr::instance().Unseat(bot->GetGUID().GetCounter());
+    if (!Guides::CrowdWaiting(info.guide.crowdedAtMs, GetMSTimeDiffToNow(info.guide.crowdedAtMs),
+                              sPlayerbotAIConfig.guideBots.crowdWaitMinutes * MINUTE * IN_MILLISECONDS))
+        info.guide.crowdedAtMs = getMSTime();
+    FixedPopulation::Count(EconomyCounter::SpotAvoids);
+    info.ChangeToIdle();
+    return true;
 }
 
 bool NewRpgFollowGuideAction::GiveUp(GuideMgr::Work const& w)

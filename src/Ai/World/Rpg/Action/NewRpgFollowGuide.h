@@ -47,6 +47,7 @@ private:
     bool WatchQuest(GuideMgr::Work const& w, uint32 quest, int32 job, float distance, uint32 elapsed);
     bool WalkTo(GuideMgr::Work const& w, WorldPosition const& where, uint32 elapsed);
     bool GiveUp(GuideMgr::Work const& w);  // stall: skip the step for the session, back to IDLE
+    bool LeaveForLater();  // its objective spots are a death loop's (BotDeaths): other work, then back to it
     // a flight it knows, else a short walk, else its guide pauses (the step is Away)
     bool Fly(GuideMgr::Work const& w, Guides::Step const& step, GuideStepInfo const& in, uint32 elapsed);
     bool Hearth(GuideMgr::Work const& w, Guides::Step const& step, GuideStepInfo const& in, uint32 elapsed);

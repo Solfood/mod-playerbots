@@ -6,6 +6,7 @@
 
 #include "PlayerbotAI.h"
 #include "AiFactory.h"
+#include "BotDeaths.h"
 #include "BudgetValues.h"
 #include "ChannelMgr.h"
 #include "CharacterPackets.h"
@@ -932,6 +933,7 @@ void PlayerbotAI::Reset(bool full)
         fresh.route = std::move(rpgInfo.route);  // quest routes: hub, style, head_to (and later the survival state)
         fresh.guide = std::move(rpgInfo.guide);  // guides: its place, pause and session skips
         fresh.craft = std::move(rpgInfo.craft);  // World of Craft: its cooldown, listings and held items
+        fresh.death = std::move(rpgInfo.death);  // honest world deaths: its loops, avoided spots, full rest
         rpgInfo = std::move(fresh);
     }
 
@@ -1496,6 +1498,7 @@ void PlayerbotAI::ChangeEngine(BotState type)
 
 void PlayerbotAI::ChangeEngineOnCombat()
 {
+    BotDeaths::OnCombatStart(this, bot);  // honest world death log: the fight's start (before the rest is cleared)
     rpgInfo.rest = Supplies::RestState{};  // a fight ends a rest and clears a rest that ran out of time
 
     if (HasStrategy("wait for attack", BOT_STATE_COMBAT))
@@ -1553,10 +1556,14 @@ void PlayerbotAI::DoNextAction(bool min)
     if (currentEngine == engines[BOT_STATE_DEAD] && isBotAlive && !bot->IsRooted())
     {
         bot->SendMovementFlagUpdate();
+        BotDeaths::OnRevived(this);
 
         ChangeEngine(BOT_STATE_NON_COMBAT);
         return;
     }
+
+    if (currentEngine == engines[BOT_STATE_COMBAT])
+        BotDeaths::TrackAttackers(this, bot);  // honest world death log (O(1))
 
     // Clear targets if in combat but sticking with old data
     if (currentEngine == engines[BOT_STATE_NON_COMBAT] && bot->IsInCombat())

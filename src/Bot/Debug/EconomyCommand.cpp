@@ -111,7 +111,7 @@ void Show(ChatHandler* handler, Player* bot)
     handler->PSendSysMessage(
         "ECON name={} guid={} level={} money={} durability={} bags={} dead={} ghost={} sick={} riding={} prof={} "
         "deaths={} rpg={} spells={} randomize={} teleport={} revive={} mounts={} mail={} tools={} map={} zone={} "
-        "held={} focus={} stucktp={} food={} drink={} resting={} short={}",
+        "held={} focus={} stucktp={} food={} drink={} resting={} short={} avoid={} restfull={} next_revive={}",
         bot->GetName(), botId, bot->GetLevel(), bot->GetMoney(), context->GetValue<uint8>("durability")->Get(),
         context->GetValue<uint8>("bag space")->Get(), bot->isDead() ? 1 : 0,
         bot->HasPlayerFlag(PLAYER_FLAGS_GHOST) ? 1 : 0, bot->HasAura(SPELL_RESURRECTION_SICKNESS) ? 1 : 0, riding,
@@ -123,7 +123,8 @@ void Show(ChatHandler* handler, Player* bot)
             bot->GetItemCount(EarnedTraining::ITEM_SKINNING_KNIFE, true),
         bot->GetMapId(), bot->GetZoneId(), sRandomPlayerbotMgr.IsHeld(botId) ? 1 : 0, botAI->rpgInfo.focus,
         botAI->rpgInfo.stuckTeleports, food, drink, botAI->rpgInfo.rest.startMs ? 1 : 0,
-        botAI->rpgInfo.shortOfMoney ? 1 : 0);
+        botAI->rpgInfo.shortOfMoney ? 1 : 0, botAI->rpgInfo.death.avoid.size(), botAI->rpgInfo.death.restFull ? 1 : 0,
+        Deaths::ReviveName(botAI->rpgInfo.death.revive));
 }
 
 void Active(ChatHandler* handler)

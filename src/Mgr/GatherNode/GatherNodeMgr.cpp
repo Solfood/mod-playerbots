@@ -8,6 +8,7 @@
 
 #include <algorithm>
 
+#include "BotDeaths.h"
 #include "DBCStores.h"
 #include "DatabaseEnv.h"
 #include "GameObject.h"
@@ -169,11 +170,15 @@ GatherNodeSpawn const* GatherNodeMgr::GetNextNode(Player* bot, std::unordered_se
 
     Map* map = bot->GetMap();
     WorldPosition botPos(bot);
+    bool const avoiding = BotDeaths::Avoiding(botAI);
 
     std::vector<std::pair<float, GatherNodeSpawn const*>> candidates;
     for (GatherNodeSpawn const& node : *nodes)
     {
         if (visited.contains(node.spawnId) || !IsUsable(botAI, bot, node))
+            continue;
+
+        if (avoiding && BotDeaths::Avoids(botAI, node.pos))  // honest world: a death loop's spot
             continue;
 
         // Don't route to spawn points we can already see to be empty.
@@ -235,6 +240,7 @@ GatherNodeSpawn const* GatherNodeMgr::GetNearestLiveNode(Player* bot,
 
     Map* map = bot->GetMap();
     WorldPosition botPos(bot);
+    bool const avoiding = BotDeaths::Avoiding(botAI);
     GatherNodeSpawn const* nearest = nullptr;
     float nearestDistSq = radius * radius;
     // All zone buckets of the map: this query is deliberately not
@@ -253,6 +259,9 @@ GatherNodeSpawn const* GatherNodeMgr::GetNearestLiveNode(Player* bot,
                 continue;
 
             if (visited.contains(node.spawnId) || !IsUsable(botAI, bot, node))
+                continue;
+
+            if (avoiding && BotDeaths::Avoids(botAI, node.pos))  // honest world: a death loop's spot
                 continue;
 
             if (!map->IsGridLoaded(node.pos.GetPositionX(), node.pos.GetPositionY()))

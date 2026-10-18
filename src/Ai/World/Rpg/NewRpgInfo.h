@@ -14,6 +14,7 @@
 #include <unordered_set>
 
 #include "CraftPlanRules.h"
+#include "DeathRules.h"
 #include "Define.h"
 #include "ObjectGuid.h"
 #include "ObjectMgr.h"
@@ -230,6 +231,28 @@ struct NewRpgInfo
     bool shortOfMoney{false};     // honest world: below the comfortable money line (BotSupplies::ShortOfMoney)
     uint32 shortCheckedMs{0};     // when that was last worked out (at most every 30 s)
     WorldPosition abandonedTrip;  // where the last town trip given up was going (the next repair trip avoids it)
+    // Honest world deaths (BotDeaths, Deaths:: rules): kept across an AI reset, lost at logout.
+    struct DeathState
+    {
+        std::deque<Deaths::Mark> marks;   // its last deaths (Deaths::MAX_MARKS)
+        std::vector<Deaths::Spot> avoid;  // spots it keeps away from (a death loop's)
+        Deaths::Revive revive{Deaths::Revive::Corpse};  // how this death revives (set when it dies)
+        bool restFull{false};    // revived after a loop: rest to FullRestPct before the next fight
+        uint32 revivedAt{0};     // unix seconds of its last revive (0 = none this session)
+        bool lastSpirit{false};  // that revive was at a spirit healer
+        // The DEATHLOG facts of the fight it is in (or was last in): taken when the fight started.
+        uint32 pullAt{0};        // unix seconds (0 = no fight yet)
+        uint8 pullHealth{0};
+        uint8 pullMana{0};
+        bool pullSick{false};
+        bool pullRestGaveUp{false};
+        uint32 maxAttackers{0};  // most units attacking it at once during that fight
+        // The creature that killed it (OnPlayerKilledByCreature runs before OnPlayerJustDied).
+        uint32 killerEntry{0};
+        uint8 killerLevel{0};
+        uint8 killerRank{0};
+    };
+    DeathState death;
 
     // Guildmaster bridge focus (0 none, 1 questing, 2 grinding, 3 pvp, 4 gathering, 5 resting, 6 crafting; the bridge's
     // Focus enum uses the same numbers). Multiplies the weights of matching statuses in RandomChangeStatus.

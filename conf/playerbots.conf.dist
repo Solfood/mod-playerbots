@@ -870,6 +870,29 @@ AiPlayerbot.FixedPopulation.ShortOfMoneyBoost = 3
 AiPlayerbot.FixedPopulation.ShortOfMoneyListPct = 200
 AiPlayerbot.FixedPopulation.ShortOfMoneyNodeReachPct = 300
 
+# Honest world death loops (only with FixedPopulation = 1; random bots with no real master). A bot that dies a
+# DeathLoopDeaths-th time within DeathLoopSeconds and DeathLoopYards of earlier deaths is in a death loop: it revives
+# at the spirit healer instead of at its body (resurrection sickness and the durability loss as normal; after 10
+# minutes as a ghost it goes back to its body), rests to FullRestPct percent health (and mana) for up to
+# FullRestMaxSeconds before its next fight, and keeps away from the spot (AvoidSpotYards round it) for
+# AvoidSpotMinutes: no grind targets, gathering nodes, grind spots or quest objective spots there; a guide objective
+# there waits (it gathers, grinds or wanders as for a full step, GuideBots.CrowdWaitMinutes, then looks again); with
+# AvoidSpotDetour a walk whose path crosses the spot steps round it when a path allows. It always fights back.
+# DeathLog: one "DEATHLOG" line in Playerbots.log per population bot death (health and mana when the fight started,
+# the most attackers at once, the killer's entry, level and rank, activity, guide step, durability, money, pet,
+# deaths in the last 15 minutes, loop, how it will revive).
+# Defaults: 1, 2, 900, 100, 30, 100, 1, 95, 240, 1
+AiPlayerbot.FixedPopulation.DeathLoopBreaker = 1
+AiPlayerbot.FixedPopulation.DeathLoopDeaths = 2
+AiPlayerbot.FixedPopulation.DeathLoopSeconds = 900
+AiPlayerbot.FixedPopulation.DeathLoopYards = 100
+AiPlayerbot.FixedPopulation.AvoidSpotMinutes = 30
+AiPlayerbot.FixedPopulation.AvoidSpotYards = 100
+AiPlayerbot.FixedPopulation.AvoidSpotDetour = 1
+AiPlayerbot.FixedPopulation.FullRestPct = 95
+AiPlayerbot.FixedPopulation.FullRestMaxSeconds = 240
+AiPlayerbot.FixedPopulation.DeathLog = 1
+
 # Honest world professions (only with FixedPopulation = 1). Each bot picks two primary professions from a
 # gathering-heavy, class-weighted table at one level between ProfessionMinLevel and ProfessionMaxLevel
 # (spread by bot), then learns them at its own cost. A pick preset in the bot's firstSkill/secondSkill

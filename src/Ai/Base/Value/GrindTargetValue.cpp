@@ -5,6 +5,7 @@
  */
 
 #include "GrindTargetValue.h"
+#include "BotDeaths.h"
 #include "CraftMgr.h"
 #include "NewRpgInfo.h"
 #include "Playerbots.h"
@@ -80,6 +81,8 @@ Unit* GrindTargetValue::FindTargetForGrinding(uint32 assistCount)
         Craft::SkinHuntFilters(botAI->rpgInfo.craft.skinHuntUntilMs, getMSTime(),
                                rpgStatus == RPG_GO_GRIND || rpgStatus == RPG_WANDER_RANDOM) &&
         CraftMgr::instance().Crafting(bot);
+    // Honest world: no new fight at a death loop's spot (BotDeaths; attackers were returned above).
+    bool const avoiding = BotDeaths::Avoiding(botAI);
 
     for (ObjectGuid const guid : targets)
     {
@@ -88,6 +91,9 @@ Unit* GrindTargetValue::FindTargetForGrinding(uint32 assistCount)
             continue;
 
         if (!unit->IsInWorld() || unit->IsDuringRemoveFromWorld())
+            continue;
+
+        if (avoiding && BotDeaths::Avoids(botAI, unit))
             continue;
 
         if (unit->ToCreature() && !unit->ToCreature()->GetCreatureTemplate()->lootid &&

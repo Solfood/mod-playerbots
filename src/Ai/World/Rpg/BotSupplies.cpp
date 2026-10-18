@@ -6,6 +6,7 @@
 
 #include "BotSupplies.h"
 
+#include "BotDeaths.h"
 #include "CraftMgr.h"
 #include "Creature.h"
 #include "EarnedTraining.h"
@@ -193,22 +194,29 @@ void BotSupplies::Shop(PlayerbotAI* botAI, Player* bot, Creature* vendor)
 bool BotSupplies::ShouldRest(PlayerbotAI* botAI, Player* bot)
 {
     Supplies::Settings const& s = sPlayerbotAIConfig.supplies;
-    if (!s.rest || !On(botAI, bot) || !bot->IsAlive() || bot->IsInCombat())
+    // After a death loop's revive (BotDeaths): to FullRestPct, for up to FullRestMaxSeconds.
+    bool const full = BotDeaths::RestToFull(botAI);
+    if ((!s.rest && !full) || !On(botAI, bot) || !bot->IsAlive() || bot->IsInCombat())
         return false;
     Supplies::RestState& state = botAI->rpgInfo.rest;
     bool const usesMana = UsesMana(bot);
     uint32 const health = static_cast<uint32>(bot->GetHealthPct());
     uint32 const mana = usesMana ? static_cast<uint32>(bot->GetPowerPct(POWER_MANA)) : 100;
-    bool needs = Supplies::NeedsRest(health, mana, usesMana, state.startMs != 0, s);
+    bool const fullNeeds =
+        full && Deaths::FullRestNeeds(health, mana, usesMana, sPlayerbotAIConfig.deaths.fullRestPct);
+    bool needs = full ? fullNeeds : Supplies::NeedsRest(health, mana, usesMana, state.startMs != 0, s);
     // Never in a group, a dungeon or a battleground (the group's play decides), nor while something attacks it.
     if (needs && (bot->GetGroup() || bot->InBattleground() || bot->GetMap()->IsDungeon() ||
                   !botAI->GetAiObjectContext()->GetValue<GuidVector>("attackers")->Get().empty()))
         needs = false;
-    Supplies::RestStep const step = Supplies::RestTick(state, needs, getMSTime(), s.restSeconds);
+    Supplies::RestStep const step =
+        Supplies::RestTick(state, needs, getMSTime(), full ? sPlayerbotAIConfig.deaths.fullRestSeconds : s.restSeconds);
     if (step == Supplies::RestStep::Start)
         FixedPopulation::Count(EconomyCounter::RestsBeforePull);
     else if (step == Supplies::RestStep::GiveUp)
         FixedPopulation::Count(EconomyCounter::RestsGaveUp);
+    if (full && (!fullNeeds || step == Supplies::RestStep::GiveUp))
+        botAI->rpgInfo.death.restFull = false;  // rested to full, or ran out of time: back to the normal rest
     return Supplies::Resting(step);
 }
 

@@ -7,6 +7,7 @@
 #include "Playerbots.h"
 #include "BattleGroundTactics.h"
 #include "BattlefieldScript.h"
+#include "BotDeaths.h"
 #include "Channel.h"
 #include "CheckMountStateAction.h"
 #include "Config.h"
@@ -150,6 +151,7 @@ public:
         PLAYERHOOK_ON_GIVE_EXP,
         PLAYERHOOK_ON_BEFORE_TELEPORT,
         PLAYERHOOK_ON_PLAYER_JUST_DIED,
+        PLAYERHOOK_ON_PLAYER_KILLED_BY_CREATURE,
         PLAYERHOOK_ON_MAP_CHANGED
     }) {}
 
@@ -216,6 +218,13 @@ public:
             FixedPopulation::Count(EconomyCounter::BotDeaths);
         if (SurvivalRulesOn(player))  // routed or guided (Plan 5c)
             Routes::NoteDeath(botAI->rpgInfo.route.deaths, static_cast<uint32>(std::time(nullptr)));
+        BotDeaths::OnJustDied(player);  // honest world: the death log and the death-loop breaker
+    }
+
+    // Runs before OnPlayerJustDied (Unit::Kill; the death itself is handled on the bot's next update).
+    void OnPlayerKilledByCreature(Creature* killer, Player* killed) override
+    {
+        BotDeaths::OnKilledByCreature(killed, killer);
     }
 
     void OnPlayerCreatureKillCredit(Player* player, Creature* killed) override

@@ -7,6 +7,7 @@
 #include "NewRpgAction.h"
 #include "AreaDefines.h"
 #include "AuctionOps.h"
+#include "BotDeaths.h"
 #include "BotSupplies.h"
 #include "BroadcastHelper.h"
 #include "ChatHelper.h"
@@ -46,6 +47,7 @@
 #include "TripRules.h"
 #include "WaypointMovementGenerator.h"
 #include "G3D/Vector2.h"
+#include <algorithm>
 #include <cmath>
 #include <cstdlib>
 
@@ -831,6 +833,13 @@ bool NewRpgDoQuestAction::Execute(Event /*event*/)
 bool NewRpgDoQuestAction::DoIncompleteQuest(NewRpgInfo::DoQuest& data)
 {
     uint32 questId = data.questId;
+    // Honest world: its objective spot is a death loop's spot: other work for now, the quest stays in its log.
+    if (data.pos != WorldPosition() && BotDeaths::Avoids(botAI, data.pos))
+    {
+        FixedPopulation::Count(EconomyCounter::SpotAvoids);
+        botAI->rpgInfo.ChangeToIdle();
+        return true;
+    }
     if (data.pos != WorldPosition())
     {
         /// @TODO: extract to a new function
@@ -866,6 +875,19 @@ bool NewRpgDoQuestAction::DoIncompleteQuest(NewRpgInfo::DoQuest& data)
             // can't find a poi pos to go, stop doing quest for now
             botAI->rpgInfo.ChangeToIdle();
             return true;
+        }
+        if (BotDeaths::Avoiding(botAI))
+        {
+            poiInfo.erase(std::remove_if(poiInfo.begin(), poiInfo.end(),
+                                         [this](POIInfo const& poi)
+                                         { return BotDeaths::Avoids(botAI, bot->GetMapId(), poi.pos.x, poi.pos.y); }),
+                          poiInfo.end());
+            if (poiInfo.empty())
+            {
+                FixedPopulation::Count(EconomyCounter::SpotAvoids);
+                botAI->rpgInfo.ChangeToIdle();
+                return true;
+            }
         }
         uint32 rndIdx = urand(0, poiInfo.size() - 1);
         G3D::Vector2 nearestPoi = poiInfo[rndIdx].pos;

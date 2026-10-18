@@ -11,6 +11,7 @@
 #include "RouteSettings.h"
 #include "GuideSettings.h"
 #include "CraftSettings.h"
+#include "DeathRules.h"
 #include "SuppliesRules.h"
 #include "SharedDefines.h"
 #include <algorithm>
@@ -378,6 +379,7 @@ public:
     uint32 fixedPopulationSafeBelow;
     uint32 fixedPopulationTownTripTimeout;
     Supplies::Settings supplies;  // AiPlayerbot.FixedPopulation.Supplies* and .Rest* (honest world food and rest)
+    Deaths::Settings deaths;      // AiPlayerbot.FixedPopulation.DeathLoop*, .AvoidSpot*, .FullRest*, .DeathLog
     Routes::Settings questRoutes;  // guildmaster quest routes (AiPlayerbot.QuestRoutes.*), off by default
     Guides::Settings guideBots;  // AiPlayerbot.GuideBots.* (guildmaster Plan 5c)
     Craft::Settings crafting;    // AiPlayerbot.Crafting.* (guildmaster World of Craft part 1, Plan 6a)

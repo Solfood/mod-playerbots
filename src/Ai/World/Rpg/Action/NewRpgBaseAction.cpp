@@ -5,6 +5,7 @@
  */
 
 #include "NewRpgBaseAction.h"
+#include "BotDeaths.h"
 #include "BroadcastHelper.h"
 #include "ChatHelper.h"
 #include "CraftMgr.h"
@@ -175,6 +176,8 @@ bool NewRpgBaseAction::MoveFarTo(WorldPosition dest)
             float endDistToDest = dest.GetExactDist(endPos.x, endPos.y, endPos.z);
             if (endDistToDest + 5.0f < disToDest)
             {
+                if (DetourAvoided(path, dest))
+                    return true;
                 return MoveTo(bot->GetMapId(), endPos.x, endPos.y, endPos.z, false, false, false, true);
             }
         }
@@ -220,6 +223,42 @@ bool NewRpgBaseAction::MoveFarTo(WorldPosition dest)
         return MoveTo(bot->GetMapId(), rx, ry, rz, false, false, false, true);
     }
     return false;
+}
+
+bool NewRpgBaseAction::DetourAvoided(PathGenerator const& path, WorldPosition const& dest)
+{
+    constexpr size_t POINT_STEP = 4;          // path points are a few yards apart: every 4th is close enough
+    constexpr float DETOUR_MARGIN_YARDS = 30.0f;  // the detour passes this far outside the spot
+    if (!sPlayerbotAIConfig.deaths.avoidDetour || !BotDeaths::Avoiding(botAI))
+        return false;
+    uint32 const mapId = bot->GetMapId();
+    float centreX = 0.0f, centreY = 0.0f;
+    if (BotDeaths::Avoids(botAI, mapId, bot->GetPositionX(), bot->GetPositionY()) || BotDeaths::Avoids(botAI, dest))
+        return false;
+    Movement::PointsArray const& points = path.GetPath();
+    bool hit = false;
+    for (size_t i = 0; i < points.size() && !hit; i += POINT_STEP)
+        hit = BotDeaths::AvoidedCentre(botAI, mapId, points[i].x, points[i].y, centreX, centreY);
+    if (!hit && !points.empty())
+        hit = BotDeaths::AvoidedCentre(botAI, mapId, points.back().x, points.back().y, centreX, centreY);
+    if (!hit)
+        return false;
+    float x = 0.0f, y = 0.0f;
+    Deaths::DetourPoint(bot->GetPositionX(), bot->GetPositionY(), dest.GetPositionX(), dest.GetPositionY(), centreX,
+                        centreY, sPlayerbotAIConfig.deaths.avoidYards, DETOUR_MARGIN_YARDS, x, y);
+    float const z = bot->GetMap()->GetHeight(x, y, MAX_HEIGHT);
+    if (z <= INVALID_HEIGHT)
+        return false;
+    PathGenerator detour(bot);
+    detour.CalculatePath(x, y, z);
+    uint32 const typeOk = PATHFIND_NORMAL | PATHFIND_INCOMPLETE | PATHFIND_FARFROMPOLY;
+    if (detour.GetPathType() & ~typeOk)
+        return false;  // no way round: it walks on as before
+    G3D::Vector3 const& end = detour.GetActualEndPosition();
+    if (BotDeaths::Avoids(botAI, mapId, end.x, end.y))
+        return false;
+    FixedPopulation::Count(EconomyCounter::SpotAvoids);
+    return MoveTo(mapId, end.x, end.y, end.z, false, false, false, true);
 }
 
 bool NewRpgBaseAction::MoveWorldObjectTo(ObjectGuid guid, float distance)
@@ -1011,6 +1050,8 @@ WorldPosition NewRpgBaseAction::SelectRandomGrindPos(Player* bot)
         loRange /= 3;
     }
     std::vector<WorldLocation> lo_prepared_locs, hi_prepared_locs;
+    PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
+    bool const avoiding = BotDeaths::Avoiding(botAI);  // honest world: not a death loop's spot
 
     bool inCity = false;
     if (AreaTableEntry const* zone = sAreaTableStore.LookupEntry(bot->GetZoneId()))
@@ -1025,6 +1066,9 @@ WorldPosition NewRpgBaseAction::SelectRandomGrindPos(Player* bot)
             continue;
 
         if (bot->GetExactDist(loc) > 2500.0f)
+            continue;
+
+        if (avoiding && BotDeaths::Avoids(botAI, loc.GetMapId(), loc.GetPositionX(), loc.GetPositionY()))
             continue;
 
         if (!inCity && bot->GetMap()->GetZoneId(bot->GetPhaseMask(), loc.GetPositionX(), loc.GetPositionY(),

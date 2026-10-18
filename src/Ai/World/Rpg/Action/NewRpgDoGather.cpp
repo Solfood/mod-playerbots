@@ -6,6 +6,8 @@
 
 #include "NewRpgDoGather.h"
 
+#include "BotDeaths.h"
+#include "FixedPopulation.h"
 #include "GameObject.h"
 #include "GatherNodeMgr.h"
 #include "GuideMgr.h"
@@ -103,6 +105,14 @@ bool NewRpgDoGatherAction::Execute(Event /*event*/)
     if (runPeriodicChecks && data.nodeSpawnId &&
         GatherNodeMgr::IsVerifiablyDown(bot->GetMap(), data.nodePos, data.nodeSpawnId))
     {
+        AbandonNode(data);
+        return true;
+    }
+
+    // Honest world: a node at a death loop's spot is given up (not marked visited: the spot opens again later).
+    if (runPeriodicChecks && data.nodeSpawnId && BotDeaths::Avoids(botAI, data.nodePos))
+    {
+        FixedPopulation::Count(EconomyCounter::SpotAvoids);
         AbandonNode(data);
         return true;
     }

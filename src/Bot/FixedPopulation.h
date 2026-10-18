@@ -76,6 +76,9 @@ enum class EconomyCounter : uint8
     ShortOfMoney,         // times a bot became short of money (entries; minus the next one: short now, roughly)
     ShortOfMoneyEnded,    // times a short bot became comfortable again (or retreated, or the check went off)
     GreysSoldShort,       // grey items a short bot sold at a vendor visit
+    LoopBreaks,           // deaths that closed a death loop (a spirit healer revive, the spot avoided, a full rest)
+    SpiritRevives,        // revives at a spirit healer chosen by the death rules (a loop, or badly worn gear)
+    SpotAvoids,           // quest, guide or walk targets turned away from an avoided spot (grind targets not counted)
     Count
 };
 

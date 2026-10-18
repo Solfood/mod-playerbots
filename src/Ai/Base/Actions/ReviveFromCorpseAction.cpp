@@ -5,6 +5,7 @@
  */
 
 #include "ReviveFromCorpseAction.h"
+#include "BotDeaths.h"
 #include "CellImpl.h"
 #include "Corpse.h"
 #include "Event.h"
@@ -70,6 +71,10 @@ bool ReviveFromCorpseAction::Execute(Event event)
             return botAI->DoSpecificAction("spirit healer");
     }
 
+    // Honest world: a death loop's revive is at the spirit healer, not at the body (BotDeaths).
+    if (BotDeaths::SpiritRevive(botAI, time(nullptr) - corpse->GetGhostTime()))
+        return botAI->DoSpecificAction("spirit healer", Event(), true);
+
     LOG_DEBUG("playerbots", "Bot {} {}:{} <{}> revives at body", bot->GetGUID().ToString().c_str(),
               bot->GetTeamId() == TEAM_ALLIANCE ? "A" : "H", bot->GetLevel(), bot->GetName().c_str());
 
@@ -99,6 +104,10 @@ bool FindCorpseAction::Execute(Event /*event*/)
     //         ServerFacade::instance().IsDistanceLessThan(AI_VALUE2(float, "distance", "group leader"),
     //         sPlayerbotAIConfig.farDistance)) return false;
     // }
+
+    // Honest world: a death loop's revive is at the spirit healer, not at the body (BotDeaths).
+    if (BotDeaths::SpiritRevive(botAI, time(nullptr) - corpse->GetGhostTime()))
+        return botAI->DoSpecificAction("spirit healer", Event(), true);
 
     uint32 dCount = AI_VALUE(uint32, "death count");
 
@@ -544,6 +553,7 @@ bool SpiritHealerAction::ExecuteHonest(Corpse* corpse)
               bot->GetTeamId() == TEAM_ALLIANCE ? "A" : "H", bot->GetLevel(), bot->GetName());
     context->GetValue<uint32>("death count")->Set(0);
     FixedPopulation::Count(EconomyCounter::SpiritHealerResurrections);
+    BotDeaths::OnSpiritRevive(botAI, bot);  // a death loop's revive: rest to full, choose again away from the spot
     avoidGraves.clear();
     honestGrave = 0;
     ResetHonestAttempts();
