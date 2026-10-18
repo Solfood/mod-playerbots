@@ -223,6 +223,22 @@ bool BotDeaths::BadlyWorn(PlayerbotAI* botAI, Player* bot)
     return TownErrands::PlaySafe(botAI, bot) && context->GetValue<uint32>("repair cost")->Get() > 0;
 }
 
+bool BotDeaths::Guarding(PlayerbotAI* botAI, Player* bot)
+{
+    return sPlayerbotAIConfig.deaths.zoneGuard && On(botAI, bot);
+}
+
+bool BotDeaths::FarAbove(Player* bot, uint32 zoneId)
+{
+    return TravelMgr::instance().IsZoneAboveLevel(
+        zoneId, Deaths::GuardLevel(bot->GetLevel(), sPlayerbotAIConfig.deaths.zoneGuardLevelGap));
+}
+
+bool BotDeaths::FarAboveAt(Player* bot, float x, float y, float z)
+{
+    return FarAbove(bot, bot->GetMap()->GetZoneId(bot->GetPhaseMask(), x, y, z));
+}
+
 bool BotDeaths::RescueNow(PlayerbotAI* botAI, Player* bot)
 {
     if (!On(botAI, bot))

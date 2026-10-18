@@ -366,6 +366,21 @@ bool NewRpgStatusUpdateAction::CheckWornGearAndTownTrip(NewRpgStatus status)
         return true;
     }
 
+    // A guide step that brought it into a zone far above its level (the zone guard, BotDeaths): the step is skipped
+    // and it walks to a town of its own level range now, not only between activities.
+    if (status == RPG_FOLLOW_GUIDE && BotDeaths::Guarding(botAI, bot) && BotDeaths::FarAbove(bot, bot->GetZoneId()))
+    {
+        WorldPosition const town = TownErrands::NearestTown(bot, true);
+        if (town != WorldPosition())
+        {
+            GuardStallStep();
+            GuideMgr::instance().Unseat(bot->GetGUID().GetCounter());
+            info.lastErrandMs = getMSTime();
+            info.ChangeToGoCamp(town);
+            return true;
+        }
+    }
+
     // ...and walk out of a zone above its level to a town of its own level range. Healthy bots too, between
     // activities: stock playerbots teleported them out, which the honest world blocks, so a low-level bot that
     // found nothing of its level around an over-level town (the Darkshire inn) would rest there for good.
@@ -441,6 +456,13 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
 {
     NewRpgInfo& info = botAI->rpgInfo;
     NewRpgStatus status = info.GetStatus();
+    // Honest world zone guard: MoveFarTo stopped a walk into a zone far above the bot (BotDeaths).
+    if (info.death.guardHitMs)
+    {
+        if (GuardTurnBack(info.death.guardDest))
+            return true;
+        info.death.guardHitMs = 0;
+    }
     if (CheckWornGearAndTownTrip(status))
         return true;
     switch (status)

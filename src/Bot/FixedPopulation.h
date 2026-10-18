@@ -80,6 +80,9 @@ enum class EconomyCounter : uint8
     SpiritRevives,        // revives at a spirit healer chosen by the death rules (a loop, or badly worn gear)
     SpotAvoids,           // quest, guide or walk targets turned away from an avoided spot (grind targets not counted)
     RepairRescues,        // repair trips that skipped the errand cooldown for badly worn gear (WornGearRescue)
+    GuideGuardSkips,      // guide steps skipped because the way there (or the step) is in a zone far above the bot
+    TripGuardSkips,       // town trips given up because the way there enters a zone far above the bot
+    GuardFlights,         // flights it knows taken instead of such a walk (guide steps)
     Count
 };
 

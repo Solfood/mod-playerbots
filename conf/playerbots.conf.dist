@@ -903,6 +903,20 @@ AiPlayerbot.FixedPopulation.DeathLog = 1
 # Default: 1
 AiPlayerbot.FixedPopulation.WornGearRescue = 1
 
+# Honest world zone guard (only with FixedPopulation = 1; random bots with no real master). A zone is "far above" a
+# bot when its level range starts more than ZoneGuardLevelGap levels above the bot's level. A guide step whose spot is
+# in such a zone, or whose walk would enter one, is not walked: with a flight it knows from a flight master within
+# 1000 yards to a node within 1000 yards of the spot (not itself in such a zone) it flies there (the core charges the
+# fare; twice per step at most), else the step is skipped for the session as a stalled step is. After
+# ZoneGuardPauseAfter such skips in a session its guide pauses (it plays as an unguided bot; its place is kept; 0 =
+# never). A town trip whose walk would enter such a zone is given up (the errand cooldown runs; the next repair trip
+# goes to another repairer if there is one). A guided bot that finds itself in such a zone skips its step and walks
+# to a town of its own level range at once. A bot already in such a zone is let walk out.
+# Defaults: 1, 5, 3
+AiPlayerbot.FixedPopulation.ZoneGuard = 1
+AiPlayerbot.FixedPopulation.ZoneGuardLevelGap = 5
+AiPlayerbot.FixedPopulation.ZoneGuardPauseAfter = 3
+
 # Honest world professions (only with FixedPopulation = 1). Each bot picks two primary professions from a
 # gathering-heavy, class-weighted table at one level between ProfessionMinLevel and ProfessionMaxLevel
 # (spread by bot), then learns them at its own cost. A pick preset in the bot's firstSkill/secondSkill

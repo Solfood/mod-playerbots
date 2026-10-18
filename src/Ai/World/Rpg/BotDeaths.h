@@ -52,6 +52,12 @@ public:
     static bool RescueNow(PlayerbotAI* botAI, Player* bot);
     // Badly worn gear (PlaySafeBelowDurability) with something to repair.
     static bool BadlyWorn(PlayerbotAI* botAI, Player* bot);
+    // The zone guard is on for this bot (ZoneGuard).
+    static bool Guarding(PlayerbotAI* botAI, Player* bot);
+    // A zone far above the bot: it starts more than ZoneGuardLevelGap levels above it (TravelMgr's zone levels).
+    static bool FarAbove(Player* bot, uint32 zoneId);
+    // The zone at a spot on the bot's map is far above it.
+    static bool FarAboveAt(Player* bot, float x, float y, float z);
 };
 
 #endif

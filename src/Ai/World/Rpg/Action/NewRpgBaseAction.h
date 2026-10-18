@@ -41,6 +41,14 @@ protected:
     // Honest world: a path through a death loop's spot (BotDeaths) steps round it where a path allows; true if it
     // moved that way. Neither the bot nor `dest` may be inside the spot (it walks out of it, or to it).
     bool DetourAvoided(PathGenerator const& path, WorldPosition const& dest);
+    // Honest world zone guard (BotDeaths): a guide step's or town trip's path that enters a zone far above the bot,
+    // while it is not in one, is not walked; the status update turns it back (GuardTurnBack). True if it stopped it.
+    bool GuardAhead(PathGenerator const& path, WorldPosition const& dest);
+    // A guide step: a flight it knows to near `dest`, else the step is skipped (GuardStallStep). A town trip: given
+    // up (the next repair trip avoids its target). Back to IDLE either way unless it flies. True if it acted.
+    bool GuardTurnBack(WorldPosition const& dest);
+    void GuardStallStep();
+    bool GuardFlight(WorldPosition const& dest);
     bool MoveWorldObjectTo(ObjectGuid guid, float distance = INTERACTION_DISTANCE);
     bool MoveRandomNear(float moveStep = 50.0f, MovementPriority priority = MovementPriority::MOVEMENT_NORMAL, WorldObject* center = nullptr);
     bool ForceToWait(uint32 duration, MovementPriority priority = MovementPriority::MOVEMENT_NORMAL);
@@ -117,6 +125,11 @@ protected:
     // the teleport fires, but long enough that a genuine long
     // walk that is slowly making progress never triggers it.
     const uint32 stuckTime = 90 * IN_MILLISECONDS;
+    /* ZONE GUARD (honest world) */
+    static constexpr uint32 GUARD_HOLD_MS = 10 * IN_MILLISECONDS;  // a stopped walk waits this long for the turn back
+    static constexpr uint32 GUARD_FLIGHT_TRIES = 2;               // guard flights per guide step
+    static constexpr float GUARD_FLIGHT_MASTER_YARDS = 1000.0f;   // a flight master this near
+    static constexpr float GUARD_LANDING_YARDS = 1000.0f;         // a landing this near the step's spot
 };
 
 #endif

@@ -720,6 +720,9 @@ bool PlayerbotAIConfig::Initialize()
     deaths.fullRestSeconds = sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.FullRestMaxSeconds", 240);
     deaths.deathLog = sConfigMgr->GetOption<bool>("AiPlayerbot.FixedPopulation.DeathLog", true);
     deaths.wornGearRescue = sConfigMgr->GetOption<bool>("AiPlayerbot.FixedPopulation.WornGearRescue", true);
+    deaths.zoneGuard = sConfigMgr->GetOption<bool>("AiPlayerbot.FixedPopulation.ZoneGuard", true);
+    deaths.zoneGuardLevelGap = sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.ZoneGuardLevelGap", 5);
+    deaths.zoneGuardPauseAfter = sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.ZoneGuardPauseAfter", 3);
     questRoutes.enabled = sConfigMgr->GetOption<bool>("AiPlayerbot.QuestRoutes", false);
     questRoutes.hubSoftCap = sConfigMgr->GetOption<uint32>("AiPlayerbot.QuestRoutes.HubSoftCap", 15);
     questRoutes.safeFightUntilLevel = sConfigMgr->GetOption<uint32>("AiPlayerbot.QuestRoutes.SafeFightUntilLevel", 10);

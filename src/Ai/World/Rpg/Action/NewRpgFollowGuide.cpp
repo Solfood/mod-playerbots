@@ -80,7 +80,8 @@ bool NewRpgFollowGuideAction::Execute(Event /*event*/)
     }
 
     NewRpgInfo::GuideState::Step& s = info.guide.step;
-    if (!s.started || s.key != w.key)
+    bool const fresh = !s.started || s.key != w.key;
+    if (fresh)
     {
         s = NewRpgInfo::GuideState::Step{};
         s.started = true;
@@ -90,6 +91,16 @@ bool NewRpgFollowGuideAction::Execute(Event /*event*/)
     s.workedMs += elapsed;
     Guides::Step const& step = guides.AllGuides()[w.guide].steps[w.seq];
     GuideStepInfo const& in = *guides.InfoOf(w.guide, w.seq);
+    // Honest world zone guard (BotDeaths): a step whose spot is in a zone far above the bot is skipped (a flight it
+    // knows first). Travel steps (fly, ride, portal, hearth) go by their own means.
+    if (fresh && GuardedKind(step.kind) && BotDeaths::Guarding(botAI, bot))
+    {
+        WorldPosition const spot = GuideMgr::Ground(bot, GuideMgr::Nearest(bot, in.points));
+        if (spot != WorldPosition() && spot.GetMapId() == bot->GetMapId() &&
+            !BotDeaths::FarAbove(bot, bot->GetZoneId()) &&
+            BotDeaths::FarAboveAt(bot, spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ()))
+            return GuardTurnBack(spot);
+    }
     if (Guides::TeleportStalled(s.teleportsAtStart, info.stuckTeleports))
     {
         // the 90 s stuck teleport fired twice on this step (decision 14). Near the dock of a ride it cannot reach
@@ -210,6 +221,12 @@ bool NewRpgFollowGuideAction::WalkTo(GuideMgr::Work const& w, WorldPosition cons
     if (bot->IsAlive() && Routes::HubWalkTick(botAI->rpgInfo.guide.step.walk, w.key, distance, elapsed))
         return GiveUp(w);
     return MoveFarTo(where) || MoveRandomNear(NUDGE_YARDS);
+}
+
+bool NewRpgFollowGuideAction::GuardedKind(Guides::StepKind kind)
+{
+    return kind != Guides::StepKind::Fly && kind != Guides::StepKind::Ride && kind != Guides::StepKind::Portal &&
+           kind != Guides::StepKind::Hearth && kind != Guides::StepKind::Grind;
 }
 
 bool NewRpgFollowGuideAction::LeaveForLater()

@@ -45,6 +45,7 @@
 #include "Timer.h"
 #include "TownErrands.h"
 #include "TravelMgr.h"
+#include "TravelNode.h"
 #include "TripRules.h"
 #include "G3D/Vector2.h"
 #include <algorithm>
@@ -59,6 +60,11 @@ bool NewRpgBaseAction::MoveFarTo(WorldPosition dest)
     // instead of returning false, because the callers of MoveFarTo fall through to
     // MoveRandomNear, which is also a ground move.
     if (bot->IsInFlight())
+        return true;
+
+    // The zone guard stopped this walk; the status update turns it back (within a few seconds, else forgotten).
+    uint32 const guardHitMs = botAI->rpgInfo.death.guardHitMs;
+    if (guardHitMs && GetMSTimeDiffToNow(guardHitMs) < GUARD_HOLD_MS)
         return true;
 
     bool newDest = dest != botAI->rpgInfo.moveFarPos;
@@ -176,7 +182,7 @@ bool NewRpgBaseAction::MoveFarTo(WorldPosition dest)
             float endDistToDest = dest.GetExactDist(endPos.x, endPos.y, endPos.z);
             if (endDistToDest + 5.0f < disToDest)
             {
-                if (DetourAvoided(path, dest))
+                if (GuardAhead(path, dest) || DetourAvoided(path, dest))
                     return true;
                 return MoveTo(bot->GetMapId(), endPos.x, endPos.y, endPos.z, false, false, false, true);
             }
@@ -259,6 +265,104 @@ bool NewRpgBaseAction::DetourAvoided(PathGenerator const& path, WorldPosition co
         return false;
     FixedPopulation::Count(EconomyCounter::SpotAvoids);
     return MoveTo(mapId, end.x, end.y, end.z, false, false, false, true);
+}
+
+bool NewRpgBaseAction::GuardAhead(PathGenerator const& path, WorldPosition const& dest)
+{
+    NewRpgInfo& info = botAI->rpgInfo;
+    NewRpgStatus const status = info.GetStatus();
+    if ((status != RPG_FOLLOW_GUIDE && status != RPG_GO_CAMP) || !BotDeaths::Guarding(botAI, bot))
+        return false;
+    Movement::PointsArray const& points = path.GetPath();
+    if (points.empty())
+        return false;
+    G3D::Vector3 const& mid = points[points.size() / 2];
+    G3D::Vector3 const& end = points.back();
+    bool const ahead =
+        BotDeaths::FarAboveAt(bot, mid.x, mid.y, mid.z) || BotDeaths::FarAboveAt(bot, end.x, end.y, end.z);
+    if (!Deaths::GuardBlocks(true, BotDeaths::FarAbove(bot, bot->GetZoneId()), ahead))
+        return false;
+    LOG_DEBUG("playerbots", "[New RPG] Bot {} (level {}) will not walk into a zone far above it on its way to {} {} {}",
+              bot->GetName(), bot->GetLevel(), dest.GetMapId(), dest.GetPositionX(), dest.GetPositionY());
+    info.death.guardHitMs = std::max<uint32>(1, getMSTime());
+    info.death.guardDest = dest;
+    return true;
+}
+
+bool NewRpgBaseAction::GuardTurnBack(WorldPosition const& dest)
+{
+    NewRpgInfo& info = botAI->rpgInfo;
+    info.death.guardHitMs = 0;
+    switch (info.GetStatus())
+    {
+        case RPG_FOLLOW_GUIDE:
+            if (info.guide.step.flightTries < GUARD_FLIGHT_TRIES && GuardFlight(dest))
+            {
+                ++info.guide.step.flightTries;
+                FixedPopulation::Count(EconomyCounter::GuardFlights);
+                return true;
+            }
+            GuardStallStep();
+            info.ChangeToIdle();
+            return true;
+        case RPG_GO_CAMP:
+            // As a town trip that never arrives: the cooldown runs and the next repair trip avoids this target.
+            info.lastErrandMs = getMSTime();
+            info.abandonedTrip = std::get<NewRpgInfo::GoCamp>(info.data).pos;
+            FixedPopulation::Count(EconomyCounter::TripGuardSkips);
+            info.ChangeToIdle();
+            return true;
+        default:
+            return false;
+    }
+}
+
+void NewRpgBaseAction::GuardStallStep()
+{
+    NewRpgInfo& info = botAI->rpgInfo;
+    GuideMgr& guides = GuideMgr::instance();
+    if (info.guide.step.started)
+    {
+        GuideMgr::Work w;
+        w.key = info.guide.step.key;
+        guides.Stall(bot, w);  // skipped for this session, as a stalled step
+    }
+    FixedPopulation::Count(EconomyCounter::GuideGuardSkips);
+    if (!Deaths::GuardPauses(++info.death.guardedSteps, sPlayerbotAIConfig.deaths.zoneGuardPauseAfter))
+        return;
+    // Its next steps keep lying past such zones: it plays as an unguided bot this session; its place is kept.
+    guides.Pause(bot, "its next steps lie past zones far above its level");
+    if (info.route.retreating)
+    {
+        info.route.retreating = false;  // a paused bot is no longer under the survival rules
+        FixedPopulation::Count(EconomyCounter::RetreatsEnded);
+    }
+}
+
+bool NewRpgBaseAction::GuardFlight(WorldPosition const& dest)
+{
+    // A flight from a flight master near it, along nodes it knows all of, to a node near `dest` that is not itself in
+    // such a zone. The core charges the fare (TRAVEL_FLIGHT walks there, pays and flies).
+    TravelMgr::FlightMasterInfo const* fm = sTravelMgr.GetNearestFlightMasterInfo(bot);
+    if (!fm || !fm->taxiNodeId || fm->pos.GetMapId() != bot->GetMapId() ||
+        bot->GetDistance(fm->pos) > GUARD_FLIGHT_MASTER_YARDS || BotDeaths::FarAbove(bot, fm->zoneId) ||
+        dest.GetMapId() != bot->GetMapId())
+        return false;
+    uint32 const to = sObjectMgr->GetNearestTaxiNode(dest.GetPositionX(), dest.GetPositionY(), dest.GetPositionZ(),
+                                                     dest.GetMapId(), bot->GetTeamId());
+    TaxiNodesEntry const* node = to ? sTaxiNodesStore.LookupEntry(to) : nullptr;
+    if (!node || to == fm->taxiNodeId || node->map_id != dest.GetMapId() ||
+        dest.GetExactDist2d(node->x, node->y) > GUARD_LANDING_YARDS ||
+        BotDeaths::FarAboveAt(bot, node->x, node->y, node->z))
+        return false;
+    std::vector<uint32> path = sTravelNodeMap.FindTaxiPath(fm->taxiNodeId, to);
+    if (path.size() < 2)
+        return false;
+    for (uint32 n : path)
+        if (!bot->isTaxiCheater() && !bot->m_taxi.IsTaximaskNodeKnown(n))
+            return false;
+    botAI->rpgInfo.ChangeToTravelFlight(fm->templateEntry, fm->pos, std::move(path));
+    return true;
 }
 
 bool NewRpgBaseAction::MoveWorldObjectTo(ObjectGuid guid, float distance)
