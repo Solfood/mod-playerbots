@@ -58,7 +58,7 @@ public:
     // How far a town trip may walk (levels 1-5 stay closer).
     static float TripYards(Player* bot);
     // On the way to town (honest world, GO_CAMP) with worn-out gear (PlaySafe) or through a zone above the bot's
-    // level: fight back, but pick no fights.
+    // level, or revived with worn-out gear until its repair trip is done (BotDeaths): fight back, pick no fights.
     static bool AvoidFights(PlayerbotAI* botAI, Player* bot);
 
     // Repair is worth a trip when the bot can pay for its weapons (the core repairs them first, then item by

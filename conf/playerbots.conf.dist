@@ -809,9 +809,10 @@ AiPlayerbot.FixedPopulation.Seed = 0
 # - a vendor when bags are at least SellAboveBagUsage percent full;
 # - an ammo vendor when a hunter has no ammo; a mailbox when mail with money or items is waiting.
 # Trips other than repair walk to the nearest camp or inn of the bot's level range (any level if none is in
-# reach). ErrandCooldownSeconds: at most one errand trip per bot in this many seconds.
-# Defaults: 40, 80, 600
-AiPlayerbot.FixedPopulation.RepairBelowDurability = 40
+# reach). ErrandCooldownSeconds: at most one errand trip per bot in this many seconds (a broken main hand, or
+# gear below PlaySafeBelowDurability whose whole repair bill it can pay, does not wait: WornGearRescue).
+# Defaults: 60, 80, 600
+AiPlayerbot.FixedPopulation.RepairBelowDurability = 60
 AiPlayerbot.FixedPopulation.SellAboveBagUsage = 80
 AiPlayerbot.FixedPopulation.ErrandCooldownSeconds = 600
 
@@ -892,6 +893,15 @@ AiPlayerbot.FixedPopulation.AvoidSpotDetour = 1
 AiPlayerbot.FixedPopulation.FullRestPct = 95
 AiPlayerbot.FixedPopulation.FullRestMaxSeconds = 240
 AiPlayerbot.FixedPopulation.DeathLog = 1
+
+# Honest world broken-gear rescue (only with FixedPopulation = 1; random bots with no real master). WornGearRescue: a
+# bot whose gear is below PlaySafeBelowDurability and that can pay its whole repair bill goes to a repairer at once,
+# whatever ErrandCooldownSeconds (not while the cooldown of a town trip it gave up still runs). A bot that dies with
+# such gear (not grouped, not in a dungeon or battleground) revives at the spirit healer (graveyards are mostly near
+# towns), then picks no fight it can avoid until its repair trip is done (it always fights back); if no repair trip
+# can start it plays on with the PlaySafeBelowDurability rules.
+# Default: 1
+AiPlayerbot.FixedPopulation.WornGearRescue = 1
 
 # Honest world professions (only with FixedPopulation = 1). Each bot picks two primary professions from a
 # gathering-heavy, class-weighted table at one level between ProfessionMinLevel and ProfessionMaxLevel

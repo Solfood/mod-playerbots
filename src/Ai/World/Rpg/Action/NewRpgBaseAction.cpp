@@ -1169,8 +1169,11 @@ bool NewRpgBaseAction::GoRunErrands(bool repairOnly)
         return false;
 
     NewRpgInfo& info = botAI->rpgInfo;
-    // A broken main hand it can pay for does not wait out the cooldown (fix round GM-BOTAI-0092).
-    if (TownErrands::CooldownLeftMs(info.lastErrandMs) && !TownErrands::RepairWeaponNow(botAI, bot))
+    // A broken main hand it can pay for does not wait out the cooldown (fix round GM-BOTAI-0092), nor does badly worn
+    // gear whose whole bill it can pay (the broken-gear rescue, BotDeaths).
+    bool const cooling = TownErrands::CooldownLeftMs(info.lastErrandMs) && !TownErrands::RepairWeaponNow(botAI, bot);
+    bool const rescue = cooling && BotDeaths::RescueNow(botAI, bot);
+    if (cooling && !rescue)
         return false;
 
     uint8 const errands = TownErrands::Needed(botAI, bot);
@@ -1193,9 +1196,13 @@ bool NewRpgBaseAction::GoRunErrands(bool repairOnly)
             return false;  // no town within reach: keep playing, try again later
     }
 
+    if (rescue && !(errands & TOWN_ERRAND_REPAIR))
+        return false;  // the cooldown was waived for the repair only
     info.lastErrandMs = getMSTime();
     info.abandonedTrip = WorldPosition();
     FixedPopulation::Count(EconomyCounter::ErrandsStarted);
+    if (rescue)
+        FixedPopulation::Count(EconomyCounter::RepairRescues);
     if (errands & TOWN_ERRAND_SUPPLIES)
         FixedPopulation::Count(EconomyCounter::SuppliesTrips);
     if (servedHere)

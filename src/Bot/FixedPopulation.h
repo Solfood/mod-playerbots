@@ -79,6 +79,7 @@ enum class EconomyCounter : uint8
     LoopBreaks,           // deaths that closed a death loop (a spirit healer revive, the spot avoided, a full rest)
     SpiritRevives,        // revives at a spirit healer chosen by the death rules (a loop, or badly worn gear)
     SpotAvoids,           // quest, guide or walk targets turned away from an avoided spot (grind targets not counted)
+    RepairRescues,        // repair trips that skipped the errand cooldown for badly worn gear (WornGearRescue)
     Count
 };
 

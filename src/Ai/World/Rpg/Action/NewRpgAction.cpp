@@ -350,6 +350,7 @@ bool NewRpgStatusUpdateAction::CheckWornGearAndTownTrip(NewRpgStatus status)
          TownErrands::RepairWeaponNow(botAI, bot)) &&
         GoRunErrands(true))
         return true;
+    info.death.repairFirst = false;  // no repair trip under way or starting: it plays on (safely, if worn out)
 
     bool const playSafe = TownErrands::PlaySafe(botAI, bot);
 
@@ -531,7 +532,7 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
                 // A broken weapon it could pay for is still broken: it never reached the repairer. Given up like a
                 // town trip, so the cooldown runs once and the next repair trip avoids this place (fix round 1,
                 // GM-BOTAI-0093: else the cooldown skip sent it back here at once, for good).
-                if (TownErrands::RepairWeaponNow(botAI, bot))
+                if (TownErrands::RepairWeaponNow(botAI, bot) || BotDeaths::RescueNow(botAI, bot))
                 {
                     info.lastErrandMs = getMSTime();
                     info.abandonedTrip = WorldPosition(bot);

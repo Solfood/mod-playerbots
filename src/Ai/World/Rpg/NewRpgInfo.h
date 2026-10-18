@@ -238,6 +238,7 @@ struct NewRpgInfo
         std::vector<Deaths::Spot> avoid;  // spots it keeps away from (a death loop's)
         Deaths::Revive revive{Deaths::Revive::Corpse};  // how this death revives (set when it dies)
         bool restFull{false};    // revived after a loop: rest to FullRestPct before the next fight
+        bool repairFirst{false};  // revived with badly worn gear: no fight it can avoid until its repair trip is done
         uint32 revivedAt{0};     // unix seconds of its last revive (0 = none this session)
         bool lastSpirit{false};  // that revive was at a spirit healer
         // The DEATHLOG facts of the fight it is in (or was last in): taken when the fight started.

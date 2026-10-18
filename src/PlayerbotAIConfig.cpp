@@ -681,7 +681,7 @@ bool PlayerbotAIConfig::Initialize()
     fixedPopulation = sConfigMgr->GetOption<bool>("AiPlayerbot.FixedPopulation", false);
     fixedPopulationSeed = sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.Seed", 0);
     fixedPopulationRepairBelow =
-        sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.RepairBelowDurability", 40);
+        sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.RepairBelowDurability", 60);
     fixedPopulationSellAboveBags = sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.SellAboveBagUsage", 80);
     fixedPopulationErrandCooldown =
         sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.ErrandCooldownSeconds", 600);
@@ -719,6 +719,7 @@ bool PlayerbotAIConfig::Initialize()
         std::min<uint32>(100, sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.FullRestPct", 95));
     deaths.fullRestSeconds = sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.FullRestMaxSeconds", 240);
     deaths.deathLog = sConfigMgr->GetOption<bool>("AiPlayerbot.FixedPopulation.DeathLog", true);
+    deaths.wornGearRescue = sConfigMgr->GetOption<bool>("AiPlayerbot.FixedPopulation.WornGearRescue", true);
     questRoutes.enabled = sConfigMgr->GetOption<bool>("AiPlayerbot.QuestRoutes", false);
     questRoutes.hubSoftCap = sConfigMgr->GetOption<uint32>("AiPlayerbot.QuestRoutes.HubSoftCap", 15);
     questRoutes.safeFightUntilLevel = sConfigMgr->GetOption<uint32>("AiPlayerbot.QuestRoutes.SafeFightUntilLevel", 10);

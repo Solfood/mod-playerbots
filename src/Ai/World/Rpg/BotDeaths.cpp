@@ -21,6 +21,7 @@
 #include "PlayerbotAI.h"
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
+#include "TownErrands.h"
 #include "TravelMgr.h"
 
 namespace
@@ -103,8 +104,12 @@ void BotDeaths::OnJustDied(Player* bot)
     bool const solo = !bot->GetGroup() && !bot->GetMap()->IsDungeon() && !bot->InBattleground();
     bool const loop = solo && Deaths::IsLoop(d.marks, mark, s);
     Deaths::Note(d.marks, mark);
-    d.revive = loop ? Deaths::Revive::SpiritLoop : Deaths::Revive::Corpse;
+    // A badly worn bot also revives at the spirit healer (graveyards are mostly near towns), then repairs first.
+    uint32 const wear = BadlyWorn(botAI, bot) ? 0 : 100;
+    d.revive = solo ? Deaths::ChooseRevive(loop, wear, sPlayerbotAIConfig.fixedPopulationSafeBelow, s)
+                    : Deaths::Revive::Corpse;
     d.restFull = false;
+    d.repairFirst = false;
     if (loop)
     {
         FixedPopulation::Count(EconomyCounter::LoopBreaks);
@@ -153,6 +158,7 @@ void BotDeaths::OnSpiritRevive(PlayerbotAI* botAI, Player* bot)
     if (d.revive == Deaths::Revive::Corpse)
         return;
     FixedPopulation::Count(EconomyCounter::SpiritRevives);
+    d.repairFirst = BadlyWorn(botAI, bot);  // the wear check sends it to a repairer (RescueNow skips the cooldown)
     if (d.revive == Deaths::Revive::SpiritLoop)
     {
         d.restFull = true;
@@ -209,6 +215,24 @@ bool BotDeaths::Avoids(PlayerbotAI* botAI, WorldPosition const& pos)
 bool BotDeaths::Avoids(PlayerbotAI* botAI, Unit const* unit)
 {
     return unit && Avoids(botAI, unit->GetMapId(), unit->GetPositionX(), unit->GetPositionY());
+}
+
+bool BotDeaths::BadlyWorn(PlayerbotAI* botAI, Player* bot)
+{
+    AiObjectContext* context = botAI->GetAiObjectContext();
+    return TownErrands::PlaySafe(botAI, bot) && context->GetValue<uint32>("repair cost")->Get() > 0;
+}
+
+bool BotDeaths::RescueNow(PlayerbotAI* botAI, Player* bot)
+{
+    if (!On(botAI, bot))
+        return false;
+    NewRpgInfo const& info = botAI->rpgInfo;
+    AiObjectContext* context = botAI->GetAiObjectContext();
+    return Deaths::RescueSkipsCooldown(
+        sPlayerbotAIConfig.deaths.wornGearRescue, context->GetValue<uint8>("durability")->Get(),
+        sPlayerbotAIConfig.fixedPopulationSafeBelow, bot->GetMoney(), context->GetValue<uint32>("repair cost")->Get(),
+        info.abandonedTrip != WorldPosition(), TownErrands::CooldownLeftMs(info.lastErrandMs));
 }
 
 bool BotDeaths::RestToFull(PlayerbotAI* botAI)

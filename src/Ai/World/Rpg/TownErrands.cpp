@@ -257,6 +257,9 @@ float TownErrands::TripYards(Player* bot)
 
 bool TownErrands::AvoidFights(PlayerbotAI* botAI, Player* bot)
 {
+    // Revived with badly worn gear (BotDeaths): no fight it can avoid until its repair trip is done, wherever it is.
+    if (botAI->rpgInfo.death.repairFirst && PlaySafe(botAI, bot))
+        return true;
     return botAI->rpgInfo.GetStatus() == RPG_GO_CAMP &&
            (PlaySafe(botAI, bot) || ZoneAboveBot(bot, bot->GetZoneId()));
 }

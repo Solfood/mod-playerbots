@@ -47,6 +47,11 @@ public:
     static bool AvoidedCentre(PlayerbotAI* botAI, uint32 mapId, float x, float y, float& centreX, float& centreY);
     // Rest to FullRestPct (after a loop's revive) instead of the normal rest levels.
     static bool RestToFull(PlayerbotAI* botAI);
+    // The broken-gear rescue (Deaths::RescueSkipsCooldown): badly worn gear whose whole bill it can pay goes to a
+    // repairer now, whatever the errand cooldown.
+    static bool RescueNow(PlayerbotAI* botAI, Player* bot);
+    // Badly worn gear (PlaySafeBelowDurability) with something to repair.
+    static bool BadlyWorn(PlayerbotAI* botAI, Player* bot);
 };
 
 #endif
