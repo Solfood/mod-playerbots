@@ -48,6 +48,7 @@ protected:
     // up (the next repair trip avoids its target). Back to IDLE either way unless it flies. True if it acted.
     bool GuardTurnBack(WorldPosition const& dest);
     void GuardStallStep();
+    bool GuardedStepNow();  // the guide step it works is not a travel step (fly, ride, portal, hearth)
     bool GuardFlight(WorldPosition const& dest);
     bool MoveWorldObjectTo(ObjectGuid guid, float distance = INTERACTION_DISTANCE);
     bool MoveRandomNear(float moveStep = 50.0f, MovementPriority priority = MovementPriority::MOVEMENT_NORMAL, WorldObject* center = nullptr);

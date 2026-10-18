@@ -81,13 +81,16 @@ int main()
     CHECK_EQ(0u, spots.size());
 
     // Revive choice: a loop, or badly worn gear, revives at the spirit healer.
-    CHECK_TRUE(ChooseRevive(true, 100, 20, s) == Revive::SpiritLoop);
-    CHECK_TRUE(ChooseRevive(false, 19, 20, s) == Revive::SpiritWorn);
-    CHECK_TRUE(ChooseRevive(true, 0, 20, s) == Revive::SpiritLoop);
-    CHECK_TRUE(ChooseRevive(false, 20, 20, s) == Revive::Corpse);
+    CHECK_TRUE(ChooseRevive(true, 100, 20, true, s) == Revive::SpiritLoop);
+    CHECK_TRUE(ChooseRevive(false, 19, 20, true, s) == Revive::SpiritWorn);
+    CHECK_TRUE(ChooseRevive(true, 0, 20, true, s) == Revive::SpiritLoop);
+    CHECK_TRUE(ChooseRevive(false, 20, 20, true, s) == Revive::Corpse);
+    // Worn but cannot pay the repair from 0%: the healer would break its gear, so its body (review F-I1).
+    CHECK_TRUE(ChooseRevive(false, 5, 20, false, s) == Revive::Corpse);
+    CHECK_TRUE(ChooseRevive(true, 5, 20, false, s) == Revive::SpiritLoop);  // a loop still breaks
     Settings noWorn = s;
     noWorn.wornGearRescue = false;
-    CHECK_TRUE(ChooseRevive(false, 0, 20, noWorn) == Revive::Corpse);
+    CHECK_TRUE(ChooseRevive(false, 0, 20, true, noWorn) == Revive::Corpse);
     CHECK_EQ(std::string("spirit_worn"), std::string(ReviveName(Revive::SpiritWorn)));
     CHECK_EQ(std::string("corpse"), std::string(ReviveName(Revive::Corpse)));
 

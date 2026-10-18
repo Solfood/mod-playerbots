@@ -317,6 +317,19 @@ bool NewRpgBaseAction::GuardTurnBack(WorldPosition const& dest)
     }
 }
 
+bool NewRpgBaseAction::GuardedStepNow()
+{
+    // The step it works (StepKey: guide index + 1 in the high bits, seq in the low 16): not a travel step.
+    NewRpgInfo::GuideState::Step const& s = botAI->rpgInfo.guide.step;
+    std::vector<Guides::Guide> const& guides = GuideMgr::instance().AllGuides();
+    uint32 const gi = s.key >> 16;
+    if (!s.started || !gi || gi > guides.size() || (s.key & 0xFFFF) >= guides[gi - 1].steps.size())
+        return true;
+    Guides::StepKind const kind = guides[gi - 1].steps[s.key & 0xFFFF].kind;
+    return kind != Guides::StepKind::Fly && kind != Guides::StepKind::Ride && kind != Guides::StepKind::Portal &&
+           kind != Guides::StepKind::Hearth;
+}
+
 void NewRpgBaseAction::GuardStallStep()
 {
     NewRpgInfo& info = botAI->rpgInfo;

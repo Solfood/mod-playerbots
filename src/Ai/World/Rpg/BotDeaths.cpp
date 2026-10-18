@@ -106,7 +106,9 @@ void BotDeaths::OnJustDied(Player* bot)
     Deaths::Note(d.marks, mark);
     // A badly worn bot also revives at the spirit healer (graveyards are mostly near towns), then repairs first.
     uint32 const wear = BadlyWorn(botAI, bot) ? 0 : 100;
-    d.revive = solo ? Deaths::ChooseRevive(loop, wear, sPlayerbotAIConfig.fixedPopulationSafeBelow, s)
+    bool const paysFromZero =
+        bot->GetMoney() >= botAI->GetAiObjectContext()->GetValue<uint32>("max repair cost")->Get();
+    d.revive = solo ? Deaths::ChooseRevive(loop, wear, sPlayerbotAIConfig.fixedPopulationSafeBelow, paysFromZero, s)
                     : Deaths::Revive::Corpse;
     d.restFull = false;
     d.repairFirst = false;

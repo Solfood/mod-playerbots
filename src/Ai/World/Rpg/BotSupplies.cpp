@@ -199,6 +199,8 @@ bool BotSupplies::ShouldRest(PlayerbotAI* botAI, Player* bot)
     if ((!s.rest && !full) || !On(botAI, bot) || !bot->IsAlive() || bot->IsInCombat())
         return false;
     Supplies::RestState& state = botAI->rpgInfo.rest;
+    if (full && state.gaveUp && !state.startMs)
+        state.gaveUp = false;  // a rest given up before the death must not stop the full rest after it
     bool const usesMana = UsesMana(bot);
     uint32 const health = static_cast<uint32>(bot->GetHealthPct());
     uint32 const mana = usesMana ? static_cast<uint32>(bot->GetPowerPct(POWER_MANA)) : 100;

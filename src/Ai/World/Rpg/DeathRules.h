@@ -137,7 +137,9 @@ inline bool Avoided(std::vector<Spot> const& spots, uint32_t map, float x, float
 }
 
 // Where it revives: at its body (the stock way), or at the spirit healer (sickness and durability: an honest price),
-// after a loop or with badly worn gear (`durabilityPct` below `safeBelow`, PlaySafeBelowDurability).
+// after a loop or with badly worn gear (`durabilityPct` below `safeBelow`, PlaySafeBelowDurability). The worn-gear
+// revive only when `paysFromZero`: its money covers the repair of all its gear from 0% ("max repair cost"), since the
+// healer's 25% breaks such gear; else its body, as before (a loop still revives at the healer).
 enum class Revive : uint8_t
 {
     Corpse = 0,
@@ -145,11 +147,11 @@ enum class Revive : uint8_t
     SpiritWorn,
 };
 
-inline Revive ChooseRevive(bool loop, uint32_t durabilityPct, uint32_t safeBelow, Settings const& s)
+inline Revive ChooseRevive(bool loop, uint32_t durabilityPct, uint32_t safeBelow, bool paysFromZero, Settings const& s)
 {
     if (loop)
         return Revive::SpiritLoop;
-    if (s.wornGearRescue && durabilityPct < safeBelow)
+    if (s.wornGearRescue && durabilityPct < safeBelow && paysFromZero)
         return Revive::SpiritWorn;
     return Revive::Corpse;
 }

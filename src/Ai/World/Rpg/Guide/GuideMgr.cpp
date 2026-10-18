@@ -505,7 +505,10 @@ GuideMgr::Work GuideMgr::NextWork(Player* bot)
             Guides::PickWork(cands, sPlayerbotAIConfig.guideBots.stepSoftCap, sPlayerbotAIConfig.guideBots.lookahead);
         for (uint32 i = 0; i < p.head; ++i)
             if (cands[i].verdict == Guides::Verdict::Done)
+            {
                 FixedPopulation::Count(EconomyCounter::GuideStepsDone);
+                GET_PLAYERBOT_AI(bot)->rpgInfo.death.guardedSteps = 0;  // the zone guard's pause counts skips in a row
+            }
             else if (cands[i].verdict == Guides::Verdict::Blocked)
             {
                 FixedPopulation::Count(EconomyCounter::GuideStepsBlocked);

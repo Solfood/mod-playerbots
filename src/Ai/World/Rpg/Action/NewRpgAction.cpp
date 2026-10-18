@@ -368,7 +368,8 @@ bool NewRpgStatusUpdateAction::CheckWornGearAndTownTrip(NewRpgStatus status)
 
     // A guide step that brought it into a zone far above its level (the zone guard, BotDeaths): the step is skipped
     // and it walks to a town of its own level range now, not only between activities.
-    if (status == RPG_FOLLOW_GUIDE && BotDeaths::Guarding(botAI, bot) && BotDeaths::FarAbove(bot, bot->GetZoneId()))
+    if (status == RPG_FOLLOW_GUIDE && GuardedStepNow() && BotDeaths::Guarding(botAI, bot) &&
+        BotDeaths::FarAbove(bot, bot->GetZoneId()))
     {
         WorldPosition const town = TownErrands::NearestTown(bot, true);
         if (town != WorldPosition())
