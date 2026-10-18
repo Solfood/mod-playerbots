@@ -894,6 +894,23 @@ AiPlayerbot.FixedPopulation.FullRestPct = 95
 AiPlayerbot.FixedPopulation.FullRestMaxSeconds = 240
 AiPlayerbot.FixedPopulation.DeathLog = 1
 
+# Honest world safe revives (only with FixedPopulation = 1; random bots with no real master). HealerSafeCheck: before a
+# ghost revives at a spirit healer (a death loop, badly worn gear, or the stock "5 deaths" rule) it looks for units
+# that would attack it there: hostile creatures whose aggro range (by level) plus HealerSafeMargin yards reaches the
+# healer, and hostile players within 40 yards. With any, or when it revived at this graveyard's healer within
+# HealerRepeatMinutes, it walks to another graveyard of the zone; after HealerMaxUnsafe refused graveyards it goes back
+# to its body. A ghost of HealerAnyAfterSeconds takes any healer. At its body a ghost waits up to CorpseWaitSeconds
+# while hostiles reach it. For LeaveAfterReviveSeconds after any revive, a bot with hostiles in reach walks away from
+# them before it rests or picks a fight (it always fights back).
+# Defaults: 1, 10, 15, 3, 900, 60, 120
+AiPlayerbot.FixedPopulation.HealerSafeCheck = 1
+AiPlayerbot.FixedPopulation.HealerSafeMargin = 10
+AiPlayerbot.FixedPopulation.HealerRepeatMinutes = 15
+AiPlayerbot.FixedPopulation.HealerMaxUnsafe = 3
+AiPlayerbot.FixedPopulation.HealerAnyAfterSeconds = 900
+AiPlayerbot.FixedPopulation.CorpseWaitSeconds = 60
+AiPlayerbot.FixedPopulation.LeaveAfterReviveSeconds = 120
+
 # Honest world broken-gear rescue (only with FixedPopulation = 1; random bots with no real master). WornGearRescue: a
 # bot whose gear is below PlaySafeBelowDurability and that can pay its whole repair bill goes to a repairer at once,
 # whatever ErrandCooldownSeconds (not while the cooldown of a town trip it gave up still runs). A bot that dies with

@@ -75,6 +75,10 @@ bool ReviveFromCorpseAction::Execute(Event event)
     if (BotDeaths::SpiritRevive(botAI, time(nullptr) - corpse->GetGhostTime()))
         return botAI->DoSpecificAction("spirit healer", Event(), true);
 
+    // Honest world: a ghost is safe; it waits a little while hostiles reach its body (BotDeaths).
+    if (BotDeaths::CorpseWait(botAI, bot))
+        return false;
+
     LOG_DEBUG("playerbots", "Bot {} {}:{} <{}> revives at body", bot->GetGUID().ToString().c_str(),
               bot->GetTeamId() == TEAM_ALLIANCE ? "A" : "H", bot->GetLevel(), bot->GetName().c_str());
 
@@ -113,7 +117,7 @@ bool FindCorpseAction::Execute(Event /*event*/)
 
     if (!botAI->HasGameClientMaster())
     {
-        if (dCount >= 5)
+        if (dCount >= 5 && !BotDeaths::HealerRefused(botAI))
         {
             // Honest world: no free revive; walk to the spirit healer (sickness and durability loss).
             if (FixedPopulation::Blocks(FixedPopulationGuard::FreeRevive))
@@ -539,6 +543,24 @@ bool SpiritHealerAction::ExecuteHonest(Corpse* corpse)
         return FailHonestAttempt(grave, "cannot walk to the spirit healer");
     }
 
+    // Honest world (BotDeaths): not with hostiles in reach of the healer, nor at the graveyard of its last healer
+    // revive; another graveyard, or after HealerMaxUnsafe refusals its body.
+    switch (BotDeaths::AtHealer(botAI, bot, healer, grave->ID, now - corpse->GetGhostTime()))
+    {
+        case BotDeaths::HealerAnswer::NextGrave:
+            avoidGraves.push_back(grave->ID);
+            honestGrave = 0;
+            ResetHonestAttempts();
+            return true;
+        case BotDeaths::HealerAnswer::Corpse:
+            avoidGraves.clear();
+            honestGrave = 0;
+            ResetHonestAttempts();
+            return false;
+        default:
+            break;
+    }
+
     // The core's own handler, exactly as a player's click: distance, faction and ghost checks, then
     // half health, resurrection sickness, DurabilityLoss.OnSpiritResurrect, bones.
     bot->GetMotionMaster()->Clear();
@@ -553,7 +575,7 @@ bool SpiritHealerAction::ExecuteHonest(Corpse* corpse)
               bot->GetTeamId() == TEAM_ALLIANCE ? "A" : "H", bot->GetLevel(), bot->GetName());
     context->GetValue<uint32>("death count")->Set(0);
     FixedPopulation::Count(EconomyCounter::SpiritHealerResurrections);
-    BotDeaths::OnSpiritRevive(botAI, bot);  // a death loop's revive: rest to full, choose again away from the spot
+    BotDeaths::OnSpiritRevive(botAI, bot, grave->ID);  // a loop: rest to full, choose again away from the spot
     avoidGraves.clear();
     honestGrave = 0;
     ResetHonestAttempts();

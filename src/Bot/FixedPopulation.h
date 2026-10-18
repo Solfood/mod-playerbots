@@ -83,6 +83,10 @@ enum class EconomyCounter : uint8
     GuideGuardSkips,      // guide steps skipped because the way there (or the step) is in a zone far above the bot
     TripGuardSkips,       // town trips given up because the way there enters a zone far above the bot
     GuardFlights,         // flights it knows taken instead of such a walk (guide steps)
+    HealersUnsafe,        // spirit healers not used: hostiles in reach, or the graveyard of its last healer revive
+    HealerRefusals,       // ghost walks that found no safe healer and went back to the body
+    CorpseWaits,          // ghosts that waited at their body for hostiles to leave
+    ReviveMoves,          // revived bots that walked away from hostiles before resting
     Count
 };
 

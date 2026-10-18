@@ -36,6 +36,17 @@ struct Settings
     uint32_t zoneGuardLevelGap = 5;  // .ZoneGuardLevelGap: "far above": the zone starts more than this above it
     uint32_t zoneGuardPauseAfter = 3;  // .ZoneGuardPauseAfter: this many guarded guide steps pause its guide
     bool deathLog = true;            // .DeathLog: one DEATHLOG line per population bot death
+    bool healerSafeCheck = true;     // .HealerSafeCheck: no spirit healer revive with hostiles in reach of the healer
+    float healerSafeMargin = 10.0f;  // .HealerSafeMargin: yards added to each hostile's aggro range
+    uint32_t healerRepeatMinutes = 15;  // .HealerRepeatMinutes: not at the same graveyard again within this long
+    uint32_t healerMaxUnsafe = 3;    // .HealerMaxUnsafe: graveyards refused on one ghost walk before its body instead
+    uint32_t healerAnyAfterSeconds = 900;  // .HealerAnyAfterSeconds: a ghost this long takes any healer
+    uint32_t corpseWaitSeconds = 60;  // .CorpseWaitSeconds: a ghost waits this long for hostiles to leave its body
+    uint32_t leaveSeconds = 120;     // .LeaveAfterReviveSeconds: after a revive it walks away from hostiles this long
+    bool sicknessWait = true;        // .SicknessWait: after a healer revive it rests while resurrection sickness lasts
+    uint32_t sicknessWaitSeconds = 600;  // .SicknessWaitMaxSeconds
+    bool hearthLost = true;          // .HearthLostBots: a lost bot hearths home (or walks out)
+    uint32_t hearthDeaths = 3;       // .HearthLostDeaths: this many deaths in 15 minutes make a bot lost
 };
 
 // One death: unix seconds and where.
@@ -218,6 +229,106 @@ inline void DetourPoint(float fromX, float fromY, float toX, float toY, float cx
     }
     outX = cx + nx * (yards + margin);
     outY = cy + ny * (yards + margin);
+}
+// --- Round 2 (research 25): safe healer revives, revives away from hostiles, lost bots ---
+
+// The healer was last used at `lastGrave` at `lastAt` (unix seconds; 0 = never): not again within `minutes`.
+inline bool HealerRepeat(uint32_t lastGrave, uint32_t lastAt, uint32_t grave, uint32_t now, uint32_t minutes)
+{
+    return lastAt && grave == lastGrave && now >= lastAt && now - lastAt < minutes * 60u;
+}
+
+// At a healer: revive, try another graveyard, or give up on healers for this death (its body instead).
+enum class HealerStep : uint8_t
+{
+    Revive = 0,
+    NextGrave,
+    Corpse,
+};
+
+// `threats`: hostiles whose aggro reaches the healer (plus the margin); `repeat`: HealerRepeat; `refused`: graveyards
+// already refused on this ghost walk; `ghostSeconds`: time as a ghost (after healerAnyAfterSeconds any healer does,
+// so a ghost whose body is out of reach is never kept dead).
+inline HealerStep AtHealer(bool on, uint32_t threats, bool repeat, uint32_t refused, uint32_t ghostSeconds,
+                           Settings const& s)
+{
+    if (!on || !s.healerSafeCheck || ghostSeconds >= s.healerAnyAfterSeconds || (!threats && !repeat))
+        return HealerStep::Revive;
+    return refused + 1 >= s.healerMaxUnsafe ? HealerStep::Corpse : HealerStep::NextGrave;
+}
+
+// At its body: wait (ghosts are safe) while hostiles reach it, for at most corpseWaitSeconds after the first wait.
+inline bool CorpseWait(uint32_t threats, uint32_t waitedSeconds, Settings const& s)
+{
+    return threats && waitedSeconds < s.corpseWaitSeconds;
+}
+
+// Just revived (within leaveSeconds) with hostiles in reach: walk away before resting or anything else.
+inline bool LeaveAfterRevive(uint32_t sinceReviveSeconds, uint32_t threats, Settings const& s)
+{
+    return threats && sinceReviveSeconds < s.leaveSeconds;
+}
+
+// Resurrection sickness after a healer revive: rest while it lasts (at most sicknessWaitSeconds).
+inline bool SicknessWaits(bool on, bool lastSpirit, int32_t sickMsLeft, uint32_t sinceReviveSeconds, Settings const& s)
+{
+    return on && s.sicknessWait && lastSpirit && sickMsLeft > 0 && sinceReviveSeconds < s.sicknessWaitSeconds;
+}
+
+// Area team flags (AreaTable.dbc): 2 Alliance, 4 Horde. The ground of the other faction (its towns and guards).
+constexpr uint32_t AREA_TEAM_ALLIANCE = 2;
+constexpr uint32_t AREA_TEAM_HORDE = 4;
+inline bool EnemyGround(uint32_t areaTeam, bool botAlliance)
+{
+    uint32_t const enemy = botAlliance ? AREA_TEAM_HORDE : AREA_TEAM_ALLIANCE;
+    uint32_t const own = botAlliance ? AREA_TEAM_ALLIANCE : AREA_TEAM_HORDE;
+    return (areaTeam & enemy) && !(areaTeam & own);
+}
+
+enum class Lost : uint8_t
+{
+    No = 0,
+    FarAbove,    // in a zone far above it (the zone guard's rule)
+    EnemyGround, // on the other faction's ground
+    Deaths,      // hearthDeaths deaths in the last 15 minutes
+};
+
+inline Lost IsLost(bool farAbove, bool enemyGround, uint32_t deaths15m, Settings const& s)
+{
+    if (!s.hearthLost)
+        return Lost::No;
+    if (farAbove)
+        return Lost::FarAbove;
+    if (enemyGround)
+        return Lost::EnemyGround;
+    return s.hearthDeaths && deaths15m >= s.hearthDeaths ? Lost::Deaths : Lost::No;
+}
+
+inline char const* LostName(Lost l)
+{
+    switch (l)
+    {
+        case Lost::FarAbove: return "far_above";
+        case Lost::EnemyGround: return "enemy_ground";
+        case Lost::Deaths: return "deaths";
+        default: return "no";
+    }
+}
+
+enum class GoHome : uint8_t
+{
+    Stay = 0,
+    Hearth,  // its hearthstone, ready, to a bind point that makes sense
+    Walk,    // a walk to a town of its own level (not for Lost::Deaths: that bot is where it belongs)
+};
+
+inline GoHome HowHome(Lost lost, bool hasStone, bool stoneReady, bool bindOk)
+{
+    if (lost == Lost::No)
+        return GoHome::Stay;
+    if (hasStone && stoneReady && bindOk)
+        return GoHome::Hearth;
+    return lost == Lost::Deaths ? GoHome::Stay : GoHome::Walk;
 }
 }  // namespace Deaths
 

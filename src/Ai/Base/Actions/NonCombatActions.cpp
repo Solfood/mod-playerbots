@@ -5,13 +5,16 @@
  */
 
 #include "NonCombatActions.h"
+#include "BotDeaths.h"
 #include "BotSupplies.h"
 #include "Event.h"
+#include "FleeManager.h"
 #include "MotionMaster.h"
 #include "Playerbots.h"
 
 namespace
 {
+constexpr float LEAVE_YARDS = 40.0f;  // a bot just revived among hostiles walks up to this far away
 constexpr uint32 REST_CHECK_DELAY_MS = 2000;  // a resting bot looks again this often (it reacts to an attack then)
 constexpr uint32 BG_WS_SPELL_WARSONG_FLAG = 23333;
 constexpr uint32 BG_WS_SPELL_SILVERWING_FLAG = 23335;
@@ -152,6 +155,20 @@ bool EatAction::isPossible()
 
 bool RestBeforePullAction::Execute(Event /*event*/)
 {
+    // Just revived with hostiles in reach (BotDeaths): walk away from them first, then rest.
+    if (BotDeaths::LeaveSpot(botAI, bot))
+    {
+        FleeManager manager(bot, LEAVE_YARDS, 0.0f, true, WorldPosition(bot));
+        float x = 0.0f, y = 0.0f, z = 0.0f;
+        if (manager.CalculateDestination(&x, &y, &z))
+        {
+            if (bot->IsSitState())
+                bot->SetStandState(UNIT_STAND_STATE_STAND);
+            bot->GetMotionMaster()->MovePoint(0, x, y, z, FORCED_MOVEMENT_NONE, 0.0f, 0.0f, false);
+            botAI->SetNextCheckDelay(REST_CHECK_DELAY_MS);
+            return true;
+        }
+    }
     bot->ClearUnitState(UNIT_STATE_CHASE);
     bot->ClearUnitState(UNIT_STATE_FOLLOW);
     if (bot->isMoving())

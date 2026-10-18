@@ -8,11 +8,15 @@
 
 #include <algorithm>
 #include <ctime>
+#include <list>
 
 #include "BotSupplies.h"
+#include "CellImpl.h"
 #include "Creature.h"
 #include "DeathRules.h"
 #include "FixedPopulation.h"
+#include "GridNotifiers.h"
+#include "GridNotifiersImpl.h"
 #include "GuideMgr.h"
 #include "Log.h"
 #include "Map.h"
@@ -28,6 +32,10 @@ namespace
 {
 constexpr uint32 SPELL_RESURRECTION_SICKNESS = 15007;
 constexpr uint32 DEATHS_LOGGED_SECONDS = 15 * MINUTE;  // the DEATHLOG line's deaths15m
+constexpr float THREAT_SEARCH_YARDS = 50.0f;           // the widest aggro range a creature has, about
+constexpr float PLAYER_THREAT_YARDS = 40.0f;           // a hostile player this close may attack
+constexpr float BOT_THREAT_MARGIN = 5.0f;              // round the bot itself (its body, a revive spot)
+constexpr uint32 THREAT_CHECK_MS = 2 * IN_MILLISECONDS;
 
 uint32 Now() { return static_cast<uint32>(std::time(nullptr)); }
 
@@ -124,7 +132,7 @@ void BotDeaths::OnJustDied(Player* bot)
                  "DEATHLOG name={} guid={} lvl={} class={} race={} map={} zone={} area={} x={:.1f} y={:.1f} z={:.1f} "
                  "hp_pull={} mana_pull={} pull_age={} attackers={} killer={} killer_lvl={} elite={} activity={} "
                  "guide={} dur={} money={} pet={} rest_gave_up={} sick_pull={} water={} deaths15m={} loop={} "
-                 "revive={} since_revive={} last_spirit={} avoid={}",
+                 "revive={} since_revive={} last_spirit={} avoid={} last_gy={} gy_unsafe={} healer_refused={}",
                  bot->GetName(), bot->GetGUID().GetCounter(), bot->GetLevel(), bot->getClass(), bot->getRace(),
                  bot->GetMapId(), bot->GetZoneId(), bot->GetAreaId(), bot->GetPositionX(), bot->GetPositionY(),
                  bot->GetPositionZ(), d.pullAt ? d.pullHealth : 0, d.pullAt ? d.pullMana : 0,
@@ -133,7 +141,8 @@ void BotDeaths::OnJustDied(Player* bot)
                  botAI->GetAiObjectContext()->GetValue<uint8>("durability")->Get(), bot->GetMoney(), PetState(bot),
                  d.pullRestGaveUp ? 1 : 0, d.pullSick ? 1 : 0, bot->IsUnderWater() ? 1 : 0,
                  Deaths::Within(d.marks, now, DEATHS_LOGGED_SECONDS), loop ? 1 : 0, Deaths::ReviveName(d.revive),
-                 d.revivedAt ? static_cast<int64>(now) - d.revivedAt : -1, d.lastSpirit ? 1 : 0, d.avoid.size());
+                 d.revivedAt ? static_cast<int64>(now) - d.revivedAt : -1, d.lastSpirit ? 1 : 0, d.avoid.size(),
+                 d.lastGrave, d.unsafeGraves, d.healerRefused ? 1 : 0);
 
     // One fight's facts are read once.
     d.pullAt = 0;
@@ -142,6 +151,9 @@ void BotDeaths::OnJustDied(Player* bot)
     d.killerLevel = 0;
     d.killerRank = 0;
     d.lastSpirit = false;
+    d.unsafeGraves = 0;
+    d.healerRefused = false;
+    d.corpseWaitSince = 0;
 }
 
 bool BotDeaths::SpiritRevive(PlayerbotAI* botAI, int64 ghostSeconds)
@@ -150,13 +162,15 @@ bool BotDeaths::SpiritRevive(PlayerbotAI* botAI, int64 ghostSeconds)
            ghostSeconds < SPIRIT_REVIVE_SECONDS;
 }
 
-void BotDeaths::OnSpiritRevive(PlayerbotAI* botAI, Player* bot)
+void BotDeaths::OnSpiritRevive(PlayerbotAI* botAI, Player* bot, uint32 graveId)
 {
     if (!On(botAI, bot))
         return;
     NewRpgInfo& info = botAI->rpgInfo;
     NewRpgInfo::DeathState& d = info.death;
     d.lastSpirit = true;
+    d.lastGrave = graveId;
+    d.lastGraveAt = Now();
     if (d.revive == Deaths::Revive::Corpse)
         return;
     FixedPopulation::Count(EconomyCounter::SpiritRevives);
@@ -178,6 +192,123 @@ void BotDeaths::OnRevived(PlayerbotAI* botAI)
     NewRpgInfo::DeathState& d = botAI->rpgInfo.death;
     d.revive = Deaths::Revive::Corpse;
     d.revivedAt = Now();
+    d.threatCheckMs = 0;  // count the hostiles round the revive spot afresh
+    d.leaveCounted = false;
+    d.corpseWaitSince = 0;
+}
+
+uint32 BotDeaths::Threats(Player* bot, WorldObject const* centre, float margin)
+{
+    if (!centre || !centre->IsInWorld())
+        return 0;
+    float const range = THREAT_SEARCH_YARDS + margin;
+    std::list<Unit*> units;
+    Acore::AnyUnitInObjectRangeCheck check(centre, range);
+    Acore::UnitListSearcher<Acore::AnyUnitInObjectRangeCheck> searcher(centre, units, check);
+    Cell::VisitObjects(centre, searcher, range);
+    uint32 threats = 0;
+    for (Unit* unit : units)
+    {
+        if (unit == bot || !unit->IsInWorld() || !unit->IsAlive() || !unit->IsHostileTo(bot))
+            continue;
+        float const distance = unit->GetDistance(centre);
+        if (Creature* creature = unit->ToCreature())
+        {
+            if (creature->IsCritter() || creature->IsCivilian() || creature->IsTotem() ||
+                creature->HasReactState(REACT_PASSIVE) || creature->IsInEvadeMode())
+                continue;
+            if (distance <= creature->GetAggroRange(bot) + margin)
+                ++threats;
+        }
+        else if (Player* player = unit->ToPlayer())
+        {
+            if (!player->HasPlayerFlag(PLAYER_FLAGS_GHOST) && distance <= PLAYER_THREAT_YARDS + margin)
+                ++threats;
+        }
+    }
+    return threats;
+}
+
+uint32 BotDeaths::ThreatsNear(PlayerbotAI* botAI, Player* bot)
+{
+    NewRpgInfo::DeathState& d = botAI->rpgInfo.death;
+    uint32 const now = getMSTime();
+    if (!d.threatCheckMs || getMSTimeDiff(d.threatCheckMs, now) >= THREAT_CHECK_MS)
+    {
+        d.threatCheckMs = std::max<uint32>(1, now);
+        d.threats = Threats(bot, bot, BOT_THREAT_MARGIN);
+    }
+    return d.threats;
+}
+
+BotDeaths::HealerAnswer BotDeaths::AtHealer(PlayerbotAI* botAI, Player* bot, Creature* healer, uint32 graveId,
+                                            int64 ghostSeconds)
+{
+    if (!On(botAI, bot))
+        return HealerAnswer::Revive;
+    Deaths::Settings const& s = sPlayerbotAIConfig.deaths;
+    NewRpgInfo::DeathState& d = botAI->rpgInfo.death;
+    uint32 const threats = s.healerSafeCheck ? Threats(bot, healer, s.healerSafeMargin) : 0;
+    bool const repeat = Deaths::HealerRepeat(d.lastGrave, d.lastGraveAt, graveId, Now(), s.healerRepeatMinutes);
+    switch (Deaths::AtHealer(true, threats, repeat, d.unsafeGraves,
+                             static_cast<uint32>(std::max<int64>(0, ghostSeconds)), s))
+    {
+        case Deaths::HealerStep::NextGrave:
+            ++d.unsafeGraves;
+            FixedPopulation::Count(EconomyCounter::HealersUnsafe);
+            LOG_DEBUG("playerbots", "Bot {} <{}> will not revive at graveyard {}: {} hostiles, repeat {}",
+                      bot->GetGUID().ToString(), bot->GetName(), graveId, threats, repeat ? 1 : 0);
+            return HealerAnswer::NextGrave;
+        case Deaths::HealerStep::Corpse:
+            ++d.unsafeGraves;
+            d.healerRefused = true;
+            d.revive = Deaths::Revive::Corpse;
+            FixedPopulation::Count(EconomyCounter::HealersUnsafe);
+            FixedPopulation::Count(EconomyCounter::HealerRefusals);
+            return HealerAnswer::Corpse;
+        default:
+            return HealerAnswer::Revive;
+    }
+}
+
+bool BotDeaths::HealerRefused(PlayerbotAI* botAI)
+{
+    return botAI && sPlayerbotAIConfig.fixedPopulation && botAI->rpgInfo.death.healerRefused;
+}
+
+bool BotDeaths::CorpseWait(PlayerbotAI* botAI, Player* bot)
+{
+    if (!On(botAI, bot) || !sPlayerbotAIConfig.deaths.healerSafeCheck)
+        return false;
+    NewRpgInfo::DeathState& d = botAI->rpgInfo.death;
+    uint32 const threats = ThreatsNear(botAI, bot);
+    if (!threats)
+        return false;
+    uint32 const now = Now();
+    if (!d.corpseWaitSince)
+    {
+        d.corpseWaitSince = now;
+        FixedPopulation::Count(EconomyCounter::CorpseWaits);
+    }
+    return Deaths::CorpseWait(threats, now - d.corpseWaitSince, sPlayerbotAIConfig.deaths);
+}
+
+bool BotDeaths::LeaveSpot(PlayerbotAI* botAI, Player* bot)
+{
+    if (!On(botAI, bot) || !bot->IsAlive())
+        return false;
+    NewRpgInfo::DeathState& d = botAI->rpgInfo.death;
+    uint32 const now = Now();
+    if (!d.revivedAt || now - d.revivedAt >= sPlayerbotAIConfig.deaths.leaveSeconds)
+        return false;
+    if (!Deaths::LeaveAfterRevive(now - d.revivedAt, ThreatsNear(botAI, bot), sPlayerbotAIConfig.deaths))
+        return false;
+    if (!d.leaveCounted)
+    {
+        d.leaveCounted = true;
+        FixedPopulation::Count(EconomyCounter::ReviveMoves);
+    }
+    return true;
 }
 
 bool BotDeaths::Avoiding(PlayerbotAI* botAI)

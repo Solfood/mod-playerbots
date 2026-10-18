@@ -13,6 +13,7 @@ class Creature;
 class Player;
 class PlayerbotAI;
 class Unit;
+class WorldObject;
 class WorldPosition;
 
 // Honest world deaths (Deaths:: rules in DeathRules.h): the death log, the death-loop breaker (revive at the spirit
@@ -34,8 +35,30 @@ public:
     // (a healer it cannot reach must not keep it dead; then its body, as before).
     static constexpr int64 SPIRIT_REVIVE_SECONDS = 600;
     static bool SpiritRevive(PlayerbotAI* botAI, int64 ghostSeconds);
-    // Revived at a spirit healer (SpiritHealerAction): a loop's revive rests to full and drops what it was doing.
-    static void OnSpiritRevive(PlayerbotAI* botAI, Player* bot);
+    // Revived at a spirit healer (SpiritHealerAction) of graveyard `graveId`: a loop's revive rests to full and drops
+    // what it was doing.
+    static void OnSpiritRevive(PlayerbotAI* botAI, Player* bot, uint32 graveId);
+    // Units that would attack the bot near `centre`: hostile creatures whose aggro range (by level) plus `margin`
+    // reaches it, and hostile players within 40 yards plus `margin`. A grid search: call it rarely.
+    static uint32 Threats(Player* bot, WorldObject const* centre, float margin);
+    // At a spirit healer, before reviving (honest world): revive here, refuse this graveyard (true: try another), or
+    // refuse healers for this death (its body). Deaths::AtHealer.
+    enum class HealerAnswer : uint8
+    {
+        Revive = 0,
+        NextGrave,
+        Corpse,
+    };
+    static HealerAnswer AtHealer(PlayerbotAI* botAI, Player* bot, Creature* healer, uint32 graveId,
+                                 int64 ghostSeconds);
+    // No safe healer for this death: the stock "5 deaths -> spirit healer" rule waits too.
+    static bool HealerRefused(PlayerbotAI* botAI);
+    // A ghost at its body waits while hostiles reach it (Deaths::CorpseWait).
+    static bool CorpseWait(PlayerbotAI* botAI, Player* bot);
+    // Just revived with hostiles in reach: walk away (the rest action does it) before resting or fighting.
+    static bool LeaveSpot(PlayerbotAI* botAI, Player* bot);
+    // Hostiles round the bot, counted at most every 2 s.
+    static uint32 ThreatsNear(PlayerbotAI* botAI, Player* bot);
     // Alive again, whatever the way (PlayerbotAI's engine change).
     static void OnRevived(PlayerbotAI* botAI);
     // Has spots to keep away from now (cheap: the test before the per-target checks).

@@ -198,6 +198,9 @@ bool BotSupplies::ShouldRest(PlayerbotAI* botAI, Player* bot)
     bool const full = BotDeaths::RestToFull(botAI);
     if ((!s.rest && !full) || !On(botAI, bot) || !bot->IsAlive() || bot->IsInCombat())
         return false;
+    // Just revived with hostiles in reach (BotDeaths): no pull; the rest action walks it away first (no rest clock).
+    if (BotDeaths::LeaveSpot(botAI, bot))
+        return true;
     Supplies::RestState& state = botAI->rpgInfo.rest;
     if (full && state.gaveUp && !state.startMs)
         state.gaveUp = false;  // a rest given up before the death must not stop the full rest after it

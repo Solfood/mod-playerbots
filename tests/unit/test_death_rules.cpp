@@ -132,5 +132,70 @@ int main()
     DetourPoint(5.0f, 5.0f, 5.0f, 5.0f, 0.0f, 0.0f, 100.0f, 30.0f, x, y);  // no line: east of the centre
     CHECK_EQ(130.0f, x);
 
+    // --- Round 2 ---
+    CHECK_TRUE(s.healerSafeCheck);
+    CHECK_EQ(10.0f, s.healerSafeMargin);
+    CHECK_EQ(15u, s.healerRepeatMinutes);
+    CHECK_EQ(3u, s.healerMaxUnsafe);
+    CHECK_EQ(900u, s.healerAnyAfterSeconds);
+    CHECK_EQ(60u, s.corpseWaitSeconds);
+    CHECK_EQ(120u, s.leaveSeconds);
+    CHECK_TRUE(s.sicknessWait);
+    CHECK_EQ(600u, s.sicknessWaitSeconds);
+    CHECK_TRUE(s.hearthLost);
+    CHECK_EQ(3u, s.hearthDeaths);
+
+    // Not the same graveyard twice within 15 minutes.
+    CHECK_TRUE(HealerRepeat(7, 1000, 7, 1899, 15));
+    CHECK_TRUE(!HealerRepeat(7, 1000, 7, 1900, 15));
+    CHECK_TRUE(!HealerRepeat(7, 1000, 8, 1100, 15));
+    CHECK_TRUE(!HealerRepeat(7, 0, 7, 100, 15));  // never used
+
+    // At a healer: safe -> revive; unsafe or a repeat -> next graveyard; the 3rd refusal -> its body.
+    CHECK_TRUE(AtHealer(true, 0, false, 0, 10, s) == HealerStep::Revive);
+    CHECK_TRUE(AtHealer(true, 2, false, 0, 10, s) == HealerStep::NextGrave);
+    CHECK_TRUE(AtHealer(true, 0, true, 1, 10, s) == HealerStep::NextGrave);
+    CHECK_TRUE(AtHealer(true, 1, false, 2, 10, s) == HealerStep::Corpse);
+    CHECK_TRUE(AtHealer(true, 1, false, 0, 900, s) == HealerStep::Revive);  // a long ghost takes any healer
+    CHECK_TRUE(AtHealer(false, 5, true, 0, 10, s) == HealerStep::Revive);   // FixedPopulation off: as before
+    Settings noCheck = s;
+    noCheck.healerSafeCheck = false;
+    CHECK_TRUE(AtHealer(true, 5, true, 0, 10, noCheck) == HealerStep::Revive);
+
+    // Corpse wait, leaving after a revive, sickness wait.
+    CHECK_TRUE(CorpseWait(1, 59, s));
+    CHECK_TRUE(!CorpseWait(1, 60, s));
+    CHECK_TRUE(!CorpseWait(0, 0, s));
+    CHECK_TRUE(LeaveAfterRevive(30, 2, s));
+    CHECK_TRUE(!LeaveAfterRevive(120, 2, s));
+    CHECK_TRUE(!LeaveAfterRevive(5, 0, s));
+    CHECK_TRUE(SicknessWaits(true, true, 1000, 10, s));
+    CHECK_TRUE(!SicknessWaits(true, false, 1000, 10, s));  // a corpse revive brings no sickness wait
+    CHECK_TRUE(!SicknessWaits(true, true, 0, 10, s));
+    CHECK_TRUE(!SicknessWaits(true, true, 1000, 600, s));
+    CHECK_TRUE(!SicknessWaits(false, true, 1000, 10, s));
+
+    // Enemy ground and lost bots.
+    CHECK_TRUE(EnemyGround(AREA_TEAM_HORDE, true));    // a dwarf at Silvermoon
+    CHECK_TRUE(!EnemyGround(AREA_TEAM_HORDE, false));
+    CHECK_TRUE(EnemyGround(AREA_TEAM_ALLIANCE, false));
+    CHECK_TRUE(!EnemyGround(0, true));                 // contested
+    CHECK_TRUE(!EnemyGround(6, true));                 // both
+    CHECK_TRUE(IsLost(true, true, 9, s) == Lost::FarAbove);
+    CHECK_TRUE(IsLost(false, true, 0, s) == Lost::EnemyGround);
+    CHECK_TRUE(IsLost(false, false, 3, s) == Lost::Deaths);
+    CHECK_TRUE(IsLost(false, false, 2, s) == Lost::No);
+    Settings noHearth = s;
+    noHearth.hearthLost = false;
+    CHECK_TRUE(IsLost(true, true, 9, noHearth) == Lost::No);
+    CHECK_EQ(std::string("enemy_ground"), std::string(LostName(Lost::EnemyGround)));
+    CHECK_TRUE(HowHome(Lost::FarAbove, true, true, true) == GoHome::Hearth);
+    CHECK_TRUE(HowHome(Lost::FarAbove, true, false, true) == GoHome::Walk);  // stone on cooldown
+    CHECK_TRUE(HowHome(Lost::EnemyGround, false, true, true) == GoHome::Walk);
+    CHECK_TRUE(HowHome(Lost::FarAbove, true, true, false) == GoHome::Walk);  // bound somewhere bad
+    CHECK_TRUE(HowHome(Lost::Deaths, true, true, true) == GoHome::Hearth);
+    CHECK_TRUE(HowHome(Lost::Deaths, true, false, true) == GoHome::Stay);
+    CHECK_TRUE(HowHome(Lost::No, true, true, true) == GoHome::Stay);
+
     return UnitFailures();
 }

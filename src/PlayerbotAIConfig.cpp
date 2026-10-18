@@ -723,6 +723,16 @@ bool PlayerbotAIConfig::Initialize()
     deaths.zoneGuard = sConfigMgr->GetOption<bool>("AiPlayerbot.FixedPopulation.ZoneGuard", true);
     deaths.zoneGuardLevelGap = sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.ZoneGuardLevelGap", 5);
     deaths.zoneGuardPauseAfter = sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.ZoneGuardPauseAfter", 3);
+    deaths.healerSafeCheck = sConfigMgr->GetOption<bool>("AiPlayerbot.FixedPopulation.HealerSafeCheck", true);
+    deaths.healerSafeMargin = sConfigMgr->GetOption<float>("AiPlayerbot.FixedPopulation.HealerSafeMargin", 10.0f);
+    deaths.healerRepeatMinutes =
+        sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.HealerRepeatMinutes", 15);
+    deaths.healerMaxUnsafe =
+        std::max<uint32>(1, sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.HealerMaxUnsafe", 3));
+    deaths.healerAnyAfterSeconds =
+        sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.HealerAnyAfterSeconds", 900);
+    deaths.corpseWaitSeconds = sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.CorpseWaitSeconds", 60);
+    deaths.leaveSeconds = sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.LeaveAfterReviveSeconds", 120);
     questRoutes.enabled = sConfigMgr->GetOption<bool>("AiPlayerbot.QuestRoutes", false);
     questRoutes.hubSoftCap = sConfigMgr->GetOption<uint32>("AiPlayerbot.QuestRoutes.HubSoftCap", 15);
     questRoutes.safeFightUntilLevel = sConfigMgr->GetOption<uint32>("AiPlayerbot.QuestRoutes.SafeFightUntilLevel", 10);

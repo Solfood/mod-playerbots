@@ -245,6 +245,16 @@ struct NewRpgInfo
         uint32 guardedSteps{0};   // guide steps skipped by the guard this session (ZoneGuardPauseAfter pauses)
         uint32 revivedAt{0};     // unix seconds of its last revive (0 = none this session)
         bool lastSpirit{false};  // that revive was at a spirit healer
+        // Safe healer revives (round 2): the graveyard of its last healer revive, and this ghost walk's refusals (kept
+        // until the next death, for the DEATHLOG line).
+        uint32 lastGrave{0};
+        uint32 lastGraveAt{0};    // unix seconds (0 = never)
+        uint32 unsafeGraves{0};   // graveyards refused on its ghost walk (hostiles in reach, or used just before)
+        bool healerRefused{false};  // no safe healer on this ghost walk: its body instead
+        uint32 corpseWaitSince{0};  // unix seconds it began waiting at its body for hostiles to leave (0 = not)
+        uint32 threatCheckMs{0};  // getMSTime() of the last hostile count round the bot (at most every 2 s)
+        uint32 threats{0};        // that count
+        bool leaveCounted{false};  // this revive's walk away from hostiles was counted
         // The DEATHLOG facts of the fight it is in (or was last in): taken when the fight started.
         uint32 pullAt{0};        // unix seconds (0 = no fight yet)
         uint8 pullHealth{0};
