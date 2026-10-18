@@ -921,6 +921,14 @@ AiPlayerbot.FixedPopulation.LeaveAfterReviveSeconds = 120
 AiPlayerbot.FixedPopulation.HearthLostBots = 1
 AiPlayerbot.FixedPopulation.HearthLostDeaths = 3
 
+# Honest world resurrection sickness (only with FixedPopulation = 1; random bots with no real master, not grouped).
+# SicknessWait: after a revive at a spirit healer a bot rests (sits; eats and drinks if it carries food) while its
+# resurrection sickness lasts, for at most SicknessWaitMaxSeconds, before it walks anywhere or picks a fight (it always
+# fights back). A corpse revive brings no sickness and no wait.
+# Defaults: 1, 600
+AiPlayerbot.FixedPopulation.SicknessWait = 1
+AiPlayerbot.FixedPopulation.SicknessWaitMaxSeconds = 600
+
 # Honest world broken-gear rescue (only with FixedPopulation = 1; random bots with no real master). WornGearRescue: a
 # bot whose gear is below PlaySafeBelowDurability and that can pay its whole repair bill goes to a repairer at once,
 # whatever ErrandCooldownSeconds (not while the cooldown of a town trip it gave up still runs). A bot that dies with

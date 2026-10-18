@@ -89,6 +89,7 @@ enum class EconomyCounter : uint8
     ReviveMoves,          // revived bots that walked away from hostiles before resting
     HearthRescues,        // lost bots that used their hearthstone to go home
     LostWalks,            // lost bots with no hearth that walked toward a town of their own level
+    SicknessWaits,        // rests begun to wait out resurrection sickness after a healer revive
     Count
 };
 

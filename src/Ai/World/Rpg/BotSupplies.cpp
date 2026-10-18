@@ -196,28 +196,32 @@ bool BotSupplies::ShouldRest(PlayerbotAI* botAI, Player* bot)
     Supplies::Settings const& s = sPlayerbotAIConfig.supplies;
     // After a death loop's revive (BotDeaths): to FullRestPct, for up to FullRestMaxSeconds.
     bool const full = BotDeaths::RestToFull(botAI);
-    if ((!s.rest && !full) || !On(botAI, bot) || !bot->IsAlive() || bot->IsInCombat())
+    // After a healer revive (BotDeaths): rest while resurrection sickness lasts, before any walk or fight.
+    bool const sick = BotDeaths::SicknessWait(botAI, bot);
+    if ((!s.rest && !full && !sick) || !On(botAI, bot) || !bot->IsAlive() || bot->IsInCombat())
         return false;
     // Just revived with hostiles in reach (BotDeaths): no pull; the rest action walks it away first (no rest clock).
     if (BotDeaths::LeaveSpot(botAI, bot))
         return true;
     Supplies::RestState& state = botAI->rpgInfo.rest;
-    if (full && state.gaveUp && !state.startMs)
-        state.gaveUp = false;  // a rest given up before the death must not stop the full rest after it
+    if ((full || sick) && state.gaveUp && !state.startMs)
+        state.gaveUp = false;  // a rest given up before the death must not stop the rest after the revive
     bool const usesMana = UsesMana(bot);
     uint32 const health = static_cast<uint32>(bot->GetHealthPct());
     uint32 const mana = usesMana ? static_cast<uint32>(bot->GetPowerPct(POWER_MANA)) : 100;
     bool const fullNeeds =
         full && Deaths::FullRestNeeds(health, mana, usesMana, sPlayerbotAIConfig.deaths.fullRestPct);
-    bool needs = full ? fullNeeds : Supplies::NeedsRest(health, mana, usesMana, state.startMs != 0, s);
+    bool needs = sick || (full ? fullNeeds : Supplies::NeedsRest(health, mana, usesMana, state.startMs != 0, s));
     // Never in a group, a dungeon or a battleground (the group's play decides), nor while something attacks it.
     if (needs && (bot->GetGroup() || bot->InBattleground() || bot->GetMap()->IsDungeon() ||
                   !botAI->GetAiObjectContext()->GetValue<GuidVector>("attackers")->Get().empty()))
         needs = false;
-    Supplies::RestStep const step =
-        Supplies::RestTick(state, needs, getMSTime(), full ? sPlayerbotAIConfig.deaths.fullRestSeconds : s.restSeconds);
+    uint32 const maxSeconds = sick   ? sPlayerbotAIConfig.deaths.sicknessWaitSeconds
+                              : full ? sPlayerbotAIConfig.deaths.fullRestSeconds
+                                     : s.restSeconds;
+    Supplies::RestStep const step = Supplies::RestTick(state, needs, getMSTime(), maxSeconds);
     if (step == Supplies::RestStep::Start)
-        FixedPopulation::Count(EconomyCounter::RestsBeforePull);
+        FixedPopulation::Count(sick ? EconomyCounter::SicknessWaits : EconomyCounter::RestsBeforePull);
     else if (step == Supplies::RestStep::GiveUp)
         FixedPopulation::Count(EconomyCounter::RestsGaveUp);
     if (full && (!fullNeeds || step == Supplies::RestStep::GiveUp))

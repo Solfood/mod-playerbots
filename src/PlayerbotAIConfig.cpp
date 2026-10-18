@@ -734,6 +734,9 @@ bool PlayerbotAIConfig::Initialize()
     deaths.corpseWaitSeconds = sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.CorpseWaitSeconds", 60);
     deaths.leaveSeconds = sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.LeaveAfterReviveSeconds", 120);
     deaths.hearthLost = sConfigMgr->GetOption<bool>("AiPlayerbot.FixedPopulation.HearthLostBots", true);
+    deaths.sicknessWait = sConfigMgr->GetOption<bool>("AiPlayerbot.FixedPopulation.SicknessWait", true);
+    deaths.sicknessWaitSeconds =
+        sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.SicknessWaitMaxSeconds", 600);
     deaths.hearthDeaths = sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.HearthLostDeaths", 3);
     questRoutes.enabled = sConfigMgr->GetOption<bool>("AiPlayerbot.QuestRoutes", false);
     questRoutes.hubSoftCap = sConfigMgr->GetOption<uint32>("AiPlayerbot.QuestRoutes.HubSoftCap", 15);

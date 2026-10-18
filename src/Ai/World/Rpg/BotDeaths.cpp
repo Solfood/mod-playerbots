@@ -22,6 +22,7 @@
 #include "Log.h"
 #include "Map.h"
 #include "Pet.h"
+#include "SpellAuras.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "PlayerbotAIConfig.h"
@@ -409,6 +410,17 @@ bool BotDeaths::RescueNow(PlayerbotAI* botAI, Player* bot)
         sPlayerbotAIConfig.deaths.wornGearRescue, context->GetValue<uint8>("durability")->Get(),
         sPlayerbotAIConfig.fixedPopulationSafeBelow, bot->GetMoney(), context->GetValue<uint32>("repair cost")->Get(),
         info.abandonedTrip != WorldPosition(), TownErrands::CooldownLeftMs(info.lastErrandMs));
+}
+
+bool BotDeaths::SicknessWait(PlayerbotAI* botAI, Player* bot)
+{
+    if (!botAI || !sPlayerbotAIConfig.fixedPopulation || !botAI->rpgInfo.death.lastSpirit)
+        return false;
+    NewRpgInfo::DeathState const& d = botAI->rpgInfo.death;
+    Aura const* sickness = bot->GetAura(SPELL_RESURRECTION_SICKNESS);
+    uint32 const since = d.revivedAt ? Now() - d.revivedAt : 0;
+    return Deaths::SicknessWaits(On(botAI, bot), d.lastSpirit, sickness ? sickness->GetDuration() : 0, since,
+                                 sPlayerbotAIConfig.deaths);
 }
 
 bool BotDeaths::RestToFull(PlayerbotAI* botAI)
