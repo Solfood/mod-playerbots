@@ -87,6 +87,8 @@ enum class EconomyCounter : uint8
     HealerRefusals,       // ghost walks that found no safe healer and went back to the body
     CorpseWaits,          // ghosts that waited at their body for hostiles to leave
     ReviveMoves,          // revived bots that walked away from hostiles before resting
+    HearthRescues,        // lost bots that used their hearthstone to go home
+    LostWalks,            // lost bots with no hearth that walked toward a town of their own level
     Count
 };
 

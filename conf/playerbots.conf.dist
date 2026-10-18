@@ -911,6 +911,16 @@ AiPlayerbot.FixedPopulation.HealerAnyAfterSeconds = 900
 AiPlayerbot.FixedPopulation.CorpseWaitSeconds = 60
 AiPlayerbot.FixedPopulation.LeaveAfterReviveSeconds = 120
 
+# Honest world lost bots (only with FixedPopulation = 1; random bots with no real master, not grouped, not in a dungeon
+# or battleground). A bot is lost in a zone far above it (the ZoneGuardLevelGap rule), on the other faction's ground
+# (an Alliance bot outside Silvermoon), or after HearthLostDeaths deaths in 15 minutes. HearthLostBots: a lost bot uses
+# its own hearthstone when it carries one, its cooldown is over and its bind point is in its own faction's land and not
+# far above it (the core casts it: 10 seconds, interruptible); otherwise a bot lost in a zone or on enemy ground walks
+# toward a town of its own level range (up to 10000 yards away) and one that keeps dying stays where it is.
+# Defaults: 1, 3
+AiPlayerbot.FixedPopulation.HearthLostBots = 1
+AiPlayerbot.FixedPopulation.HearthLostDeaths = 3
+
 # Honest world broken-gear rescue (only with FixedPopulation = 1; random bots with no real master). WornGearRescue: a
 # bot whose gear is below PlaySafeBelowDurability and that can pay its whole repair bill goes to a repairer at once,
 # whatever ErrandCooldownSeconds (not while the cooldown of a town trip it gave up still runs). A bot that dies with

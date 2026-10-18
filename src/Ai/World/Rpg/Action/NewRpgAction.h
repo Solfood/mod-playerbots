@@ -67,6 +67,14 @@ protected:
     // Quest routes, spec §6 retreat and earn (routed bots only): starts and ends the retreat. True if it changed the
     // status.
     bool UpdateRetreat();
+    // Honest world lost bots (BotDeaths::LostNow): its hearthstone home, else a walk toward a town of its own level.
+    // True if it changed the status or hearthed.
+    bool GoHomeIfLost(NewRpgStatus status);
+    static constexpr uint32 HEARTHSTONE_ITEM = 6948;
+    static constexpr uint32 HEARTHSTONE_SPELL = 8690;
+    static constexpr uint32 HEARTH_RETRY_MS = 60 * IN_MILLISECONDS;  // a failed hearth: not again sooner
+    static constexpr float LOST_WALK_YARDS = 10000.0f;  // a lost bot walks to an own-level town this far away
+    static constexpr float TOWN_NEAR_YARDS = 50.0f;     // closer than this it is in town already
     // World of Craft (Plan 6a spec §5 "Guides", rulings P2, P2b), from IDLE, for a guided crafting bot that is not
     // retreating: a craft trip first on its town trip or with the crafting focus, else the guided idle roll (its guide
     // against an aimed gathering trip and, for a crafter, a craft trip in town). True if it changed the status; false =

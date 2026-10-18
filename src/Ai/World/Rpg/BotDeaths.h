@@ -59,6 +59,12 @@ public:
     static bool LeaveSpot(PlayerbotAI* botAI, Player* bot);
     // Hostiles round the bot, counted at most every 2 s.
     static uint32 ThreatsNear(PlayerbotAI* botAI, Player* bot);
+    // Lost (Deaths::IsLost): in a zone far above it, on the other faction's ground, or dying again and again.
+    static uint8 LostNow(PlayerbotAI* botAI, Player* bot);  // a Deaths::Lost
+    // On the other faction's ground: the area's (else its zone's) AreaTable team.
+    static bool OnEnemyGround(Player* bot, uint32 areaId);
+    // Its hearth's bind point is in its own faction's land and not in a zone far above it.
+    static bool BindOk(Player* bot);
     // Alive again, whatever the way (PlayerbotAI's engine change).
     static void OnRevived(PlayerbotAI* botAI);
     // Has spots to keep away from now (cheap: the test before the per-target checks).

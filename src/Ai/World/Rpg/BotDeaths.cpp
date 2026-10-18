@@ -13,6 +13,7 @@
 #include "BotSupplies.h"
 #include "CellImpl.h"
 #include "Creature.h"
+#include "DBCStores.h"
 #include "DeathRules.h"
 #include "FixedPopulation.h"
 #include "GridNotifiers.h"
@@ -269,6 +270,32 @@ BotDeaths::HealerAnswer BotDeaths::AtHealer(PlayerbotAI* botAI, Player* bot, Cre
         default:
             return HealerAnswer::Revive;
     }
+}
+
+bool BotDeaths::OnEnemyGround(Player* bot, uint32 areaId)
+{
+    AreaTableEntry const* area = sAreaTableStore.LookupEntry(areaId);
+    if (area && !area->team && area->zone)
+        area = sAreaTableStore.LookupEntry(area->zone);
+    return area && Deaths::EnemyGround(area->team, bot->GetTeamId() == TEAM_ALLIANCE);
+}
+
+bool BotDeaths::BindOk(Player* bot)
+{
+    AreaTableEntry const* area = sAreaTableStore.LookupEntry(bot->m_homebindAreaId);
+    if (!area)
+        return false;
+    uint32 const zone = area->zone ? area->zone : bot->m_homebindAreaId;
+    return !OnEnemyGround(bot, bot->m_homebindAreaId) && !FarAbove(bot, zone);
+}
+
+uint8 BotDeaths::LostNow(PlayerbotAI* botAI, Player* bot)
+{
+    if (!On(botAI, bot))
+        return static_cast<uint8>(Deaths::Lost::No);
+    return static_cast<uint8>(Deaths::IsLost(FarAbove(bot, bot->GetZoneId()), OnEnemyGround(bot, bot->GetAreaId()),
+                                             Deaths::Within(botAI->rpgInfo.death.marks, Now(), DEATHS_LOGGED_SECONDS),
+                                             sPlayerbotAIConfig.deaths));
 }
 
 bool BotDeaths::HealerRefused(PlayerbotAI* botAI)

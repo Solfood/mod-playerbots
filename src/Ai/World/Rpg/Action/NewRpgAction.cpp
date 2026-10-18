@@ -13,6 +13,7 @@
 #include "ChatHelper.h"
 #include "CraftMgr.h"
 #include "DBCStores.h"
+#include "Map.h"
 #include "EarnedTraining.h"
 #include "FixedPopulation.h"
 #include "GameObject.h"
@@ -328,6 +329,9 @@ bool NewRpgStatusUpdateAction::CheckWornGearAndTownTrip(NewRpgStatus status)
     if (SurvivalRulesOn(bot) && UpdateRetreat())
         return true;
 
+    if (GoHomeIfLost(status))
+        return true;
+
     // A town trip that never arrives (bad path, dying on the way) is given up; the errand cooldown starts.
     if (status == RPG_GO_CAMP)
     {
@@ -397,6 +401,52 @@ bool NewRpgStatusUpdateAction::CheckWornGearAndTownTrip(NewRpgStatus status)
         return true;
     }
     return false;
+}
+
+bool NewRpgStatusUpdateAction::GoHomeIfLost(NewRpgStatus status)
+{
+    if (!sPlayerbotAIConfig.deaths.hearthLost || status == RPG_TRAVEL_FLIGHT || !bot->IsAlive() || bot->IsInCombat() ||
+        bot->IsInFlight() || bot->GetTransport() || bot->GetGroup() || bot->InBattleground() ||
+        bot->GetMap()->IsDungeon())
+        return false;
+    Deaths::Lost const lost = static_cast<Deaths::Lost>(BotDeaths::LostNow(botAI, bot));
+    if (lost == Deaths::Lost::No)
+        return false;
+    NewRpgInfo& info = botAI->rpgInfo;
+    bool const tried = info.death.hearthTryMs && GetMSTimeDiffToNow(info.death.hearthTryMs) < HEARTH_RETRY_MS;
+    bool const ready = !tried && !bot->HasSpellCooldown(HEARTHSTONE_SPELL);
+    switch (Deaths::HowHome(lost, bot->HasItemCount(HEARTHSTONE_ITEM, 1), ready, BotDeaths::BindOk(bot)))
+    {
+        case Deaths::GoHome::Hearth:
+            // Its real hearthstone and cooldown; the cast can be interrupted (then it tries again a minute later).
+            info.death.hearthTryMs = std::max<uint32>(1, getMSTime());
+            if (!botAI->DoSpecificAction("hearthstone", Event(), true))
+                return false;
+            FixedPopulation::Count(EconomyCounter::HearthRescues);
+            LOG_DEBUG("playerbots", "[New RPG] Bot {} (level {}) is lost ({}) in zone {}: hearthstone home",
+                      bot->GetName(), bot->GetLevel(), Deaths::LostName(lost), bot->GetZoneId());
+            GuideMgr::instance().Unseat(bot->GetGUID().GetCounter());
+            info.ChangeToIdle();
+            return true;
+        case Deaths::GoHome::Walk:
+        {
+            // Already on its way or in town; a guided bot's step is handled by the zone guard's own walk out.
+            if (status == RPG_GO_CAMP || status == RPG_WANDER_NPC || status == RPG_FOLLOW_GUIDE)
+                return false;
+            WorldPosition town = TownErrands::NearestTown(bot, true);
+            if (town == WorldPosition())
+                town = TravelMgr::instance().GetNearestTravelHub(bot, TOWN_NEAR_YARDS, LOST_WALK_YARDS,
+                                                                 bot->GetLevel());
+            if (town == WorldPosition())
+                return false;
+            FixedPopulation::Count(EconomyCounter::LostWalks);
+            info.lastErrandMs = getMSTime();
+            info.ChangeToGoCamp(town);
+            return true;
+        }
+        default:
+            return false;
+    }
 }
 
 bool NewRpgStatusUpdateAction::GuidedCraftOrGather()

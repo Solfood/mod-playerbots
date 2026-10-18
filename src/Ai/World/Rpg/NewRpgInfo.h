@@ -255,6 +255,7 @@ struct NewRpgInfo
         uint32 threatCheckMs{0};  // getMSTime() of the last hostile count round the bot (at most every 2 s)
         uint32 threats{0};        // that count
         bool leaveCounted{false};  // this revive's walk away from hostiles was counted
+        uint32 hearthTryMs{0};     // getMSTime() of its last try to hearth home as a lost bot (0 = none)
         // The DEATHLOG facts of the fight it is in (or was last in): taken when the fight started.
         uint32 pullAt{0};        // unix seconds (0 = no fight yet)
         uint8 pullHealth{0};

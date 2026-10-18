@@ -7,6 +7,7 @@
 #include "EconomyCommand.h"
 
 #include "Bag.h"
+#include "BotDeaths.h"
 #include "BotSupplies.h"
 #include "CharacterCache.h"
 #include "Chat.h"
@@ -43,6 +44,8 @@
 namespace
 {
 constexpr uint32 SPELL_RESURRECTION_SICKNESS = 15007;
+constexpr uint32 HEARTHSTONE_ITEM = 6948;
+constexpr uint32 HEARTHSTONE_SPELL = 8690;
 
 std::vector<std::string> SplitArgs(char const* args)
 {
@@ -111,7 +114,8 @@ void Show(ChatHandler* handler, Player* bot)
     handler->PSendSysMessage(
         "ECON name={} guid={} level={} money={} durability={} bags={} dead={} ghost={} sick={} riding={} prof={} "
         "deaths={} rpg={} spells={} randomize={} teleport={} revive={} mounts={} mail={} tools={} map={} zone={} "
-        "held={} focus={} stucktp={} food={} drink={} resting={} short={} avoid={} restfull={} next_revive={}",
+        "held={} focus={} stucktp={} food={} drink={} resting={} short={} avoid={} restfull={} next_revive={} lost={} "
+        "stone={}",
         bot->GetName(), botId, bot->GetLevel(), bot->GetMoney(), context->GetValue<uint8>("durability")->Get(),
         context->GetValue<uint8>("bag space")->Get(), bot->isDead() ? 1 : 0,
         bot->HasPlayerFlag(PLAYER_FLAGS_GHOST) ? 1 : 0, bot->HasAura(SPELL_RESURRECTION_SICKNESS) ? 1 : 0, riding,
@@ -124,7 +128,11 @@ void Show(ChatHandler* handler, Player* bot)
         bot->GetMapId(), bot->GetZoneId(), sRandomPlayerbotMgr.IsHeld(botId) ? 1 : 0, botAI->rpgInfo.focus,
         botAI->rpgInfo.stuckTeleports, food, drink, botAI->rpgInfo.rest.startMs ? 1 : 0,
         botAI->rpgInfo.shortOfMoney ? 1 : 0, botAI->rpgInfo.death.avoid.size(), botAI->rpgInfo.death.restFull ? 1 : 0,
-        Deaths::ReviveName(botAI->rpgInfo.death.revive));
+        Deaths::ReviveName(botAI->rpgInfo.death.revive),
+        Deaths::LostName(static_cast<Deaths::Lost>(BotDeaths::LostNow(botAI, bot))),
+        !bot->HasItemCount(HEARTHSTONE_ITEM, 1)    ? "none"
+        : bot->HasSpellCooldown(HEARTHSTONE_SPELL) ? "cooldown"
+                                                   : "ready");
 }
 
 void Active(ChatHandler* handler)
