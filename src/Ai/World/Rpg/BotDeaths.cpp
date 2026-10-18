@@ -276,9 +276,12 @@ BotDeaths::HealerAnswer BotDeaths::AtHealer(PlayerbotAI* botAI, Player* bot, Cre
 bool BotDeaths::OnEnemyGround(Player* bot, uint32 areaId)
 {
     AreaTableEntry const* area = sAreaTableStore.LookupEntry(areaId);
-    if (area && !area->team && area->zone)
-        area = sAreaTableStore.LookupEntry(area->zone);
-    return area && Deaths::EnemyGround(area->team, bot->GetTeamId() == TEAM_ALLIANCE);
+    if (!area)
+        return false;
+    AreaTableEntry const* zone = area->zone ? sAreaTableStore.LookupEntry(area->zone) : area;
+    uint32 const zoneId = area->zone ? area->zone : areaId;
+    bool const home = zone && ((zone->flags & AREA_FLAG_CAPITAL) || TravelMgr::instance().IsStartingZone(zoneId));
+    return Deaths::EnemyGround(area->team, zone ? zone->team : 0, home, bot->GetTeamId() == TEAM_ALLIANCE);
 }
 
 bool BotDeaths::BindOk(Player* bot)
@@ -323,7 +326,7 @@ bool BotDeaths::CorpseWait(PlayerbotAI* botAI, Player* bot)
 
 bool BotDeaths::LeaveSpot(PlayerbotAI* botAI, Player* bot)
 {
-    if (!On(botAI, bot) || !bot->IsAlive())
+    if (!On(botAI, bot) || !bot->IsAlive() || bot->GetGroup() || bot->InBattleground() || bot->GetMap()->IsDungeon())
         return false;
     NewRpgInfo::DeathState& d = botAI->rpgInfo.death;
     uint32 const now = Now();

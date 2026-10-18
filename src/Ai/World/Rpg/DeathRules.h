@@ -285,6 +285,16 @@ inline bool EnemyGround(uint32_t areaTeam, bool botAlliance)
     return (areaTeam & enemy) && !(areaTeam & own);
 }
 
+// The area's own team decides; an area with none (0) takes its zone's team only when the zone is a faction's home
+// (a capital or a starting zone, `zoneIsHome`). Questing zones carry a team too (the Barrens: Horde, Westfall:
+// Alliance), and their neutral or other-faction towns (Ratchet, Northwatch Hold) have none: those never count.
+inline bool EnemyGround(uint32_t areaTeam, uint32_t zoneTeam, bool zoneIsHome, bool botAlliance)
+{
+    if (areaTeam)
+        return EnemyGround(areaTeam, botAlliance);
+    return zoneIsHome && EnemyGround(zoneTeam, botAlliance);
+}
+
 enum class Lost : uint8_t
 {
     No = 0,

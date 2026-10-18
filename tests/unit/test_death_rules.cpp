@@ -181,6 +181,12 @@ int main()
     CHECK_TRUE(EnemyGround(AREA_TEAM_ALLIANCE, false));
     CHECK_TRUE(!EnemyGround(0, true));                 // contested
     CHECK_TRUE(!EnemyGround(6, true));                 // both
+    // Area first; a teamless area takes its zone's team only in a faction's home (review R2-I2).
+    CHECK_TRUE(!EnemyGround(0, AREA_TEAM_HORDE, false, true));  // Ratchet (team 0) in the Barrens (Horde): not enemy
+    CHECK_TRUE(!EnemyGround(0, AREA_TEAM_HORDE, false, true));  // Northwatch Hold, the same
+    CHECK_TRUE(EnemyGround(0, AREA_TEAM_HORDE, true, true));    // a teamless spot in Eversong (a starting zone)
+    CHECK_TRUE(EnemyGround(AREA_TEAM_HORDE, AREA_TEAM_HORDE, false, true));  // the Crossroads-type town with a team
+    CHECK_TRUE(!EnemyGround(AREA_TEAM_ALLIANCE, AREA_TEAM_HORDE, true, true));  // own town wins
     CHECK_TRUE(IsLost(true, true, 9, s) == Lost::FarAbove);
     CHECK_TRUE(IsLost(false, true, 0, s) == Lost::EnemyGround);
     CHECK_TRUE(IsLost(false, false, 3, s) == Lost::Deaths);

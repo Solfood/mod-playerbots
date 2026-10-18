@@ -67,7 +67,7 @@ bool ReviveFromCorpseAction::Execute(Event event)
     {
         uint32 dCount = AI_VALUE(uint32, "death count");
 
-        if (dCount >= 5)
+        if (dCount >= 5 && !BotDeaths::HealerRefused(botAI))  // honest world: no safe healer for this death
             return botAI->DoSpecificAction("spirit healer");
     }
 

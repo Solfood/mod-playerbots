@@ -433,6 +433,9 @@ bool NewRpgStatusUpdateAction::GoHomeIfLost(NewRpgStatus status)
             // Already on its way or in town; a guided bot's step is handled by the zone guard's own walk out.
             if (status == RPG_GO_CAMP || status == RPG_WANDER_NPC || status == RPG_FOLLOW_GUIDE)
                 return false;
+            // A walk it gave up (the zone guard, the trip timeout): not again until that cooldown has run.
+            if (info.abandonedTrip != WorldPosition() && TownErrands::CooldownLeftMs(info.lastErrandMs))
+                return false;
             WorldPosition town = TownErrands::NearestTown(bot, true);
             if (town == WorldPosition())
                 town = TravelMgr::instance().GetNearestTravelHub(bot, TOWN_NEAR_YARDS, LOST_WALK_YARDS,

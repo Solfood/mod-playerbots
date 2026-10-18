@@ -4564,6 +4564,13 @@ WorldPosition TravelMgr::GetNearestRepairer(Player* bot, float minDistance, floa
     return nearest != WorldPosition() ? nearest : nearestAvoided;
 }
 
+bool TravelMgr::IsStartingZone(uint32 zoneId) const
+{
+    constexpr uint32 START_ZONE_LOW = 5;
+    auto const itr = zone2LevelBracket.find(zoneId);
+    return itr != zone2LevelBracket.end() && itr->second.low <= START_ZONE_LOW;
+}
+
 bool TravelMgr::IsZoneAboveLevel(uint32 zoneId, uint32 level) const
 {
     // Starting zones are listed from level 5 but are made for levels 1-12.

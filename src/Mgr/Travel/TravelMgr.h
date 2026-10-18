@@ -885,6 +885,8 @@ public:
     // True when the zone's level range starts above `level` (starting zones count as open to every level;
     // zones without a known range are never above). Read-only.
     bool IsZoneAboveLevel(uint32 zoneId, uint32 level) const;
+    // A race's starting zone (its level range starts at 5 or lower in the zone level table).
+    bool IsStartingZone(uint32 zoneId) const;
     // Honest world (AiPlayerbot.FixedPopulation): the nearest repairer friendly to the bot's faction on its map,
     // between minDistance and maxDistance yards away, in a zone whose level range does not start above the bot's
     // level. A repairer within 30 yards of `avoid` is passed over while another one is in reach. An empty
