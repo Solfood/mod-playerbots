@@ -115,6 +115,21 @@ inline bool HoldForAuction(uint32_t rankByValue, uint32_t live, uint32_t maxList
 {
     return rankByValue < ListSlots(live, maxListings);
 }
+
+// Final review I1: dust, essences and shards come only from disenchanting, and the core calls an unbound green a bot
+// cannot use an auction item, not a disenchant one; so with every green listed no enchanter could ever level. An
+// enchanter that still has enchanting to learn (skill below its current cap) keeps an uncommon armor piece or weapon it
+// would list, when it has the skill to disenchant it, for its next craft trip to disenchant. At its cap it lists them
+// as before. At most DISENCHANT_KEEP at once (`kept` = how many it already keeps), so they never fill its bags.
+constexpr uint32_t DISENCHANT_KEEP = 4;
+
+inline bool KeepToDisenchant(bool enchanter, uint32_t quality, bool armorOrWeapon, bool auctionItem,
+                             bool disenchantable, uint32_t skill, uint32_t kept, uint32_t maxSkill,
+                             uint32_t requiredSkill)
+{
+    return enchanter && quality == 2 /* ITEM_QUALITY_UNCOMMON */ && armorOrWeapon && auctionItem && disenchantable &&
+           skill >= requiredSkill && skill < maxSkill && kept < DISENCHANT_KEEP;
+}
 // The buyout a visit asks for a stack (Task 10): a returned item it asked `lastPerUnit` for before is relisted at
 // relistPct of that price (spec §4); anything else gets ListPrice of its StartPrice (gear by item level). Never below
 // the vendor value, so it can equal it: callers check WorthListing.

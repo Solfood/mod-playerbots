@@ -51,6 +51,21 @@ int main()
     CHECK_TRUE(HoldForAuction(2, 7, 10));
     CHECK_TRUE(!HoldForAuction(3, 7, 10));
 
+    // final review I1: an enchanter that still has enchanting to learn keeps an unbound green it would list, to
+    // disenchant (at most DISENCHANT_KEEP of them); the auction house does not get it
+    CHECK_TRUE(KeepToDisenchant(true, 2, true, true, true, 40, 1, 75, 20));
+    CHECK_TRUE(KeepToDisenchant(true, 2, true, true, true, 20, 1, 75, 20));     // skill just enough
+    CHECK_TRUE(!KeepToDisenchant(false, 2, true, true, true, 40, 1, 75, 20));   // not an enchanter
+    CHECK_TRUE(!KeepToDisenchant(true, 3, true, true, true, 40, 1, 75, 20));    // blue: not this rule
+    CHECK_TRUE(!KeepToDisenchant(true, 1, true, true, true, 40, 1, 75, 20));    // white: no dust
+    CHECK_TRUE(!KeepToDisenchant(true, 2, false, true, true, 40, 1, 75, 20));   // not armor or a weapon
+    CHECK_TRUE(!KeepToDisenchant(true, 2, true, false, true, 40, 1, 75, 20));   // not an auction item (it needs it)
+    CHECK_TRUE(!KeepToDisenchant(true, 2, true, true, false, 40, 1, 75, 20));   // no disenchant loot
+    CHECK_TRUE(!KeepToDisenchant(true, 2, true, true, true, 19, 1, 75, 20));    // skill too low for it
+    CHECK_TRUE(!KeepToDisenchant(true, 2, true, true, true, 75, 1, 75, 20));    // at its cap: it lists it as before
+    CHECK_TRUE(KeepToDisenchant(true, 2, true, true, true, 40, DISENCHANT_KEEP - 1, 75, 20));
+    CHECK_TRUE(!KeepToDisenchant(true, 2, true, true, true, 40, DISENCHANT_KEEP, 75, 20));  // bags: at most a few
+
     // buying: an upgrade it can pay for and still repair; a missing material cheaper than what it makes
     CHECK_TRUE(BuyGear(true, 500, 1000, 400));
     CHECK_TRUE(!BuyGear(true, 700, 1000, 400));   // it would spend its repair reserve

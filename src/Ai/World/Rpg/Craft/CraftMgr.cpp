@@ -640,16 +640,44 @@ bool CraftMgr::StartTrip(PlayerbotAI* botAI, Player* bot) const
     return true;
 }
 
-std::vector<Item*> CraftMgr::HeldForAuction(PlayerbotAI* botAI, Player* /*bot*/) const
+std::vector<Item*> CraftMgr::KeptToDisenchant(PlayerbotAI* botAI, Player* bot) const
+{
+    std::vector<Item*> kept;
+    if (!Crafting(bot) || !bot->HasSkill(SKILL_ENCHANTING))
+        return kept;  // crafting off: nothing is kept, exactly as before
+    AiObjectContext* context = botAI->GetAiObjectContext();
+    uint32 const skill = bot->GetSkillValue(SKILL_ENCHANTING);
+    uint32 const maxSkill = bot->GetMaxSkillValue(SKILL_ENCHANTING);
+    for (Item* item : botAI->GetInventoryItems())
+    {
+        ItemTemplate const* proto = item->GetTemplate();
+        if (proto->Quality != ITEM_QUALITY_UNCOMMON)
+            continue;  // the cheap test first: the usage lookup below runs only for greens
+        bool const auctionItem =
+            context->GetValue<ItemUsage>("item usage", proto->ItemId)->Get() == ITEM_USAGE_AH;
+        if (::Craft::KeepToDisenchant(true, proto->Quality,
+                                      proto->Class == ITEM_CLASS_ARMOR || proto->Class == ITEM_CLASS_WEAPON,
+                                      auctionItem, proto->DisenchantID != 0, skill, uint32(kept.size()), maxSkill,
+                                      proto->RequiredDisenchantSkill))
+            kept.push_back(item);
+    }
+    return kept;
+}
+
+std::vector<Item*> CraftMgr::HeldForAuction(PlayerbotAI* botAI, Player* bot) const
 {
     NewRpgInfo::CraftState const& state = botAI->rpgInfo.craft;
     ::Craft::Settings const& s = sPlayerbotAIConfig.crafting;
     AiObjectContext* context = botAI->GetAiObjectContext();
     uint32 const now = getMSTime();
+    // Final review I1: what an enchanter keeps to disenchant is not listed (crafting off: none).
+    std::vector<Item*> const disenchant = KeptToDisenchant(botAI, bot);
     std::vector<std::pair<uint64, Item*>> listable;
     for (Item* item : botAI->GetInventoryItems())
     {
         ItemTemplate const* proto = item->GetTemplate();
+        if (std::find(disenchant.begin(), disenchant.end(), item) != disenchant.end())
+            continue;
         // What the core's sell handler refuses is never held (soulbound, untradable, conjured, timed).
         if (!proto->SellPrice || item->IsSoulBound() || !item->CanBeTraded() || proto->HasFlag(ITEM_FLAG_CONJURED) ||
             item->GetUInt32Value(ITEM_FIELD_DURATION))
@@ -687,6 +715,9 @@ uint32 CraftMgr::ListableCount(PlayerbotAI* botAI, Player* bot) const
         state.listable = static_cast<uint32>(held.size());
         state.heldItems.clear();
         for (Item* item : held)
+            state.heldItems.insert(item->GetGUID());
+        // Final review I1: the greens it keeps to disenchant are kept from the vendor too (not counted as listable).
+        for (Item* item : KeptToDisenchant(botAI, bot))
             state.heldItems.insert(item->GetGUID());
         state.listableAtMs = std::max<uint32>(1, now);
     }

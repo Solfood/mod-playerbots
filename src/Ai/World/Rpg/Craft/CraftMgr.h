@@ -122,6 +122,10 @@ public:
     // What it holds back for its next auction visit (spec §4 "What it lists"), best value first, at most one stack per
     // free listing slot. Map or world thread (the bot's own data).
     std::vector<Item*> HeldForAuction(PlayerbotAI* botAI, Player* bot) const;
+    // Final review I1: the unbound greens an enchanter keeps for its next craft trip to disenchant
+    // (Craft::KeepToDisenchant); never held for the auction house, but kept from the vendor with the held items. Empty
+    // when the bot is not crafting.
+    std::vector<Item*> KeptToDisenchant(PlayerbotAI* botAI, Player* bot) const;
     // HeldForAuction's size, counted at most once a minute (the errand check runs every few seconds); the held items
     // are kept with it (CraftState::heldItems).
     uint32 ListableCount(PlayerbotAI* botAI, Player* bot) const;

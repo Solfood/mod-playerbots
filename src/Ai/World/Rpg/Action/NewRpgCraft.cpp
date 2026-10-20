@@ -313,13 +313,17 @@ bool NewRpgCraftAction::UseResults(NewRpgInfo::CraftTrip& trip)
     if (bot->IsNonMeleeSpellCast(false))
         return true;
     // spec §3: an enchanter disenchants the green items it can neither use nor sell, one a tick, each tried once. The
-    // core destroys the item when the bot's loot handler ("store loot") takes the dust and releases the loot.
+    // core destroys the item when the bot's loot handler ("store loot") takes the dust and releases the loot. Final
+    // review I1: also the unbound greens it keeps to disenchant while it has enchanting to learn (KeptToDisenchant).
     if (bot->HasSkill(SKILL_ENCHANTING))
+    {
+        std::vector<Item*> const keep = CraftMgr::instance().KeptToDisenchant(botAI, bot);
         for (Item* item : botAI->GetInventoryItems())
         {
             if (item->GetTemplate()->Quality != ITEM_QUALITY_UNCOMMON || trip.tried.count(item->GetGUID().GetCounter()))
                 continue;
-            if (AI_VALUE2(ItemUsage, "item usage", item->GetEntry()) != ITEM_USAGE_DISENCHANT)
+            if (AI_VALUE2(ItemUsage, "item usage", item->GetEntry()) != ITEM_USAGE_DISENCHANT &&
+                std::find(keep.begin(), keep.end(), item) == keep.end())
                 continue;
             trip.atWork = true;  // GM-BOTAI-0125: on foot while it disenchants
             trip.atWorkPos = WorldPosition(bot);
@@ -329,6 +333,7 @@ bool NewRpgCraftAction::UseResults(NewRpgInfo::CraftTrip& trip)
             if (botAI->CastSpell(SPELL_DISENCHANT, bot, item))
                 return true;
         }
+    }
     // Wear what it made that beats what it wears (the same upgrade test the equip action uses), then count it.
     botAI->DoSpecificAction("equip upgrade", Event(), true);
     for (uint32 product : trip.products)
