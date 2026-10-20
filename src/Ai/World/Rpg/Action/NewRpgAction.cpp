@@ -350,10 +350,25 @@ bool NewRpgStatusUpdateAction::CheckWornGearAndTownTrip(NewRpgStatus status)
 
     // Leave for town in time, not only when the activity ends (one bad fight costs 10% and a spirit healer 25%). A
     // broken main hand it can pay for goes now too, whatever the rest of its gear (fix round GM-BOTAI-0092).
-    if ((AI_VALUE(uint8, "durability") < sPlayerbotAIConfig.fixedPopulationRepairBelow ||
-         TownErrands::RepairWeaponNow(botAI, bot)) &&
-        GoRunErrands(true))
-        return true;
+    if (AI_VALUE(uint8, "durability") < sPlayerbotAIConfig.fixedPopulationRepairBelow ||
+        TownErrands::RepairWeaponNow(botAI, bot))
+    {
+        // World of Craft final review M5: a craft trip the repair trip replaces ends as NewRpgCraftAction::End(true)
+        // would: counted as given up, and the cooldown runs when it made nothing (crafting off: never a craft trip).
+        auto const* craftTrip = status == RPG_CRAFT ? std::get_if<NewRpgInfo::CraftTrip>(&info.data) : nullptr;
+        uint32 const craftMade = craftTrip ? craftTrip->made : 0;
+        if (GoRunErrands(true))
+        {
+            if (craftTrip)
+            {
+                FixedPopulation::Count(EconomyCounter::CraftTripsAbandoned);
+                bool const cooldown =
+                    Craft::CooldownAfterTrip(craftMade, sPlayerbotAIConfig.crafting.emptyCooldownMinutes) != 0;
+                info.craft.emptyAtMs = cooldown ? std::max<uint32>(1, getMSTime()) : 0;
+            }
+            return true;
+        }
+    }
     info.death.repairFirst = false;  // no repair trip under way or starting: it plays on (safely, if worn out)
 
     bool const playSafe = TownErrands::PlaySafe(botAI, bot);

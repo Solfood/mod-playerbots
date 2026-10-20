@@ -299,13 +299,14 @@ bool NewRpgCraftAction::Make(NewRpgInfo::CraftTrip& trip)
     return true;
 }
 
-bool NewRpgCraftAction::WearsOwn(uint32 entry) const
+GuidSet NewRpgCraftAction::OwnWorn() const
 {
+    GuidSet worn;
     for (uint8 slot = EQUIPMENT_SLOT_START; slot < EQUIPMENT_SLOT_END; ++slot)
         if (Item* item = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slot))
-            if (item->GetEntry() == entry && item->GetGuidValue(ITEM_FIELD_CREATOR) == bot->GetGUID())
-                return true;
-    return false;
+            if (item->GetGuidValue(ITEM_FIELD_CREATOR) == bot->GetGUID())
+                worn.insert(item->GetGUID());
+    return worn;
 }
 
 bool NewRpgCraftAction::UseResults(NewRpgInfo::CraftTrip& trip)
@@ -334,10 +335,14 @@ bool NewRpgCraftAction::UseResults(NewRpgInfo::CraftTrip& trip)
                 return true;
         }
     }
-    // Wear what it made that beats what it wears (the same upgrade test the equip action uses), then count it.
+    // Wear what it made that beats what it wears (the same upgrade test the equip action uses), then count it: only a
+    // piece it put on now (final review M1: an older copy it already wore is not counted again).
+    GuidSet const before = OwnWorn();
     botAI->DoSpecificAction("equip upgrade", Event(), true);
-    for (uint32 product : trip.products)
-        if (WearsOwn(product))
-            FixedPopulation::Count(EconomyCounter::CraftsEquipped);
+    for (ObjectGuid const& guid : OwnWorn())
+        if (!before.count(guid))
+            if (Item* item = bot->GetItemByGuid(guid))
+                if (std::find(trip.products.begin(), trip.products.end(), item->GetEntry()) != trip.products.end())
+                    FixedPopulation::Count(EconomyCounter::CraftsEquipped);
     return End(false);
 }

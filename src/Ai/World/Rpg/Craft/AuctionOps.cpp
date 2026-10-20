@@ -18,6 +18,7 @@
 #include "EarnedTraining.h"
 #include "FixedPopulation.h"
 #include "Item.h"
+#include "Mail.h"
 #include "ItemUsageValue.h"
 #include "MarketRules.h"
 #include "NewRpgInfo.h"
@@ -142,6 +143,19 @@ void AuctionVisitOperation::Buy(Player* bot, PlayerbotAI* botAI, Creature* npc, 
     uint64 const reserve = EarnedTraining::RepairReserve(bot);
     std::unordered_map<uint32, bool> upgrade;      // item -> the upgrade test, judged once a visit
     std::unordered_set<uint32> slots;              // equipment slots it picked an upgrade for (Craft::GearSlot)
+    // Final review M3: gear it won on an earlier visit waits in its mailbox until it collects and wears it; that slot
+    // gets no second upgrade meanwhile (the upgrade test reads only its bags and gear).
+    for (Mail const* mail : bot->GetMails())
+    {
+        uint32_t item = 0;
+        uint32_t answer = 0;
+        if (mail->state == MAIL_STATE_DELETED || mail->messageType != MAIL_AUCTION || !mail->HasItems() ||
+            !::Craft::ReadAuctionMailSubject(mail->subject, item, answer) || answer != AUCTION_WON)
+            continue;
+        if (ItemTemplate const* won = sObjectMgr->GetItemTemplate(item))
+            if (won->InventoryType != INVTYPE_NON_EQUIP)
+                slots.insert(::Craft::GearSlot(won->InventoryType));
+    }
     struct Pick
     {
         uint32 id;        // the auction

@@ -37,7 +37,8 @@ private:
     // Ends the trip: the cooldown if it made nothing; counted when it was given up before its results were used.
     bool End(bool abandoned);
     bool BuyFrom(Creature* npc, VendorItemData const* list, uint32 item, uint32 count);
-    bool WearsOwn(uint32 entry) const;
+    // The pieces it made itself that it wears now (final review M1: crafts_equipped counts only new ones).
+    GuidSet OwnWorn() const;
     // Ready to cast `spell` where it stands: not moving, standing, not mounted, and in no form that blocks `spell`.
     // False: it fixed one of them this tick, and casts on a later tick (PlayerbotAI::CastSpell refuses a cast while it
     // moves or sits; that is no refusal by the core, so the step must not be skipped for it).

@@ -5,7 +5,12 @@
  */
 
 #include "MaintenanceValues.h"
+
+#include <algorithm>
+
 #include "BudgetValues.h"
+#include "CraftMgr.h"
+#include "Item.h"
 #include "ItemUsageValue.h"
 #include "Playerbots.h"
 
@@ -40,8 +45,14 @@ bool ShouldSellValue::Calculate() { return AI_VALUE(uint8, "bag space") > 80; }
 
 bool CanSellValue::Calculate()
 {
-    return (AI_VALUE2(uint32, "item count", "usage " + std::to_string(ITEM_USAGE_VENDOR)) +
-            AI_VALUE2(uint32, "item count", "usage " + std::to_string(ITEM_USAGE_AH))) > 1;
+    uint32 count = AI_VALUE2(uint32, "item count", "usage " + std::to_string(ITEM_USAGE_VENDOR)) +
+                   AI_VALUE2(uint32, "item count", "usage " + std::to_string(ITEM_USAGE_AH));
+    // World of Craft final review M2: what it holds back from the vendor (auction or disenchant) is nothing to sell, so
+    // held stacks alone never send it to a vendor that buys nothing. Crafting off: nothing is held, exactly as before.
+    for (ObjectGuid const& guid : CraftMgr::instance().HeldGuids(botAI, bot))
+        if (Item* item = bot->GetItemByGuid(guid))
+            count -= std::min(count, item->GetCount());
+    return count > 1;
 }
 
 bool CanTrainValue::Calculate()

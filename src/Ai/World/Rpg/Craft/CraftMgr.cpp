@@ -640,6 +640,17 @@ bool CraftMgr::StartTrip(PlayerbotAI* botAI, Player* bot) const
     return true;
 }
 
+namespace
+{
+// Final review M7: the tools the training pass buys (pick, knife, hammer, copper rod). A crafting bot neither lists
+// nor vendors one, so it never sells one and buys it again.
+bool IsTrainingTool(uint32 entry)
+{
+    return entry == EarnedTraining::ITEM_MINING_PICK || entry == EarnedTraining::ITEM_SKINNING_KNIFE ||
+           entry == EarnedTraining::ITEM_BLACKSMITH_HAMMER || entry == EarnedTraining::ITEM_COPPER_ROD;
+}
+}  // namespace
+
 std::vector<Item*> CraftMgr::KeptToDisenchant(PlayerbotAI* botAI, Player* bot) const
 {
     std::vector<Item*> kept;
@@ -678,6 +689,8 @@ std::vector<Item*> CraftMgr::HeldForAuction(PlayerbotAI* botAI, Player* bot) con
         ItemTemplate const* proto = item->GetTemplate();
         if (std::find(disenchant.begin(), disenchant.end(), item) != disenchant.end())
             continue;
+        if (IsTrainingTool(proto->ItemId))
+            continue;  // final review M7: never listed (kept from the vendor too, ListableCount)
         // What the core's sell handler refuses is never held (soulbound, untradable, conjured, timed).
         if (!proto->SellPrice || item->IsSoulBound() || !item->CanBeTraded() || proto->HasFlag(ITEM_FLAG_CONJURED) ||
             item->GetUInt32Value(ITEM_FIELD_DURATION))
@@ -716,9 +729,14 @@ uint32 CraftMgr::ListableCount(PlayerbotAI* botAI, Player* bot) const
         state.heldItems.clear();
         for (Item* item : held)
             state.heldItems.insert(item->GetGUID());
-        // Final review I1: the greens it keeps to disenchant are kept from the vendor too (not counted as listable).
+        // Final review I1: the greens it keeps to disenchant are kept from the vendor too (not counted as listable);
+        // M7: so are its training tools. Crafting off: nothing (HeldGuids is empty then anyway).
         for (Item* item : KeptToDisenchant(botAI, bot))
             state.heldItems.insert(item->GetGUID());
+        if (Crafting(bot))
+            for (Item* item : botAI->GetInventoryItems())
+                if (IsTrainingTool(item->GetEntry()))
+                    state.heldItems.insert(item->GetGUID());
         state.listableAtMs = std::max<uint32>(1, now);
     }
     return state.listable;
