@@ -543,6 +543,23 @@ bool SpiritHealerAction::ExecuteHonest(Corpse* corpse)
         return FailHonestAttempt(grave, "cannot walk to the spirit healer");
     }
 
+    // Honest world (BotDeaths): the core revives the bot here, then puts it at the graveyard nearest its body when
+    // that is not the one nearest the ghost (WorldSession::SendSpiritResurrect, the same calls). Not when that
+    // landing is unsafe: its body instead, after the corpse wait.
+    GraveyardStruct const* landing = grave;
+    if (GraveyardStruct const* corpseGrave = sGraveyard->GetClosestGraveyard(bot, bot->GetTeamId(), bot->HasCorpse()))
+        if (corpseGrave != sGraveyard->GetClosestGraveyard(bot, bot->GetTeamId()))
+            landing = corpseGrave;
+    bool const landingRefused = std::find(avoidGraves.begin(), avoidGraves.end(), landing->ID) != avoidGraves.end();
+    if (BotDeaths::AtLanding(botAI, bot, landing, grave->ID, landingRefused, now - corpse->GetGhostTime()) ==
+        BotDeaths::HealerAnswer::Corpse)
+    {
+        avoidGraves.clear();
+        honestGrave = 0;
+        ResetHonestAttempts();
+        return false;
+    }
+
     // Honest world (BotDeaths): not with hostiles in reach of the healer, nor at the graveyard of its last healer
     // revive; another graveyard, or after HealerMaxUnsafe refusals its body.
     switch (BotDeaths::AtHealer(botAI, bot, healer, grave->ID, now - corpse->GetGhostTime()))
@@ -575,7 +592,8 @@ bool SpiritHealerAction::ExecuteHonest(Corpse* corpse)
               bot->GetTeamId() == TEAM_ALLIANCE ? "A" : "H", bot->GetLevel(), bot->GetName());
     context->GetValue<uint32>("death count")->Set(0);
     FixedPopulation::Count(EconomyCounter::SpiritHealerResurrections);
-    BotDeaths::OnSpiritRevive(botAI, bot, grave->ID);  // a loop: rest to full, choose again away from the spot
+    // Where the core put it (`landing`): the repeat rule and the death log's last_gy compare with that.
+    BotDeaths::OnSpiritRevive(botAI, bot, landing->ID);  // a loop: rest to full, choose again away from the spot
     avoidGraves.clear();
     honestGrave = 0;
     ResetHonestAttempts();

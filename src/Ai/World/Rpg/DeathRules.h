@@ -257,6 +257,19 @@ inline HealerStep AtHealer(bool on, uint32_t threats, bool repeat, uint32_t refu
     return refused + 1 >= s.healerMaxUnsafe ? HealerStep::Corpse : HealerStep::NextGrave;
 }
 
+// Where the core puts a bot revived at a healer: the graveyard nearest its body, `landing` (0 = none), when that is
+// not the healer's own graveyard `healerGrave` (AzerothCore WorldSession::SendSpiritResurrect, a far healer is no free
+// travel). Revive at this healer only when that landing is safe: not refused on this ghost walk (`refused`), not the
+// graveyard of its last revive within healerRepeatMinutes (`repeat`), no hostiles in reach of it (`threats`). Else its
+// body (after the corpse wait). A ghost of healerAnyAfterSeconds takes any healer, as AtHealer.
+inline bool LandingSafe(bool on, uint32_t landing, uint32_t healerGrave, bool refused, bool repeat, uint32_t threats,
+                        uint32_t ghostSeconds, Settings const& s)
+{
+    if (!on || !s.healerSafeCheck || !landing || landing == healerGrave || ghostSeconds >= s.healerAnyAfterSeconds)
+        return true;
+    return !refused && !repeat && !threats;
+}
+
 // At its body: wait (ghosts are safe) while hostiles reach it, for at most corpseWaitSeconds after the first wait.
 inline bool CorpseWait(uint32_t threats, uint32_t waitedSeconds, Settings const& s)
 {

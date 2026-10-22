@@ -161,6 +161,16 @@ int main()
     Settings noCheck = s;
     noCheck.healerSafeCheck = false;
     CHECK_TRUE(AtHealer(true, 5, true, 0, 10, noCheck) == HealerStep::Revive);
+    // The core's landing (the graveyard nearest the body) must be safe too (guard loop, Hillsbrad 1452).
+    CHECK_TRUE(LandingSafe(true, 98, 98, true, true, 5, 10, s));        // lands where it revives: AtHealer decides
+    CHECK_TRUE(LandingSafe(true, 0, 98, true, true, 5, 10, s));         // no landing predicted: no move
+    CHECK_TRUE(!LandingSafe(true, 1452, 98, true, false, 0, 10, s));    // refused on this ghost walk
+    CHECK_TRUE(!LandingSafe(true, 1452, 98, false, true, 0, 10, s));    // its last revive's graveyard (15 min)
+    CHECK_TRUE(!LandingSafe(true, 1452, 98, false, false, 2, 10, s));   // hostiles in reach of the landing
+    CHECK_TRUE(LandingSafe(true, 1452, 98, false, false, 0, 10, s));    // a safe landing elsewhere
+    CHECK_TRUE(LandingSafe(true, 1452, 98, true, true, 5, 900, s));     // a long ghost takes any healer
+    CHECK_TRUE(LandingSafe(false, 1452, 98, true, true, 5, 10, s));     // FixedPopulation off: as before
+    CHECK_TRUE(LandingSafe(true, 1452, 98, true, true, 5, 10, noCheck));  // the safe check off: as before
 
     // Corpse wait, leaving after a revive, sickness wait.
     CHECK_TRUE(CorpseWait(1, 59, s));

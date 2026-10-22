@@ -15,6 +15,7 @@ class PlayerbotAI;
 class Unit;
 class WorldObject;
 class WorldPosition;
+struct GraveyardStruct;
 
 // Honest world deaths (Deaths:: rules in DeathRules.h): the death log, the death-loop breaker (revive at the spirit
 // healer, keep away from the spot, rest to full). Random bots with no real master only (BotSupplies::On), and only
@@ -41,6 +42,8 @@ public:
     // Units that would attack the bot near `centre`: hostile creatures whose aggro range (by level) plus `margin`
     // reaches it, and hostile players within 40 yards plus `margin`. A grid search: call it rarely.
     static uint32 Threats(Player* bot, WorldObject const* centre, float margin);
+    // The same round a point of the bot's map with no object on it (a graveyard). A grid not loaded counts 0.
+    static uint32 ThreatsAt(Player* bot, uint32 mapId, float x, float y, float z, float margin);
     // At a spirit healer, before reviving (honest world): revive here, refuse this graveyard (true: try another), or
     // refuse healers for this death (its body). Deaths::AtHealer.
     enum class HealerAnswer : uint8
@@ -51,6 +54,11 @@ public:
     };
     static HealerAnswer AtHealer(PlayerbotAI* botAI, Player* bot, Creature* healer, uint32 graveId,
                                  int64 ghostSeconds);
+    // At a healer of graveyard `graveId` the core would put the revived bot at `landing` (the graveyard nearest its
+    // body; null or graveId: it stays). Revive, or its body when that landing is unsafe (Deaths::LandingSafe;
+    // `refused`: the landing was refused on this ghost walk). Never NextGrave: every healer here lands it there.
+    static HealerAnswer AtLanding(PlayerbotAI* botAI, Player* bot, GraveyardStruct const* landing, uint32 graveId,
+                                  bool refused, int64 ghostSeconds);
     // No safe healer for this death: the stock "5 deaths -> spirit healer" rule waits too.
     static bool HealerRefused(PlayerbotAI* botAI);
     // A ghost at its body waits while hostiles reach it (Deaths::CorpseWait).

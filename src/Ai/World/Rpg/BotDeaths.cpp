@@ -16,6 +16,7 @@
 #include "DBCStores.h"
 #include "DeathRules.h"
 #include "FixedPopulation.h"
+#include "GameGraveyard.h"
 #include "GridNotifiers.h"
 #include "GridNotifiersImpl.h"
 #include "GuideMgr.h"
@@ -63,6 +64,32 @@ std::string PetState(Player* bot)
         return "dead";
     return std::to_string(static_cast<uint32>(pet->GetHealthPct()));
 }
+
+// A unit `distance` yards from a centre would attack the bot there: a hostile creature whose aggro range (by level)
+// plus `margin` reaches it (not a critter, civilian, totem, passive or evading one), or a hostile live player within
+// PLAYER_THREAT_YARDS plus `margin`.
+bool IsThreat(Player* bot, Unit* unit, float distance, float margin)
+{
+    if (unit == bot || !unit->IsInWorld() || !unit->IsAlive() || !unit->IsHostileTo(bot))
+        return false;
+    if (Creature* creature = unit->ToCreature())
+    {
+        if (creature->IsCritter() || creature->IsCivilian() || creature->IsTotem() ||
+            creature->HasReactState(REACT_PASSIVE) || creature->IsInEvadeMode())
+            return false;
+        return distance <= creature->GetAggroRange(bot) + margin;
+    }
+    if (Player* player = unit->ToPlayer())
+        return !player->HasPlayerFlag(PLAYER_FLAGS_GHOST) && distance <= PLAYER_THREAT_YARDS + margin;
+    return false;
+}
+
+// Live units within `range` yards of a point (the grid search round a spot with no object on it).
+struct UnitNearPoint
+{
+    float x, y, z, range;
+    bool operator()(Unit* u) const { return u->IsAlive() && u->IsWithinDist3d(x, y, z, range); }
+};
 }  // namespace
 
 bool BotDeaths::On(PlayerbotAI* botAI, Player* bot) { return BotSupplies::On(botAI, bot); }
@@ -210,24 +237,24 @@ uint32 BotDeaths::Threats(Player* bot, WorldObject const* centre, float margin)
     Cell::VisitObjects(centre, searcher, range);
     uint32 threats = 0;
     for (Unit* unit : units)
-    {
-        if (unit == bot || !unit->IsInWorld() || !unit->IsAlive() || !unit->IsHostileTo(bot))
-            continue;
-        float const distance = unit->GetDistance(centre);
-        if (Creature* creature = unit->ToCreature())
-        {
-            if (creature->IsCritter() || creature->IsCivilian() || creature->IsTotem() ||
-                creature->HasReactState(REACT_PASSIVE) || creature->IsInEvadeMode())
-                continue;
-            if (distance <= creature->GetAggroRange(bot) + margin)
-                ++threats;
-        }
-        else if (Player* player = unit->ToPlayer())
-        {
-            if (!player->HasPlayerFlag(PLAYER_FLAGS_GHOST) && distance <= PLAYER_THREAT_YARDS + margin)
-                ++threats;
-        }
-    }
+        if (IsThreat(bot, unit, unit->GetDistance(centre), margin))
+            ++threats;
+    return threats;
+}
+
+uint32 BotDeaths::ThreatsAt(Player* bot, uint32 mapId, float x, float y, float z, float margin)
+{
+    if (!bot || !bot->IsInWorld() || bot->GetMapId() != mapId)
+        return 0;
+    float const range = THREAT_SEARCH_YARDS + margin;
+    std::list<Unit*> units;
+    UnitNearPoint check{x, y, z, range};
+    Acore::UnitListSearcher<UnitNearPoint> searcher(bot, units, check);
+    Cell::VisitObjects(x, y, bot->GetMap(), searcher, range);  // a grid not loaded holds no one: 0
+    uint32 threats = 0;
+    for (Unit* unit : units)
+        if (IsThreat(bot, unit, unit->GetDistance(x, y, z), margin))
+            ++threats;
     return threats;
 }
 
@@ -271,6 +298,31 @@ BotDeaths::HealerAnswer BotDeaths::AtHealer(PlayerbotAI* botAI, Player* bot, Cre
         default:
             return HealerAnswer::Revive;
     }
+}
+
+BotDeaths::HealerAnswer BotDeaths::AtLanding(PlayerbotAI* botAI, Player* bot, GraveyardStruct const* landing,
+                                             uint32 graveId, bool refused, int64 ghostSeconds)
+{
+    if (!On(botAI, bot) || !landing || landing->ID == graveId)
+        return HealerAnswer::Revive;
+    Deaths::Settings const& s = sPlayerbotAIConfig.deaths;
+    NewRpgInfo::DeathState& d = botAI->rpgInfo.death;
+    uint32 const ghost = static_cast<uint32>(std::max<int64>(0, ghostSeconds));
+    bool const repeat = Deaths::HealerRepeat(d.lastGrave, d.lastGraveAt, landing->ID, Now(), s.healerRepeatMinutes);
+    // The grid search only when the cheap answers leave it open.
+    bool const decided = !s.healerSafeCheck || ghost >= s.healerAnyAfterSeconds || refused || repeat;
+    uint32 const threats =
+        decided ? 0 : ThreatsAt(bot, landing->Map, landing->x, landing->y, landing->z, s.healerSafeMargin);
+    if (Deaths::LandingSafe(true, landing->ID, graveId, refused, repeat, threats, ghost, s))
+        return HealerAnswer::Revive;
+    d.healerRefused = true;
+    d.revive = Deaths::Revive::Corpse;
+    FixedPopulation::Count(EconomyCounter::HealerRefusals);
+    FixedPopulation::Count(EconomyCounter::LandingRefusals);
+    LOG_DEBUG("playerbots", "Bot {} <{}> will not revive at graveyard {}: the core would put it at graveyard {} "
+              "(refused {}, repeat {}, {} hostiles); its body instead", bot->GetGUID().ToString(), bot->GetName(),
+              graveId, landing->ID, refused ? 1 : 0, repeat ? 1 : 0, threats);
+    return HealerAnswer::Corpse;
 }
 
 bool BotDeaths::OnEnemyGround(Player* bot, uint32 areaId)
