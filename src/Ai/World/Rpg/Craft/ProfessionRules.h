@@ -9,6 +9,7 @@
 #ifndef PLAYERBOTS_CRAFTPROFESSIONRULES_H
 #define PLAYERBOTS_CRAFTPROFESSIONRULES_H
 
+#include <cstddef>
 #include <cstdint>
 #include <utility>
 #include <vector>
@@ -157,6 +158,48 @@ inline uint16_t GatherAim(std::vector<uint16_t> const& skills, ValueOf valueOf)
             bestValue = valueOf(kinds[i]);
         }
     return bestValue ? best : 0;
+}
+
+// A profession share at the trainer (guildmaster research, craft training): every trainer visit spent all spare money
+// on class spells first, so a 15-40 s recipe or a 50 s rank waited for every class rank. A crafting bot first buys at
+// most one useful profession training per visit: a rank of a skill it is at the cap of, or a recipe that gives
+// skill-ups now, costing at most PROFESSION_SHARE_PCT % of its money above the reserve. A rank first (it unblocks the
+// skill), then the cheapest. Returns its index in `options`, or -1.
+constexpr uint32_t PROFESSION_SHARE_PCT = 25;
+
+struct TrainOption
+{
+    uint32_t price = 0;    // copper
+    bool rank = false;     // a profession rank (Journeyman, Expert, ...)
+    bool atCap = false;    // ranks: the bot's skill is at its current cap
+    bool skillUp = false;  // recipes: not grey at its skill now
+};
+
+inline uint64_t ProfessionShare(uint64_t money, uint64_t reserve, uint32_t pct)
+{
+    return money > reserve ? (money - reserve) * pct / 100 : 0;
+}
+
+inline int PickTraining(std::vector<TrainOption> const& options, uint64_t money, uint64_t reserve,
+                        uint32_t pct = PROFESSION_SHARE_PCT)
+{
+    uint64_t const share = ProfessionShare(money, reserve, pct);
+    int best = -1;
+    for (size_t i = 0; i < options.size(); ++i)
+    {
+        TrainOption const& o = options[i];
+        if (!(o.rank ? o.atCap : o.skillUp) || o.price > share)
+            continue;
+        if (best < 0)
+        {
+            best = static_cast<int>(i);
+            continue;
+        }
+        TrainOption const& b = options[best];
+        if (o.rank != b.rank ? o.rank : o.price < b.price)
+            best = static_cast<int>(i);
+    }
+    return best;
 }
 }  // namespace Craft
 

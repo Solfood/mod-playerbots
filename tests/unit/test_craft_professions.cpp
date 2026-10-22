@@ -78,5 +78,19 @@ int main()
     CHECK_EQ(MINING, GatherAim({HERBALISM, MINING}, oreBest));         // a pure gatherer: what is worth most
     CHECK_EQ(0, GatherAim({HERBALISM, MINING}, none));                 // nothing known: anything
     CHECK_EQ(0, GatherAim({TAILORING, ENCHANTING}, oreBest));          // nothing to gather
+
+    // A profession share at the trainer: 25 % of the money above the reserve, a rank at the cap first, else cheapest.
+    CHECK_EQ(25000u, static_cast<uint32_t>(ProfessionShare(110000, 10000, PROFESSION_SHARE_PCT)));
+    CHECK_EQ(0u, static_cast<uint32_t>(ProfessionShare(5000, 10000, PROFESSION_SHARE_PCT)));
+    TrainOption const healing{4000, false, false, true}, lesserMana{1500, false, false, true};
+    TrainOption const greyRecipe{50, false, false, false}, expert{5000, true, true, false};
+    TrainOption const earlyRank{500, true, false, false};
+    CHECK_EQ(1, PickTraining({healing, lesserMana}, 30000, 10000));       // share 5000: the cheaper of the two
+    CHECK_EQ(0, PickTraining({healing}, 26000, 10000));                   // share 4000: 40 s fits
+    CHECK_EQ(-1, PickTraining({healing}, 25999, 10000));                  // ... not a copper less
+    CHECK_EQ(-1, PickTraining({greyRecipe, earlyRank}, 1000000, 0));      // grey, or a rank below the cap: no
+    CHECK_EQ(2, PickTraining({lesserMana, healing, expert}, 1000000, 0)); // a rank at the cap first
+    CHECK_EQ(0, PickTraining({lesserMana, expert}, 16000, 10000));         // the rank does not fit: the recipe
+    CHECK_EQ(-1, PickTraining({}, 1000000, 0));
     return UnitFailures();
 }

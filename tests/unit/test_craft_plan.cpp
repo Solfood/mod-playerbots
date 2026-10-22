@@ -171,5 +171,20 @@ int main()
     for (uint32_t s = 100; s < 108; ++s)
         many.push_back(R(s, Want::SkillUp, 1, {}));
     CHECK_EQ(5u, PlanBatch(many, {}, {}, 0, 0).batch.size());
+
+    // Crafters keep what their recipes use: a herb is kept when the vial is held or a vendor sells it.
+    MaterialHeld const vialSold{1, 0, true}, vialHeld{1, 3, false}, herbMissing{2, 0, false}, herbHeld{2, 2, false};
+    CHECK_TRUE(KeepForRecipe(true, true, {vialSold}));               // the next craft trip buys the vial
+    CHECK_TRUE(KeepForRecipe(true, true, {vialHeld}));
+    CHECK_TRUE(KeepForRecipe(true, true, {}));                       // a one-material recipe
+    CHECK_TRUE(KeepForRecipe(true, true, {vialSold, herbHeld}));
+    CHECK_TRUE(!KeepForRecipe(true, true, {vialSold, herbMissing}));  // another herb no vendor sells is missing
+    CHECK_TRUE(!KeepForRecipe(true, false, {vialSold}));             // grey: no skill-up, not kept for it
+    CHECK_TRUE(!KeepForRecipe(false, true, {vialSold}));             // crafting off: the stock rule only
+    // ... and the planner then buys that vial: herbs held, the vial at a vendor.
+    std::vector<Recipe> potion{R(2330, Want::SkillUp, 2, {{2447, 1}, {765, 1}, {3371, 1}})};
+    Plan const withVials = PlanBatch(potion, {{2447, 4}, {765, 4}}, {{3371, 20}}, 1000, 0);
+    CHECK_EQ(1u, withVials.batch.size());
+    CHECK_EQ(2u, withVials.buy.at(3371));
     return UnitFailures();
 }

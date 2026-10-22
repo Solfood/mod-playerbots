@@ -7,6 +7,7 @@
 #include "ItemUsageValue.h"
 #include "AiFactory.h"
 #include "ChatHelper.h"
+#include "CraftMgr.h"
 #include "GuildTaskMgr.h"
 #include "Item.h"
 #include "LootObjectStack.h"
@@ -790,7 +791,12 @@ bool ItemUsageValue::IsItemNeededForUsefullSpell(ItemTemplate const* proto, bool
             continue;
 
         if (checkAllReagents && !HasItemsNeededForSpell(spellId, proto))
+        {
+            // Honest world crafting: the materials a vendor sells come on its next craft trip (Craft::KeepForRecipe).
+            if (KeepForVendorMaterials(spellId, proto))
+                return true;
             continue;
+        }
 
         // Class utility spells (teleport, buff, resurrect, summon, etc.) consume reagents but
         // neither create items nor grant skill-ups - keep the reagent for those too.
@@ -893,6 +899,22 @@ bool ItemUsageValue::HasItemsNeededForSpell(uint32 spellId, ItemTemplate const* 
         }
 
     return true;
+}
+
+bool ItemUsageValue::KeepForVendorMaterials(uint32 spellId, ItemTemplate const* proto)
+{
+    // FixedPopulation and crafting on only: else the stock rule alone, exactly as before.
+    if (!sPlayerbotAIConfig.fixedPopulation || !CraftMgr::instance().Crafting(bot))
+        return false;
+    CraftRecipeInfo const* recipe = CraftMgr::instance().Recipe(spellId);
+    if (!recipe)
+        return false;  // not a trade-skill recipe the craft trips make
+    std::vector<::Craft::MaterialHeld> others;
+    for (::Craft::Reagent const& g : recipe->reagents)
+        if (g.item != proto->ItemId)
+            others.push_back(
+                {g.count, bot->GetItemCount(g.item, false), CraftMgr::instance().VendorUnitPrice(g.item) > 0});
+    return ::Craft::KeepForRecipe(true, SpellGivesSkillUp(spellId, bot), others);
 }
 
 Item* ItemUsageValue::CurrentItem(ItemTemplate const* proto)

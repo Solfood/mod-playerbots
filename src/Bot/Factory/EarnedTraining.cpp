@@ -9,11 +9,13 @@
 
 #include "FixedPopulation.h"
 #include "ItemTemplate.h"
+#include "ItemUsageValue.h"
 #include "ObjectMgr.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "PlayerbotFactory.h"
 #include "Playerbots.h"
+#include "ProfessionRules.h"
 #include "ScriptMgr.h"
 #include "SpellInfo.h"
 #include "SpellMgr.h"
@@ -201,6 +203,72 @@ uint32 LearnFrom(Player* bot, OfferList const& list, uint32 reserve, EarnedTrain
     return learned;
 }
 
+// The primary profession whose cap a trainer spell raises (Journeyman Alchemist: SPELL_EFFECT_SKILL_STEP, the skill in
+// MiscValue; the spell it teaches has SPELL_EFFECT_SKILL), 0 for a recipe.
+uint32 RankSkillOf(uint32 spellId)
+{
+    SpellInfo const* info = sSpellMgr->GetSpellInfo(spellId);
+    if (!info)
+        return 0;
+    for (SpellEffectInfo const& effect : info->GetEffects())
+        if ((effect.IsEffect(SPELL_EFFECT_SKILL_STEP) || effect.IsEffect(SPELL_EFFECT_SKILL)) && effect.MiscValue > 0 &&
+            IsPrimaryProfessionSkill(static_cast<uint32>(effect.MiscValue)))
+            return static_cast<uint32>(effect.MiscValue);
+    return 0;
+}
+
+// Honest world crafting (FixedPopulation, CraftMgr::Crafting): before the class spells, at most one useful
+// profession recipe or rank of a profession it has, for at most a share of its money above the reserve
+// (Craft::PickTraining). Same trainer tests as LearnFrom.
+void BuyProfessionShare(Player* bot, uint32 reserve, EarnedTraining::Result& result)
+{
+    if (!sPlayerbotAIConfig.fixedPopulation || !CraftMgr::instance().Crafting(bot))
+        return;
+    std::vector<Trainer::Spell const*> spells;
+    std::vector<::Craft::TrainOption> options;
+    uint8 const level = bot->GetLevel();
+    for (OfferEntry const& entry : offerCache.tradeskillOffers)
+    {
+        Trainer::Spell const* first = entry.offers.front().spell;
+        if (first->ReqLevel > level)
+            break;
+        // Only a profession it has (a recipe or rank needs the skill line); never a new profession here.
+        if (!first->ReqSkillLine || !IsPrimaryProfessionSkill(first->ReqSkillLine) ||
+            !bot->HasSkill(first->ReqSkillLine) || bot->GetBaseSkillValue(first->ReqSkillLine) < first->ReqSkillRank ||
+            bot->HasSpell(entry.learnedSpell))
+            continue;
+        for (TrainerOffer const& offer : entry.offers)
+        {
+            if (!offer.trainer->IsTrainerValidForPlayer(bot) || !offer.trainer->CanTeachSpell(bot, offer.spell) ||
+                !PlayerbotFactory::IsTrainerSpellAllowedForBot(bot, offer.trainer, offer.spell))
+                continue;
+            uint32 rankSkill = RankSkillOf(offer.spell->SpellId);
+            if (!rankSkill)
+                rankSkill = RankSkillOf(entry.learnedSpell);
+            ::Craft::TrainOption option;
+            option.price = offer.spell->MoneyCost;
+            option.rank = rankSkill != 0;
+            option.atCap = option.rank && bot->GetPureSkillValue(rankSkill) >= bot->GetPureMaxSkillValue(rankSkill);
+            option.skillUp = !option.rank && ItemUsageValue::SpellGivesSkillUp(entry.learnedSpell, bot);
+            spells.push_back(offer.spell);
+            options.push_back(option);
+            break;
+        }
+    }
+    int const pick = ::Craft::PickTraining(options, bot->GetMoney(), reserve);
+    if (pick < 0)
+        return;
+    Trainer::Spell const* spell = spells[pick];
+    if (!PayFromOwnGold(bot, spell->MoneyCost, reserve))
+        return;
+    EarnedTraining::TeachTrainerSpell(bot, spell->SpellId);
+    result.spent += spell->MoneyCost;
+    ++result.learned;
+    FixedPopulation::Count(EconomyCounter::ProfessionTraining);
+    LOG_DEBUG("playerbots", "Bot {} ({}) bought profession training {} for {} copper first", bot->GetName(),
+              bot->GetLevel(), spell->SpellId, spell->MoneyCost);
+}
+
 void BuyMounts(Player* bot, uint32 reserve, EarnedTraining::Result& result)
 {
     std::call_once(mountPriceOnce, BuildMountPrices);
@@ -324,6 +392,9 @@ EarnedTraining::Result EarnedTraining::LearnAffordable(Player* bot, uint32 reser
 
     std::call_once(offerCacheOnce, BuildOfferCache);
     auto const classIt = offerCache.classOffers.find(bot->getClass());
+
+    // World of Craft: a crafting bot's profession share comes first (at most one recipe or rank).
+    BuyProfessionShare(bot, reserve, result);
 
     // Class spells first, then riding, then professions: the order a player spends in. Within a pass the
     // lists run lowest level first, so rank 2 is bought before rank 3 is looked at; a rank that only became

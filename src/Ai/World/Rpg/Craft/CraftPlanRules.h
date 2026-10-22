@@ -148,6 +148,29 @@ struct Plan
     bool Empty() const { return batch.empty(); }
 };
 
+// Crafters keep what their recipes use (guildmaster research, craft training): with full bags the stock item usage
+// keeps a material only when every other material of the recipe is held, and the craft planner buys a vendor material
+// (vial, thread, flux) only for a recipe whose other materials are held: neither ever comes, so herbs went to the
+// auction house. A crafting bot keeps `item`'s stack for a known recipe that still gives skill-ups when every other
+// material is held or a vendor sells it (its next craft trip buys it, from its own money). `others`: the recipe's
+// other materials (not `item`).
+struct MaterialHeld
+{
+    uint32_t need = 0;         // per cast
+    uint32_t held = 0;         // in its bags
+    bool vendorSells = false;  // a vendor sells it (CraftMgr::VendorUnitPrice)
+};
+
+inline bool KeepForRecipe(bool crafting, bool skillUp, std::vector<MaterialHeld> const& others)
+{
+    if (!crafting || !skillUp)
+        return false;
+    for (MaterialHeld const& m : others)
+        if (m.held < m.need && !m.vendorSells)
+            return false;
+    return true;
+}
+
 constexpr uint32_t MAX_BATCH = 5;  // spec §3 "The trip": up to 5 recipes
 
 // `inventory`: item -> count the bot holds. `vendorPrice`: item -> copper per unit for every item a vendor sells

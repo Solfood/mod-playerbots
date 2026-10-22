@@ -64,6 +64,9 @@ private:
      */
     bool IsTemporaryWeaponEnchantment(ItemTemplate const* proto);
     bool HasItemsNeededForSpell(uint32 spellId, ItemTemplate const* proto);
+    // Honest world crafting (FixedPopulation, CraftMgr::Crafting): `proto` is kept for recipe `spellId` that still
+    // gives skill-ups when every other material is held or a vendor sells it (Craft::KeepForRecipe).
+    bool KeepForVendorMaterials(uint32 spellId, ItemTemplate const* proto);
     Item* CurrentItem(ItemTemplate const* proto);
     float CurrentStacks(ItemTemplate const* proto);
     float BetterStacks(ItemTemplate const* proto, std::string const usageType = "");

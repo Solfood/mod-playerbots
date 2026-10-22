@@ -91,6 +91,7 @@ enum class EconomyCounter : uint8
     LostWalks,            // lost bots with no hearth that walked toward a town of their own level
     SicknessWaits,        // rests begun to wait out resurrection sickness after a healer revive
     LandingRefusals,      // healer revives refused because the core would put the bot at an unsafe graveyard
+    ProfessionTraining,   // profession recipes or ranks a crafting bot bought before its class spells (the share)
     Count
 };
 
