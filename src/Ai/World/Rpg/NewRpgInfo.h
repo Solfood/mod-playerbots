@@ -147,6 +147,20 @@ struct NewRpgInfo
         uint32 lastCastSpell{0};  // the last spell it tried to cast (0 = none yet)
         uint8 lastCast{0};        // its result: 0 none yet, 1 cast, 2 refused
     };
+    // RPG_FISH (GM-BOTAI-0163): one fishing trip (NewRpgFishAction).
+    struct FishTrip
+    {
+        uint8 phase{0};               // Fish::Phase: buy a pole, walk to the shore, fish
+        WorldPosition spot{};         // the shore spot it fishes from (picked when the trip starts)
+        WorldPosition target{};       // the vendor or the spot it walks to now (empty = none)
+        Guides::Approach approach{};  // no 5 yards closer in 60 s of walking: the trip is given up
+        uint32 lastTickMs{0};         // the approach clock's last tick (0 = none yet)
+        uint32 fishSinceMs{0};        // when it began fishing (0 = not yet)
+        uint32 casts{0};              // casts started on this trip
+        uint32 castFails{0};          // casts in a row that did not start
+        bool atWork{false};           // fishing where it stands: CheckMountStateAction keeps it on foot
+        WorldPosition atWorkPos{};
+    };
     struct Idle
     {
     };
@@ -227,6 +241,15 @@ struct NewRpgInfo
         uint32 missingCheckedMs{0};    // ... and when (fix round 1, I3)
     };
     CraftState craft;
+    // Fishing trips (GM-BOTAI-0163): kept across statuses, so whatever ends a trip, its weapons go back on.
+    struct FishGear
+    {
+        bool poleOn{false};    // it put the pole on for a trip: the weapons below go back on after it
+        ObjectGuid mainHand;   // what it wore before (empty = nothing)
+        ObjectGuid offHand;
+    };
+    FishGear fishGear;
+    uint32 fishAtMs{0};  // getMSTime() a fishing trip last started (the cooldown; 0 = never)
     Supplies::RestState rest;  // honest world rest before a fight (BotSupplies::ShouldRest); cleared by combat
     bool shortOfMoney{false};     // honest world: below the comfortable money line (BotSupplies::ShortOfMoney)
     uint32 shortCheckedMs{0};     // when that was last worked out (at most every 30 s)
@@ -320,7 +343,8 @@ struct NewRpgInfo
         DoGather,
         FollowRoute,
         FollowGuide,
-        CraftTrip
+        CraftTrip,
+        FishTrip
     >;
     RpgData data;
 
@@ -342,6 +366,7 @@ struct NewRpgInfo
     void ChangeToClassQuest(uint32 questId, WorldPosition giver);
     void ChangeToFollowGuide();
     void ChangeToCraft(::Craft::Plan plan, bool guided);
+    void ChangeToFish(WorldPosition spot, bool hasPole);
     bool CanChangeTo(NewRpgStatus status);
     void Reset();
     void SetMoveFarTo(WorldPosition pos);

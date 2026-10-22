@@ -767,6 +767,9 @@ bool PlayerbotAIConfig::Initialize()
     crafting.supplyStack = sConfigMgr->GetOption<uint32>("AiPlayerbot.Crafting.SupplyStack", 5);
     crafting.stationYards = sConfigMgr->GetOption<uint32>("AiPlayerbot.Crafting.StationYards", 1500);
     crafting.townYards = sConfigMgr->GetOption<uint32>("AiPlayerbot.Crafting.TownYards", 150);
+    crafting.fishMinutes = sConfigMgr->GetOption<uint32>("AiPlayerbot.Crafting.FishMinutes", 10);
+    crafting.fishCooldownMinutes = sConfigMgr->GetOption<uint32>("AiPlayerbot.Crafting.FishCooldownMinutes", 120);
+    crafting.fishSpotYards = sConfigMgr->GetOption<uint32>("AiPlayerbot.Crafting.FishSpotYards", 200);
     professionPickMinLevel = sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.ProfessionMinLevel", 5);
     professionPickMaxLevel = sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.ProfessionMaxLevel", 10);
     if (professionPickMaxLevel < professionPickMinLevel)
@@ -848,6 +851,7 @@ bool PlayerbotAIConfig::Initialize()
     RpgStatusProbWeight[RPG_OUTDOOR_PVP] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.OutdoorPvp", 10);
     RpgStatusProbWeight[RPG_DO_GATHER] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.DoGather", 15);
     RpgStatusProbWeight[RPG_CRAFT] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.Craft", 15);
+    RpgStatusProbWeight[RPG_FISH] = sConfigMgr->GetOption<int32>("AiPlayerbot.RpgStatusProbWeight.Fish", 3);
     rpgFocusMultiplier = sConfigMgr->GetOption<uint32>("AiPlayerbot.RpgFocusMultiplier", 6);
 
     syncLevelWithPlayers = sConfigMgr->GetOption<bool>("AiPlayerbot.SyncLevelWithPlayers", false);

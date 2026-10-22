@@ -85,7 +85,10 @@ enum NewRpgStatus : int
     // A craft trip: buy materials, walk to a station, craft, use the results (World of Craft; only when
     // AiPlayerbot.Crafting = 1 or a test seam)
     RPG_CRAFT = 12,
-    RPG_STATUS_END = 13
+    // A fishing trip: buy a pole if it has none, walk to water, fish a while, weapons back on (guildmaster
+    // GM-BOTAI-0163; only with AiPlayerbot.FixedPopulation = 1 and AiPlayerbot.Crafting = 1)
+    RPG_FISH = 13,
+    RPG_STATUS_END = 14
 };
 
 #define MAX_SPECNO 20

@@ -92,6 +92,9 @@ enum class EconomyCounter : uint8
     SicknessWaits,        // rests begun to wait out resurrection sickness after a healer revive
     LandingRefusals,      // healer revives refused because the core would put the bot at an unsafe graveyard
     ProfessionTraining,   // profession recipes or ranks a crafting bot bought before its class spells (the share)
+    FishingTrips,         // fishing trips started (GM-BOTAI-0163)
+    FishCaught,           // items random bots looted from their fishing bobbers
+    FishingAbandoned,     // fishing trips given up: no water, no pole, a walk that got nowhere, casts that failed
     Count
 };
 

@@ -15,6 +15,7 @@
 #include "DBCStores.h"
 #include "Map.h"
 #include "EarnedTraining.h"
+#include "FishRules.h"
 #include "FixedPopulation.h"
 #include "GameObject.h"
 #include "GossipDef.h"
@@ -22,6 +23,7 @@
 #include "IVMapMgr.h"
 #include "MotionMaster.h"
 #include "MoveSpline.h"
+#include "NewRpgFish.h"
 #include "NewRpgInfo.h"
 #include "NewRpgStrategy.h"
 #include "Object.h"
@@ -532,6 +534,9 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
             return true;
         info.death.guardHitMs = 0;
     }
+    // Fishing trips: whatever ended a trip (a repair trip, a lost bot going home, a death), its weapons go back on.
+    if (info.fishGear.poleOn && status != RPG_FISH && NewRpgFishAction::RestoreWeapons(botAI, bot))
+        FixedPopulation::Count(EconomyCounter::FishingAbandoned);
     if (CheckWornGearAndTownTrip(status))
         return true;
     switch (status)
@@ -577,6 +582,10 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
             // (RpgStatusProbWeight.Craft); a crafting focus boosts it. Crafting off: the list above, as before.
             if (CraftMgr::instance().Crafting(bot))
                 candidates.push_back(RPG_CRAFT);
+            // Fishing trips (GM-BOTAI-0163): a crafting population bot may roll one now and then
+            // (RpgStatusProbWeight.Fish, low; NewRpgFishAction::Ready). Otherwise the list above, as before.
+            if (sPlayerbotAIConfig.fixedPopulation && CraftMgr::instance().Crafting(bot))
+                candidates.push_back(RPG_FISH);
             return RandomChangeStatus(candidates);
         }
 
@@ -716,6 +725,20 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
                 auto const* trip = std::get_if<NewRpgInfo::CraftTrip>(&info.data);
                 if (Craft::CooldownAfterTrip(trip ? trip->made : 0, sPlayerbotAIConfig.crafting.emptyCooldownMinutes))
                     info.craft.emptyAtMs = std::max<uint32>(1, getMSTime());
+                info.ChangeToIdle();
+                return true;
+            }
+            break;
+        }
+        case RPG_FISH:
+        {
+            // The trip ends itself (Fish::TripOver); this backstop only catches a trip whose action stopped running.
+            if (info.HasStatusPersisted((sPlayerbotAIConfig.crafting.fishMinutes + Fish::WALK_MINUTES) * MINUTE *
+                                            IN_MILLISECONDS +
+                                        statusCraftSlackMs))
+            {
+                FixedPopulation::Count(EconomyCounter::FishingAbandoned);
+                NewRpgFishAction::RestoreWeapons(botAI, bot);  // a refused swap: the check above tries again
                 info.ChangeToIdle();
                 return true;
             }

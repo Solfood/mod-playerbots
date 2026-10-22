@@ -18,6 +18,7 @@
 #include "DBCStores.h"
 #include "DatabaseEnv.h"
 #include "EarnedTraining.h"
+#include "FishRules.h"
 #include "FixedPopulation.h"
 #include "GameObjectData.h"
 #include "GuideMgr.h"
@@ -233,21 +234,29 @@ void CraftMgr::BuildSpots()
             continue;
         // The materials it sells for plain gold with unlimited stock (limited stock or tokens: never planned on).
         std::vector<std::pair<uint32, uint32>> sold;  // (item, unit price)
+        uint32 polePrice = 0;  // fishing trips (GM-BOTAI-0163): it sells a Fishing Pole at this price (0 = no)
         if (VendorItemData const* list = vendor ? sObjectMgr->GetNpcVendorItemList(data.id) : nullptr)
         {
             for (uint32 slot = 0; slot < list->GetItemCount(); ++slot)
             {
                 VendorItem const* v = list->GetItem(slot);
-                if (!v || v->maxcount || v->ExtendedCost || !reagents.count(v->item))
+                if (!v || v->maxcount || v->ExtendedCost)
+                    continue;
+                bool const pole = v->item == Fish::FISHING_POLE;
+                if (!pole && !reagents.count(v->item))
                     continue;
                 ItemTemplate const* proto = sObjectMgr->GetItemTemplate(v->item);
                 if (!proto || proto->BuyPrice <= 0)
                     continue;
-                sold.emplace_back(v->item, std::max<uint32>(1, static_cast<uint32>(proto->BuyPrice) /
-                                                                   std::max<uint32>(1, proto->BuyCount)));
+                uint32 const unit = std::max<uint32>(1, static_cast<uint32>(proto->BuyPrice) /
+                                                            std::max<uint32>(1, proto->BuyCount));
+                if (pole)
+                    polePrice = unit;
+                else
+                    sold.emplace_back(v->item, unit);
             }
         }
-        if (!auctioneer && sold.empty())
+        if (!auctioneer && sold.empty() && !polePrice)
             continue;  // a vendor of nothing a recipe needs: not kept, so its zone is never looked up
         CraftSpot s;
         s.pos = WorldPosition(data.mapid, data.posX, data.posY, data.posZ, data.orientation);
@@ -260,6 +269,14 @@ void CraftMgr::BuildSpots()
         {
             _auctioneers[data.mapid].push_back(s);
             ++_auctioneerCount;
+        }
+        if (polePrice)
+        {
+            // Not a material vendor: kept out of _vendorSpots (InCraftTown) and the vendor count.
+            auto const [it, inserted] = _vendorPrice.emplace(Fish::FISHING_POLE, polePrice);
+            if (!inserted && polePrice < it->second)
+                it->second = polePrice;
+            _vendors[Fish::FISHING_POLE][data.mapid].push_back(s);
         }
         if (sold.empty())
             continue;

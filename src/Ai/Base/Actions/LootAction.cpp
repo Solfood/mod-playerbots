@@ -493,6 +493,9 @@ bool StoreLootAction::Execute(Event event)
         if (sRandomPlayerbotMgr.IsRandomBot(bot) &&
             (loot_type == LOOT_SKINNING || (guid.IsGameObject() && proto->Class == ITEM_CLASS_TRADE_GOODS)))
             FixedPopulation::Count(EconomyCounter::GatherYield, itemcount);
+        // Fishing trips (GM-BOTAI-0163): what random bots catch (a count only; changes no bot).
+        if (loot_type == LOOT_FISHING && guid.IsGameObject() && sRandomPlayerbotMgr.IsRandomBot(bot))
+            FixedPopulation::Count(EconomyCounter::FishCaught, itemcount);
 
         WorldPacket* packet = new WorldPacket(CMSG_AUTOSTORE_LOOT_ITEM, 1);
         *packet << itemindex;

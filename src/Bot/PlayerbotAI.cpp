@@ -7,6 +7,7 @@
 #include "PlayerbotAI.h"
 #include "AiFactory.h"
 #include "BotDeaths.h"
+#include "NewRpgFish.h"
 #include "BudgetValues.h"
 #include "ChannelMgr.h"
 #include "CharacterPackets.h"
@@ -1499,6 +1500,7 @@ void PlayerbotAI::ChangeEngine(BotState type)
 void PlayerbotAI::ChangeEngineOnCombat()
 {
     BotDeaths::OnCombatStart(this, bot);  // honest world death log: the fight's start (before the rest is cleared)
+    NewRpgFishAction::RestoreWeapons(this, bot);  // fishing trips: it fights with its weapons, not the pole
     rpgInfo.rest = Supplies::RestState{};  // a fight ends a rest and clears a rest that ran out of time
 
     if (HasStrategy("wait for attack", BOT_STATE_COMBAT))

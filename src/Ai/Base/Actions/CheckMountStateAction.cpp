@@ -158,17 +158,22 @@ bool CheckMountStateAction::HoldMountForCraft(bool noRealMaster, Unit* currentTa
     // random bot mounted again, so the craft never cast (outdoor forges: 15 minutes, nothing made). The hold lasts only
     // while it is still at that spot, has no real master to follow and no fight; otherwise it lapses for good (the
     // craft action sets it again at its next cast). No craft trip exists with crafting off.
+    // GM-BOTAI-0163: the same for a bot fishing where it stands on a fishing trip.
     auto* trip = std::get_if<NewRpgInfo::CraftTrip>(&botAI->rpgInfo.data);
-    if (!trip || !trip->atWork)
+    auto* fishTrip = trip ? nullptr : std::get_if<NewRpgInfo::FishTrip>(&botAI->rpgInfo.data);
+    bool* atWork = trip ? &trip->atWork : fishTrip ? &fishTrip->atWork : nullptr;
+    if (!atWork || !*atWork)
         return false;
+    WorldPosition const& atWorkPos = trip ? trip->atWorkPos : fishTrip->atWorkPos;
     bool const fighting = bot->IsInCombat() || botAI->GetState() == BOT_STATE_COMBAT || currentTarget ||
                           AI_VALUE(uint8, "attacker count");
-    if (!noRealMaster || fighting || bot->GetExactDist(trip->atWorkPos) > 10.0f)
+    if (!noRealMaster || fighting || bot->GetExactDist(atWorkPos) > 10.0f)
     {
-        trip->atWork = false;
+        *atWork = false;
         return false;
     }
-    ++trip->mountHeld;
+    if (trip)
+        ++trip->mountHeld;
     return true;
 }
 

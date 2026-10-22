@@ -249,6 +249,7 @@ public:
         creators["follow route status"] = &TriggerContext::follow_route_status;
         creators["follow guide status"] = &TriggerContext::follow_guide_status;
         creators["craft status"] = &TriggerContext::craft_status;
+        creators["fish status"] = &TriggerContext::fish_status;
         creators["can self resurrect"] = &TriggerContext::can_self_resurrect;
         creators["can fish"] = &TriggerContext::can_fish;
         creators["can use fishing bobber"] = &TriggerContext::can_use_fishing_bobber;
@@ -469,6 +470,7 @@ private:
     static Trigger* follow_route_status(PlayerbotAI* botAI) { return new NewRpgStatusTrigger(botAI, RPG_FOLLOW_ROUTE); }
     static Trigger* follow_guide_status(PlayerbotAI* botAI) { return new NewRpgStatusTrigger(botAI, RPG_FOLLOW_GUIDE); }
     static Trigger* craft_status(PlayerbotAI* botAI) { return new NewRpgStatusTrigger(botAI, RPG_CRAFT); }
+    static Trigger* fish_status(PlayerbotAI* botAI) { return new NewRpgStatusTrigger(botAI, RPG_FISH); }
     static Trigger* can_self_resurrect(PlayerbotAI* ai) { return new SelfResurrectTrigger(ai); }
     static Trigger* can_fish(PlayerbotAI* ai) { return new CanFishTrigger(ai); }
     static Trigger* can_use_fishing_bobber(PlayerbotAI* ai) { return new CanUseFishingBobberTrigger(ai); }

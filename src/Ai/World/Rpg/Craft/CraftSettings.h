@@ -29,6 +29,10 @@ struct Settings
     uint32_t supplyStack = 5;            // .SupplyStack: food, bandages and potions it keeps
     uint32_t stationYards = 1500;        // .StationYards: the farthest station an unguided bot walks to
     uint32_t townYards = 150;            // .TownYards: a guided bot crafts only at a station this near (in town)
+    // Fishing trips (GM-BOTAI-0163; FixedPopulation and crafting on; RpgStatusProbWeight.Fish picks them).
+    uint32_t fishMinutes = 10;           // .FishMinutes: it fishes this long once at the water
+    uint32_t fishCooldownMinutes = 120;  // .FishCooldownMinutes: no new trip this long after one started
+    uint32_t fishSpotYards = 200;        // .FishSpotYards: water it looks for within this many yards
 };
 }  // namespace Craft
 

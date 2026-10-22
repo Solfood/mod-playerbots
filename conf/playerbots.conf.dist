@@ -1029,7 +1029,11 @@ AiPlayerbot.GuideBots.RideMinutes = 10
 # UndercutPct: below the cheapest same-item listing. RelistPct: a returned item is listed once more at this %.
 # SupplyStack: food, bandages and potions a bot keeps. StationYards: the farthest station an unguided bot walks to.
 # TownYards: a guided bot crafts only at a station this near (in the town it is in).
-# Defaults: 0, 0, 15, 30, 10, 24, 300, 2, 80, 5, 1500, 150
+# Fishing trips (only with AiPlayerbot.FixedPopulation = 1 too; how often: RpgStatusProbWeight.Fish): an unguided bot
+#     with the Fishing skill buys a Fishing Pole at a vendor's price if it has none, walks to water within
+#     FishSpotYards in its own zone, fishes FishMinutes, then puts its weapons back on. FishCooldownMinutes: no new
+#     trip this long after one started.
+# Defaults: 0, 0, 15, 30, 10, 24, 300, 2, 80, 5, 1500, 150, 10, 120, 200
 AiPlayerbot.Crafting = 0
 AiPlayerbot.Crafting.HubAuctioneers = 0
 AiPlayerbot.Crafting.TripMinutes = 15
@@ -1042,6 +1046,9 @@ AiPlayerbot.Crafting.RelistPct = 80
 AiPlayerbot.Crafting.SupplyStack = 5
 AiPlayerbot.Crafting.StationYards = 1500
 AiPlayerbot.Crafting.TownYards = 150
+AiPlayerbot.Crafting.FishMinutes = 10
+AiPlayerbot.Crafting.FishCooldownMinutes = 120
+AiPlayerbot.Crafting.FishSpotYards = 200
 
 # Death knight "raisings" (only with FixedPopulation = 1). None at launch. Once a bot of a faction reaches
 # UnlockLevel, every WaveIntervalHours that faction raises bots that died within RecentDeathHours at
@@ -1729,6 +1736,7 @@ AiPlayerbot.EnableNewRpgStrategy = 1
 # OutdoorPvp    (Default: 10  Participate in outdoor PvP capture points if already in an outdoor PvP zone)
 # DoGather      (Default: 15  Roam the current zone harvesting herb/ore nodes; requires Herbalism or Mining)
 # Craft         (Default: 15  A craft trip; only with AiPlayerbot.Crafting = 1)
+# Fish          (Default: 3   A fishing trip; only with AiPlayerbot.Crafting = 1 and AiPlayerbot.FixedPopulation = 1)
 AiPlayerbot.RpgStatusProbWeight.WanderRandom = 15
 AiPlayerbot.RpgStatusProbWeight.WanderNpc = 20
 AiPlayerbot.RpgStatusProbWeight.GoGrind = 15
@@ -1739,6 +1747,7 @@ AiPlayerbot.RpgStatusProbWeight.Rest = 5
 AiPlayerbot.RpgStatusProbWeight.OutdoorPvp = 10
 AiPlayerbot.RpgStatusProbWeight.DoGather = 15
 AiPlayerbot.RpgStatusProbWeight.Craft = 15
+AiPlayerbot.RpgStatusProbWeight.Fish = 3
 
 #    AiPlayerbot.RpgFocusMultiplier
 #        Description: Guildmaster bridge focus. A bot with a focus picks the matching new-RPG activities this

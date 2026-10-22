@@ -46,6 +46,7 @@
 #include "NewRpgAction.h"
 #include "NewRpgCraft.h"
 #include "NewRpgDoGather.h"
+#include "NewRpgFish.h"
 #include "NewRpgFollowGuide.h"
 #include "NewRpgFollowRoute.h"
 #include "NewRpgOutdoorPvP.h"
@@ -287,6 +288,7 @@ public:
         creators["new rpg follow route"] = &ActionContext::new_rpg_follow_route;
         creators["new rpg follow guide"] = &ActionContext::new_rpg_follow_guide;
         creators["new rpg craft"] = &ActionContext::new_rpg_craft;
+        creators["new rpg fish"] = &ActionContext::new_rpg_fish;
         creators["wait for attack keep safe distance"] = &ActionContext::wait_for_attack_keep_safe_distance;
     }
 
@@ -498,6 +500,7 @@ private:
     static Action* new_rpg_follow_route(PlayerbotAI* ai) { return new NewRpgFollowRouteAction(ai); }
     static Action* new_rpg_follow_guide(PlayerbotAI* ai) { return new NewRpgFollowGuideAction(ai); }
     static Action* new_rpg_craft(PlayerbotAI* ai) { return new NewRpgCraftAction(ai); }
+    static Action* new_rpg_fish(PlayerbotAI* ai) { return new NewRpgFishAction(ai); }
     static Action* wait_for_attack_keep_safe_distance(PlayerbotAI* ai) { return new WaitForAttackKeepSafeDistanceAction(ai); }
 };
 

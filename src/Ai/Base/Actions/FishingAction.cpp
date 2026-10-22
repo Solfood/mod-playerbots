@@ -39,7 +39,7 @@ static bool IsFishingPole(Item* const item)
         proto->SubClass == ITEM_SUBCLASS_WEAPON_FISHING_POLE;
 }
 
-float HasFishableWaterOrLand(float x, float y, float z,  Map* map, uint32 phaseMask, bool checkForLand=false)
+float HasFishableWaterOrLand(float x, float y, float z, Map* map, uint32 phaseMask, bool checkForLand)
 {
     if (!map)
         return INVALID_HEIGHT;
@@ -79,7 +79,7 @@ bool HasLosToWater(Player* bot, float wx, float wy, float waterZ)
         VMAP::ModelIgnoreFlags::Nothing);
 }
 
-WorldPosition FindLandFromPosition(PlayerbotAI* botAI, float startDistance, float endDistance, float increment, float orientation, WorldPosition targetPos, float fishingSearchWindow, bool checkLOS = true)
+WorldPosition FindLandFromPosition(PlayerbotAI* botAI, float startDistance, float endDistance, float increment, float orientation, WorldPosition targetPos, float fishingSearchWindow, bool checkLOS)
 {
     Player* bot = botAI->GetBot();
     Map* map = bot->GetMap();
@@ -383,7 +383,8 @@ bool EquipFishingPoleAction::isUseful()
         }
     }
 
-    if (sRandomPlayerbotMgr.IsRandomBot(bot))
+    // Honest world (FixedPopulation): no free pole; a fishing trip buys one at a vendor's price (NewRpgFishAction).
+    if (sRandomPlayerbotMgr.IsRandomBot(bot) && !sPlayerbotAIConfig.fixedPopulation)
     {
         bot->StoreNewItemInBestSlots(FISHING_POLE, 1);  // Try to get a fishing pole
         return true;

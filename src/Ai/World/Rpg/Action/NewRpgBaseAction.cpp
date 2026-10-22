@@ -19,6 +19,7 @@
 #include "GuideMgr.h"
 #include "GuideStepRules.h"
 #include "IVMapMgr.h"
+#include "NewRpgFish.h"
 #include "NewRpgInfo.h"
 #include "NewRpgStrategy.h"
 #include "Object.h"
@@ -1520,6 +1521,8 @@ bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> candidateSta
             return true;
         case RPG_CRAFT:
             return ChangeToCraftPlan();  // CheckRpgStatusAvailable planned it in this roll
+        case RPG_FISH:
+            return NewRpgFishAction::Start(botAI, bot);  // picks the shore spot (false: no water near)
         case RPG_IDLE:
         {
             botAI->rpgInfo.ChangeToIdle();
@@ -1813,6 +1816,8 @@ bool NewRpgBaseAction::CheckRpgStatusAvailable(NewRpgStatus status)
         }
         case RPG_CRAFT:
             return CraftReady(GuideMgr::instance().Guided(bot));
+        case RPG_FISH:
+            return NewRpgFishAction::Ready(botAI, bot);
         default:
             return false;
     }

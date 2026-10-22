@@ -5,6 +5,7 @@
  */
 
 #include "NewRpgInfo.h"
+#include "FishRules.h"
 #include "Timer.h"
 #include <cmath>
 
@@ -116,6 +117,15 @@ void NewRpgInfo::ChangeToCraft(::Craft::Plan plan, bool guided)
     data = std::move(trip);
 }
 
+void NewRpgInfo::ChangeToFish(WorldPosition spot, bool hasPole)
+{
+    startT = getMSTime();
+    FishTrip trip;
+    trip.spot = spot;
+    trip.phase = static_cast<uint8>(hasPole ? Fish::Phase::Walk : Fish::Phase::Pole);
+    data = std::move(trip);
+}
+
 bool NewRpgInfo::CanChangeTo(NewRpgStatus)
 {
     return true;
@@ -150,6 +160,7 @@ NewRpgStatus NewRpgInfo::StatusFromString(std::string const& name)
     if (name == "follow route")   return RPG_FOLLOW_ROUTE;
     if (name == "follow guide")   return RPG_FOLLOW_GUIDE;
     if (name == "craft")          return RPG_CRAFT;
+    if (name == "fish")           return RPG_FISH;
     return RPG_STATUS_END;
 }
 
@@ -170,6 +181,7 @@ NewRpgStatus NewRpgInfo::GetStatus()
         if constexpr (std::is_same_v<T, FollowRoute>) return RPG_FOLLOW_ROUTE;
         if constexpr (std::is_same_v<T, FollowGuide>) return RPG_FOLLOW_GUIDE;
         if constexpr (std::is_same_v<T, CraftTrip>) return RPG_CRAFT;
+        if constexpr (std::is_same_v<T, FishTrip>) return RPG_FISH;
         return RPG_IDLE;
     }, data);
 }
@@ -268,6 +280,13 @@ std::string NewRpgInfo::ToString()
             out << "CRAFT";
             out << "\nphase: " << uint32(arg.phase) << " step: " << arg.step << " of " << arg.batch.size();
             out << "\nmade: " << arg.made << " to buy: " << arg.buy.size();
+        }
+        else if constexpr (std::is_same_v<T, FishTrip>)
+        {
+            out << "FISH";
+            out << "\nphase: " << uint32(arg.phase) << " casts: " << arg.casts;
+            out << "\nspot: " << arg.spot.GetMapId() << " " << arg.spot.GetPositionX() << " "
+                << arg.spot.GetPositionY() << " " << arg.spot.GetPositionZ();
         }
         else
             out << "UNKNOWN";
