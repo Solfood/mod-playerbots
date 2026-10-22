@@ -909,11 +909,19 @@ bool ItemUsageValue::KeepForVendorMaterials(uint32 spellId, ItemTemplate const* 
     CraftRecipeInfo const* recipe = CraftMgr::instance().Recipe(spellId);
     if (!recipe)
         return false;  // not a trade-skill recipe the craft trips make
+    // A vendor counts only within the distance the craft planner walks (CraftMgr::NearestVendorFor, StationYards), so
+    // a kept stack can really be crafted on its next trip (fix round 1). Looked up only for a material it lacks.
+    CraftMgr const& crafts = CraftMgr::instance();
     std::vector<::Craft::MaterialHeld> others;
     for (::Craft::Reagent const& g : recipe->reagents)
-        if (g.item != proto->ItemId)
-            others.push_back(
-                {g.count, bot->GetItemCount(g.item, false), CraftMgr::instance().VendorUnitPrice(g.item) > 0});
+    {
+        if (g.item == proto->ItemId)
+            continue;
+        uint32 const held = bot->GetItemCount(g.item, false);
+        bool const vendorNear = held < g.count && crafts.VendorUnitPrice(g.item) > 0 &&
+                                crafts.NearestVendorFor(bot, g.item, false) != nullptr;
+        others.push_back({g.count, held, vendorNear});
+    }
     return ::Craft::KeepForRecipe(true, SpellGivesSkillUp(spellId, bot), others);
 }
 
