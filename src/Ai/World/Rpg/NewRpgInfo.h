@@ -247,6 +247,7 @@ struct NewRpgInfo
         bool poleOn{false};    // it put the pole on for a trip: the weapons below go back on after it
         ObjectGuid mainHand;   // what it wore before (empty = nothing)
         ObjectGuid offHand;
+        uint32 unpoleTryMs{0};  // getMSTime() of its last "equip upgrade" for a pole left on (0 = none)
     };
     FishGear fishGear;
     uint32 fishAtMs{0};  // getMSTime() a fishing trip last started (the cooldown; 0 = never)

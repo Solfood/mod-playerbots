@@ -9,6 +9,7 @@
 
 #include "NewRpgBaseAction.h"
 
+class GameObject;
 class Item;
 
 // RPG_FISH (guildmaster GM-BOTAI-0163; AiPlayerbot.FixedPopulation and AiPlayerbot.Crafting on, Fish:: rules in
@@ -29,6 +30,9 @@ public:
     // Its weapons back on after the pole, whatever ended the trip (the trip's end, the status update, a fight's start).
     // Nothing unless a trip put the pole on. True if it is done (or nothing was to do).
     static bool RestoreWeapons(PlayerbotAI* botAI, Player* bot);
+    // Not fishing, with a pole in its main hand and no weapons noted (a restart or logout mid-trip, or none worn
+    // before): the stock "equip upgrade" puts its best bag weapon on, at most once a minute. True if it tried.
+    static bool UsePoleFreeGear(PlayerbotAI* botAI, Player* bot);
 
 private:
     bool BuyPole(NewRpgInfo::FishTrip& trip);
@@ -42,6 +46,7 @@ private:
     // its off-hand piece (the core would mail it away).
     bool PutPoleOn();
     bool End(bool abandoned);
+    GameObject* OwnBobber();  // its own fishing bobber (UNIT_FIELD_CHANNEL_OBJECT), nullptr when none
     static WorldPosition PickSpot(PlayerbotAI* botAI, Player* bot);
     static Item* FindPole(Player* bot);  // in its bags or main hand
     static bool IsPole(Item* item);

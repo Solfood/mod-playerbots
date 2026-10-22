@@ -16,10 +16,12 @@
 #include "FishRules.h"
 #include "FishingAction.h"
 #include "FixedPopulation.h"
+#include "GameObject.h"
 #include "GuideMgr.h"
 #include "Item.h"
 #include "MarketRules.h"
 #include "MoveSpline.h"
+#include "ObjectAccessor.h"
 #include "ObjectMgr.h"
 #include "PathGenerator.h"
 #include "Player.h"
@@ -82,15 +84,19 @@ bool NewRpgFishAction::Ready(PlayerbotAI* botAI, Player* bot)
 {
     if (!sPlayerbotAIConfig.fixedPopulation || !CraftMgr::instance().Crafting(bot) || !bot->GetMap())
         return false;
+    // The cheap tests first (every idle roll asks): the skill, guided, the cooldown, a fight, the group run.
+    uint32 const cooldownLeftMs =
+        Fish::CooldownLeftMs(botAI->rpgInfo.fishAtMs, getMSTime(), sPlayerbotAIConfig.crafting.fishCooldownMinutes);
+    if (!bot->HasSkill(SKILL_FISHING) || cooldownLeftMs || bot->IsInCombat() || !bot->IsAlive() || bot->GetGroup() ||
+        bot->GetMap()->Instanceable() || GuideMgr::instance().Guided(bot))
+        return false;
     CraftMgr& crafts = CraftMgr::instance();
     bool const hasPole = FindPole(bot) != nullptr;
     uint32 const polePrice = hasPole ? 0 : crafts.VendorUnitPrice(Fish::FISHING_POLE);
     uint8 const bagUsed = botAI->GetAiObjectContext()->GetValue<uint8>("bag space")->Get();
     if (!Fish::MayStart(bot->HasSkill(SKILL_FISHING), GuideMgr::instance().Guided(bot), bot->IsInCombat(),
                         !bot->IsAlive(), bot->GetGroup() != nullptr, bot->GetMap()->Instanceable(), bagUsed,
-                        Fish::CooldownLeftMs(botAI->rpgInfo.fishAtMs, getMSTime(),
-                                             sPlayerbotAIConfig.crafting.fishCooldownMinutes),
-                        hasPole, bot->GetMoney(), EarnedTraining::RepairReserve(bot), polePrice))
+                        cooldownLeftMs, hasPole, bot->GetMoney(), EarnedTraining::RepairReserve(bot), polePrice))
         return false;
     return hasPole || crafts.NearestVendorFor(bot, Fish::FISHING_POLE, false) != nullptr;
 }
@@ -102,7 +108,7 @@ bool NewRpgFishAction::Start(PlayerbotAI* botAI, Player* bot)
     WorldPosition spot = PickSpot(botAI, bot);
     if (!spot.IsValid())
     {
-        FixedPopulation::Count(EconomyCounter::FishingAbandoned);
+        FixedPopulation::Count(EconomyCounter::FishingNoSpot);  // no trip: not counted as one given up
         return false;
     }
     FixedPopulation::Count(EconomyCounter::FishingTrips);
@@ -337,15 +343,51 @@ bool NewRpgFishAction::RestoreWeapons(PlayerbotAI* botAI, Player* bot)
     return true;
 }
 
+bool NewRpgFishAction::UsePoleFreeGear(PlayerbotAI* botAI, Player* bot)
+{
+    if (!botAI || !bot || !bot->IsAlive() || !IsPole(bot->GetItemByPos(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_MAINHAND)))
+        return false;
+    // Fix round 1 (I2): a pole left in its hand (a restart or logout mid-trip, or no weapon noted before the trip):
+    // the stock upgrade test puts its best bag weapon on. At most once a minute (a bot with no other weapon keeps it).
+    uint32& triedMs = botAI->rpgInfo.fishGear.unpoleTryMs;
+    uint32 const now = getMSTime();
+    if (triedMs && getMSTimeDiff(triedMs, now) < MINUTE * IN_MILLISECONDS)
+        return false;
+    triedMs = std::max<uint32>(1, now);
+    botAI->DoSpecificAction("equip upgrade", Event(), true);
+    return true;
+}
+
+GameObject* NewRpgFishAction::OwnBobber()
+{
+    ObjectGuid const guid = bot->GetGuidValue(UNIT_FIELD_CHANNEL_OBJECT);
+    if (guid.IsEmpty() || !guid.IsGameObject())
+        return nullptr;
+    GameObject* go = ObjectAccessor::GetGameObject(*bot, guid);
+    return go && go->GetOwnerGUID() == bot->GetGUID() && go->GetGoType() == GAMEOBJECT_TYPE_FISHINGNODE ? go : nullptr;
+}
+
 bool NewRpgFishAction::FishHere(NewRpgInfo::FishTrip& trip)
 {
     uint32 const now = getMSTime();
     if (trip.fishSinceMs &&
         Fish::FishingOver(getMSTimeDiff(trip.fishSinceMs, now), sPlayerbotAIConfig.crafting.fishMinutes))
         return End(false);
-    // A cast or a catch under way: the stock "use bobber" strategy and loot handler take it from here.
-    if (bot->IsNonMeleeSpellCast(false) || !bot->GetLootGUID().IsEmpty())
+    // Fix round 1 (I1): the bobber is used here, not by the stock "use bobber" strategy, whose bobber value pauses the
+    // bot's AI until the bobber is ready (17-27 s): it could not fight back meanwhile. A bite: use it now (the core
+    // sends the loot; the stock loot handler stores it).
+    if (bot->IsNonMeleeSpellCast(false))
+    {
+        if (GameObject* bobber = OwnBobber())
+            if (bobber->getLootState() == GO_READY)
+                bobber->Use(bot);
         return true;
+    }
+    if (!bot->GetLootGUID().IsEmpty())
+        return true;  // its catch is being stored
+    // Bags over 80 % full: the loot handler would leave the catch; the trip is done.
+    if (botAI->GetAiObjectContext()->GetValue<uint8>("bag space")->Get() > 80)
+        return End(false);
     if (!ReadyToFish(trip))
         return true;
     // The pole on (again, if something took it off); no pole or no room for the off-hand piece: given up.
@@ -355,6 +397,8 @@ bool NewRpgFishAction::FishHere(NewRpgInfo::FishTrip& trip)
         trip.fishSinceMs = std::max<uint32>(1, now);
     FishingAction fishing(botAI);
     fishing.Execute(Event());
+    if (botAI->HasStrategy("use bobber", BOT_STATE_NON_COMBAT))
+        botAI->ChangeStrategy("-use bobber", BOT_STATE_NON_COMBAT);  // FishHere watches the bobber itself (I1)
     if (bot->IsNonMeleeSpellCast(false))
     {
         ++trip.casts;
@@ -375,5 +419,7 @@ bool NewRpgFishAction::End(bool abandoned)
         botAI->ChangeStrategy("-use bobber", BOT_STATE_NON_COMBAT);
     RestoreWeapons(botAI, bot);  // a refused swap is tried again by the status update
     botAI->rpgInfo.ChangeToIdle();
+    if (!botAI->rpgInfo.fishGear.poleOn)
+        UsePoleFreeGear(botAI, bot);  // no weapon noted (none worn before): the best bag weapon, if any (I2)
     return true;
 }

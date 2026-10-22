@@ -534,9 +534,16 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
             return true;
         info.death.guardHitMs = 0;
     }
-    // Fishing trips: whatever ended a trip (a repair trip, a lost bot going home, a death), its weapons go back on.
-    if (info.fishGear.poleOn && status != RPG_FISH && NewRpgFishAction::RestoreWeapons(botAI, bot))
-        FixedPopulation::Count(EconomyCounter::FishingAbandoned);
+    // Fishing trips: whatever ended a trip (a repair trip, a lost bot going home, a death), its weapons go back on
+    // (counted where the trip ended, not here). A pole left on with nothing noted (a restart or logout mid-trip):
+    // its best bag weapon (fix round 1, I2). Crafting or FixedPopulation off: never a fishing trip, nothing here.
+    if (status != RPG_FISH && sPlayerbotAIConfig.fixedPopulation)
+    {
+        if (info.fishGear.poleOn)
+            NewRpgFishAction::RestoreWeapons(botAI, bot);
+        else if (CraftMgr::instance().Crafting(bot))
+            NewRpgFishAction::UsePoleFreeGear(botAI, bot);
+    }
     if (CheckWornGearAndTownTrip(status))
         return true;
     switch (status)

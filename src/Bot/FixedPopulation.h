@@ -94,7 +94,8 @@ enum class EconomyCounter : uint8
     ProfessionTraining,   // profession recipes or ranks a crafting bot bought before its class spells (the share)
     FishingTrips,         // fishing trips started (GM-BOTAI-0163)
     FishCaught,           // items random bots looted from their fishing bobbers
-    FishingAbandoned,     // fishing trips given up: no water, no pole, a walk that got nowhere, casts that failed
+    FishingAbandoned,     // fishing trips given up: no pole, a walk that got nowhere, casts that failed, the backstop
+    FishingNoSpot,        // fishing trips not started: no fishable water near (the cooldown still runs)
     Count
 };
 
