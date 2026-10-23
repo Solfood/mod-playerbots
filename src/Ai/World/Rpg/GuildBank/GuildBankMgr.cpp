@@ -10,6 +10,7 @@
 
 #include "BotSupplies.h"
 #include "CourierRules.h"
+#include "CraftMgr.h"
 #include "Creature.h"
 #include "CreatureData.h"
 #include "DBCStores.h"
@@ -31,6 +32,8 @@
 #include "SpellInfo.h"
 #include "SpellMgr.h"
 #include "Timer.h"
+#include "WorldState.h"
+#include "WorldStateDefines.h"
 
 namespace
 {
@@ -374,4 +377,234 @@ void GuildBankMgr::Update(uint32 diff)
         else
             Forget(id);
     }
+}
+
+uint64 GuildBankMgr::Day() const { return sWorldState->getWorldState(WORLD_STATE_CUSTOM_GUILD_DAILY_RESET_TIME); }
+
+uint32 GuildBankMgr::Carried(Player* bot, PlayerbotAI* botAI, GuildBank::Kind kind)
+{
+    if (!bot || !botAI || kind == GuildBank::Kind::None)
+        return 0;
+    uint32 carried = 0;
+    for (Item* item : botAI->GetInventoryItems())
+    {
+        ItemTemplate const* proto = item->GetTemplate();
+        if (proto && KindOf(proto) == kind && GuildBank::Suits(kind, proto->RequiredLevel, bot->GetLevel()) &&
+            bot->CanUseItem(proto) == EQUIP_ERR_OK)
+            carried += item->GetCount();
+    }
+    return carried;
+}
+
+void GuildBankMgr::MadeSupplies(PlayerbotAI* botAI, Player* bot, GuildBank::Levels const& levels,
+                                std::array<uint32, GuildBank::KIND_COUNT>& held,
+                                std::array<std::vector<Item*>, GuildBank::KIND_COUNT>* items)
+{
+    held.fill(0);
+    if (items)
+        for (auto& v : *items)
+            v.clear();
+    if (!bot || !botAI)
+        return;
+    for (Item* item : botAI->GetInventoryItems())
+    {
+        ItemTemplate const* proto = item->GetTemplate();
+        GuildBank::Kind const kind = KindOf(proto);
+        if (kind == GuildBank::Kind::None || item->IsSoulBound() ||
+            !GuildBank::UsefulToGuild(kind, proto->RequiredLevel, levels) ||
+            !CraftMgr::instance().Makes(bot, item->GetEntry()))
+            continue;
+        std::size_t const k = GuildBank::Index(kind);  // never None here (checked above)
+        held[k] += item->GetCount();
+        if (items)
+            (*items)[k].push_back(item);
+    }
+}
+
+uint32 GuildBankMgr::DepositItem(Guild* guild, Player* bot, Item* item, uint32 count)
+{
+    uint32 const entry = item->GetEntry();
+    uint32 const stack = item->GetCount();
+    if (!count || count > stack)
+        return 0;  // never a split larger than the stack
+    uint32 const before = bot->GetItemCount(entry, false);
+    // slot NULL_SLOT: the core finds a free slot in tab 1 or merges (Guild::SwapItemsWithInventory, Guild.cpp:2414).
+    // `item` may be gone after this call (a whole stack merged into the bank): never touch it again.
+    guild->SwapItemsWithInventory(bot, false, 0, NULL_SLOT, item->GetBagSlot(), item->GetSlot(),
+                                  GuildBank::SplitFor(count, stack));
+    uint32 const after = bot->GetItemCount(entry, false);
+    return before > after ? before - after : 0;  // decision 3: what the bags say moved
+}
+
+VisitResult GuildBankMgr::Visit(Player* bot, PlayerbotAI* botAI)
+{
+    VisitResult r;
+    if (!bot || !botAI)
+        return r;
+    r.bot = bot->GetName();
+    r.guild = bot->GetGuildId();
+    Guild* guild = sGuildMgr->GetGuildById(r.guild);
+    if (!guild || GuildBankAccess::Tabs(*guild).empty() || !Serves(bot))
+        return r;
+    GuildBank::Settings const& s = sPlayerbotAIConfig.guildBank;
+    bool const mana = BotSupplies::UsesMana(bot);
+    uint64 const day = Day();
+    uint32 const guid = bot->GetGUID().GetCounter();
+    GuildBank::ShareState share;
+    {
+        std::lock_guard<std::mutex> guard(_shareLock);
+        GuildBank::ShareState& st = _shares[guid];
+        GuildBank::RollDay(st, day);
+        share = st;
+    }
+    Refresh(guild);
+    BankStock stock;
+    Stock(r.guild, stock);
+    r.before = stock.stock;
+
+    // 3. A crafter deposits what it makes, above its own share, while its guild is below target (decision 7).
+    if (CraftMgr::instance().Crafting(bot))
+    {
+        std::array<std::vector<Item*>, GuildBank::KIND_COUNT> made;
+        std::array<uint32, GuildBank::KIND_COUNT> held{};
+        MadeSupplies(botAI, bot, stock.levels, held, &made);
+        for (std::size_t k = 0; k < GuildBank::KIND_COUNT; ++k)
+        {
+            auto const kind = static_cast<GuildBank::Kind>(k);
+            uint32 left =
+                GuildBank::DepositAmount(held[k], GuildBank::Keep(kind, mana, s), stock.stock[k], s.target[k]);
+            for (Item* item : made[k])
+            {
+                if (!left)
+                    break;
+                // Each stack is used once: a moved stack may no longer exist after DepositItem.
+                uint32 const moved = DepositItem(guild, bot, item, std::min(left, item->GetCount()));
+                if (!moved)
+                    break;  // the core refused (a full tab, rights, a timed item): stop this kind
+                r.deposited[k] += moved;
+                left -= std::min(left, moved);
+            }
+            r.kept[k] = held[k] - std::min(held[k], r.deposited[k]);
+        }
+    }
+
+    // 4. A member takes its share of each kind it may use, the best (highest required level) first (decision 8).
+    auto& tabs = GuildBankAccess::Tabs(*guild);
+    for (std::size_t k = 0; k < GuildBank::KIND_COUNT; ++k)
+    {
+        auto const kind = static_cast<GuildBank::Kind>(k);
+        if (GuildBank::ManaOnly(kind) && !mana)
+            continue;
+        uint32 want = GuildBank::Want(Carried(bot, botAI, kind), s.share[k],
+                                      GuildBank::ShareLeft(share, day, kind, mana, s));
+        r.wanted[k] = want;
+        if (!want)
+            continue;
+        // Tab 1's slots of this kind it may use (only supplies: KindOf is None for gear and anything else).
+        std::vector<std::pair<uint32, uint8>> slots;  // (required level, slot)
+        for (uint8 slot = 0; slot < GUILD_BANK_MAX_SLOTS; ++slot)
+        {
+            Item* item = tabs[0].GetItem(slot);
+            ItemTemplate const* proto = item ? item->GetTemplate() : nullptr;
+            if (proto && KindOf(proto) == kind && GuildBank::Suits(kind, proto->RequiredLevel, bot->GetLevel()) &&
+                bot->CanUseItem(proto) == EQUIP_ERR_OK)
+                slots.emplace_back(proto->RequiredLevel, slot);
+        }
+        std::stable_sort(slots.begin(), slots.end(), [](auto const& a, auto const& b) { return a.first > b.first; });
+        if (slots.empty())
+            r.empty = true;
+        for (auto const& [req, slot] : slots)
+        {
+            if (!want)
+                break;
+            Item* item = tabs[0].GetItem(slot);  // read again: an earlier move may have changed the tab
+            if (!item)
+                continue;
+            uint32 const entry = item->GetEntry();
+            uint32 const count = item->GetCount();
+            uint32 const ask = std::min(want, count);
+            ItemPosCountVec dest;
+            uint32 noSpace = 0;
+            InventoryResult const res = bot->CanStoreNewItem(NULL_BAG, NULL_SLOT, dest, entry, ask, &noSpace);
+            uint32 const fits = res == EQUIP_ERR_OK ? ask : noSpace ? ask - std::min(ask, noSpace) : 0;
+            uint32 const n = GuildBank::Take(want, count, fits);
+            if (!n)
+                break;  // full bags (or the core would refuse it): only what fits (spec §6)
+            uint32 const before = bot->GetItemCount(entry, false);
+            guild->SwapItemsWithInventory(bot, true, 0, slot, NULL_BAG, NULL_SLOT, GuildBank::SplitFor(n, count));
+            uint32 const after = bot->GetItemCount(entry, false);
+            uint32 const moved = after > before ? after - before : 0;  // decision 3: what the bags say moved
+            if (!moved)
+                break;  // the core refused (rights, stacks a day): stop this kind
+            r.taken[k] += moved;
+            want -= std::min(want, moved);
+        }
+    }
+
+    // Shares and counters: only what moved.
+    uint32 in = 0;
+    uint32 out = 0;
+    for (std::size_t k = 0; k < GuildBank::KIND_COUNT; ++k)
+    {
+        in += r.deposited[k];
+        out += r.taken[k];
+    }
+    r.deposit = in > 0;
+    if (in)
+    {
+        FixedPopulation::Count(EconomyCounter::BankDeposits);
+        FixedPopulation::Count(EconomyCounter::BankItemsIn, in);
+    }
+    if (out)
+    {
+        FixedPopulation::Count(EconomyCounter::BankWithdrawals);
+        FixedPopulation::Count(EconomyCounter::BankItemsOut, out);
+    }
+    Refresh(guild);
+    std::lock_guard<std::mutex> guard(_shareLock);
+    GuildBank::ShareState& st = _shares[guid];
+    GuildBank::RollDay(st, day);  // the same day as above (the world thread is the only writer of the reset time)
+    for (std::size_t k = 0; k < GuildBank::KIND_COUNT; ++k)
+        st.taken[k] += r.taken[k];
+    _last = r;
+    if (r.deposit)
+        _lastDeposit = r;
+    return r;
+}
+
+uint32 GuildBankMgr::Put(Player* bot, uint32 entry, uint32 count)
+{
+    PlayerbotAI* botAI = bot ? GET_PLAYERBOT_AI(bot) : nullptr;
+    Guild* guild = bot ? sGuildMgr->GetGuildById(bot->GetGuildId()) : nullptr;
+    if (!botAI || !guild || GuildBankAccess::Tabs(*guild).empty())
+        return 0;
+    count = std::min(count, bot->GetItemCount(entry, false));  // a count above what it holds is clamped
+    uint32 moved = 0;
+    for (Item* item : botAI->GetInventoryItems())
+    {
+        if (moved >= count)
+            break;
+        if (item->GetEntry() != entry)
+            continue;
+        // Each stack is used once: a moved stack may no longer exist after DepositItem.
+        uint32 const n = DepositItem(guild, bot, item, std::min(count - moved, item->GetCount()));
+        if (!n)
+            break;  // the core refused: nothing more
+        moved += n;
+    }
+    Refresh(guild);
+    return moved;
+}
+
+VisitResult GuildBankMgr::Last(bool deposit) const
+{
+    std::lock_guard<std::mutex> guard(_shareLock);
+    return deposit ? _lastDeposit : _last;
+}
+
+GuildBank::ShareState GuildBankMgr::ShareOf(uint32 guid) const
+{
+    std::lock_guard<std::mutex> guard(_shareLock);
+    auto const it = _shares.find(guid);
+    return it == _shares.end() ? GuildBank::ShareState{} : it->second;
 }

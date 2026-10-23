@@ -188,6 +188,8 @@ void CraftMgr::BuildRecipes()
     {
         _bySkill[r.skill].push_back(&r);
         _bySpell[r.spell] = &r;
+        if (r.product)
+            _byProduct[r.product].push_back(&r);
     }
 }
 
@@ -340,6 +342,19 @@ CraftRecipeInfo const* CraftMgr::Recipe(uint32 spell) const
 {
     auto const it = _bySpell.find(spell);
     return it == _bySpell.end() ? nullptr : it->second;
+}
+
+bool CraftMgr::Makes(Player* bot, uint32 item) const
+{
+    if (!bot || !Built())
+        return false;
+    auto const it = _byProduct.find(item);
+    if (it == _byProduct.end())
+        return false;
+    for (CraftRecipeInfo const* r : it->second)
+        if (bot->HasSpell(r->spell))
+            return true;
+    return false;
 }
 
 uint32 CraftMgr::VendorUnitPrice(uint32 item) const

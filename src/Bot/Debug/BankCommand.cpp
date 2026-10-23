@@ -17,13 +17,17 @@
 #include "Guild.h"
 #include "GuildBankMgr.h"
 #include "GuildMgr.h"
+#include "MailAction.h"
 #include "MapMgr.h"
+#include "MotionMaster.h"
 #include "ObjectAccessor.h"
 #include "ObjectMgr.h"
 #include "Player.h"
+#include "PlayerbotAI.h"
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
 #include "RandomPlayerbotMgr.h"
+#include "TownErrands.h"
 
 namespace
 {
@@ -93,8 +97,37 @@ bool Show(ChatHandler* handler, std::vector<std::string> const& words)
 void PrintBot(ChatHandler* handler, Player* bot)
 {
     GuildBankMgr& bank = GuildBankMgr::instance();
-    handler->PSendSysMessage("BANKBOT name={} guid={} guild={} served={}", bot->GetName(),
-                             bot->GetGUID().GetCounter(), bot->GetGuildId(), bank.Serves(bot) ? 1 : 0);
+    PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
+    uint64 const day = bank.Day();
+    GuildBank::ShareState const share = bank.ShareOf(bot->GetGUID().GetCounter());
+    CourierSpawn const* c = bank.NearestCourier(bot, 100000.0f);
+    std::ostringstream out;
+    out << "BANKBOT name=" << bot->GetName() << " guid=" << bot->GetGUID().GetCounter()
+        << " guild=" << bot->GetGuildId() << " served=" << (bank.Serves(bot) ? 1 : 0) << " courier_d="
+        << (c ? static_cast<int32>(bot->GetExactDist(c->x, c->y, c->z) + 0.5f) : -1) << " day=" << day;
+    for (std::size_t k = 0; k < GuildBank::KIND_COUNT; ++k)
+    {
+        auto const kind = static_cast<GuildBank::Kind>(k);
+        char const* n = GuildBank::KindName(kind);
+        // taken: today's share only (another day's counts are spent)
+        out << ' ' << n << "_carried=" << GuildBankMgr::Carried(bot, botAI, kind) << ' ' << n
+            << "_taken=" << (share.day == day ? share.taken[k] : 0);
+    }
+    handler->PSendSysMessage("{}", out.str());
+}
+
+void PrintLast(ChatHandler* handler, VisitResult const& r)
+{
+    std::ostringstream out;
+    out << "BANKLAST name=" << (r.bot.empty() ? "-" : r.bot) << " guild=" << r.guild
+        << " deposit=" << (r.deposit ? 1 : 0) << " empty=" << (r.empty ? 1 : 0);
+    for (std::size_t k = 0; k < GuildBank::KIND_COUNT; ++k)
+    {
+        char const* n = GuildBank::KindName(static_cast<GuildBank::Kind>(k));
+        out << ' ' << n << "_before=" << r.before[k] << ' ' << n << "_in=" << r.deposited[k] << ' ' << n
+            << "_out=" << r.taken[k] << ' ' << n << "_kept=" << r.kept[k] << ' ' << n << "_want=" << r.wanted[k];
+    }
+    handler->PSendSysMessage("{}", out.str());
 }
 }  // namespace
 
@@ -135,6 +168,12 @@ bool BankCommand::Handle(ChatHandler* handler, char const* args)
     }
     if (sub == "show" && words.size() >= 2)
         return Show(handler, words);
+    if (sub == "last")
+    {
+        // The last courier visit (`bank last deposit`: the last one that deposited). Kept in memory only.
+        PrintLast(handler, bank.Last(words.size() > 1 && words[1] == "deposit"));
+        return true;
+    }
     if (words.size() < 2)
     {
         handler->PSendSysMessage("BANKERR {} needs a name", sub);
@@ -152,6 +191,60 @@ bool BankCommand::Handle(ChatHandler* handler, char const* args)
     if (sub == "bot")
     {
         PrintBot(handler, bot);
+        return true;
+    }
+    if (sub == "walk")
+    {
+        // Test seam: walk (a plain move, no teleport) to the nearest courier of its side within 120 yards.
+        CourierSpawn const* c = bank.NearestCourier(bot, 120.0f);
+        if (!c)
+        {
+            handler->PSendSysMessage("BANKERR no courier of {}'s side within 120 yards", bot->GetName());
+            return false;
+        }
+        bot->GetMotionMaster()->MovePoint(0, c->x, c->y, c->z);
+        handler->PSendSysMessage("BANKWALK name={} yards={:.0f}", bot->GetName(), bot->GetExactDist(c->x, c->y, c->z));
+        return true;
+    }
+    if (sub == "visit")
+    {
+        // Test seam: the courier visit now, if it stands at one (the same step a town trip makes). Console commands
+        // run on the world thread.
+        CourierSpawn const* c = bank.NearestCourier(bot, 5.0f);
+        if (!c || !bank.Serves(bot))
+        {
+            handler->PSendSysMessage("BANKERR {} is not served, or not within 5 yards of a courier", bot->GetName());
+            return false;
+        }
+        PrintLast(handler, bank.Visit(bot, GET_PLAYERBOT_AI(bot)));
+        handler->PSendSysMessage("BANKOK visit {}", bot->GetName());
+        return true;
+    }
+    if (sub == "mail")
+    {
+        // Test seam: take its mail at a mailbox within reach (the courier stands by one): c05's fixture items.
+        PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
+        ObjectGuid const mailbox = botAI ? MailProcessor::FindMailbox(botAI) : ObjectGuid::Empty;
+        if (mailbox.IsEmpty())
+        {
+            handler->PSendSysMessage("BANKERR no mailbox in reach of {}", bot->GetName());
+            return false;
+        }
+        handler->PSendSysMessage("BANKOK mail {} n={}", bot->GetName(), TownErrands::CollectMail(bot, mailbox));
+        return true;
+    }
+    if (sub == "put")
+    {
+        // Test seam: put a held item into tab 1 (any item; the core's rules and rights apply). Only a served bot (the
+        // `bank on` seam); a count above what it holds is clamped, 0 or a typo is refused.
+        uint32 const item = words.size() == 4 ? Num(words[2]) : 0;
+        uint32 const count = words.size() == 4 ? Num(words[3]) : 0;
+        if (!item || !count || !bank.Serves(bot))
+        {
+            handler->PSendSysMessage("BANKERR usage: put <name> <item> <count> (a served bot, count >= 1)");
+            return false;
+        }
+        handler->PSendSysMessage("BANKOK put {} item={} moved={}", bot->GetName(), item, bank.Put(bot, item, count));
         return true;
     }
     handler->PSendSysMessage("BANKERR unknown sub-command {}", sub);

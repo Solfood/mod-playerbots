@@ -10,6 +10,7 @@
 #include <array>
 #include <atomic>
 #include <mutex>
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -20,7 +21,9 @@
 
 class Creature;
 class Guild;
+class Item;
 class Player;
+class PlayerbotAI;
 struct ItemTemplate;
 
 // One guild's tab 1 ("Supplies"), read on the world thread (Refresh) and copied out under a short lock.
@@ -50,6 +53,20 @@ struct CourierSpawn
     float x = 0.0f, y = 0.0f, z = 0.0f, o = 0.0f;
     bool alliance = false;  // the human courier (Alliance), else the orc (Horde)
     uint32 innEntry = 0;    // the innkeeper whose town it is
+};
+
+// One courier visit (GuildBankMgr::Visit), kept for `bank last`. Counts are items; index by GuildBank::Index(kind).
+struct VisitResult
+{
+    std::string bot;
+    uint32 guild = 0;
+    std::array<uint32, GuildBank::KIND_COUNT> before{};     // useful stock before
+    std::array<uint32, GuildBank::KIND_COUNT> deposited{};  // items moved into tab 1
+    std::array<uint32, GuildBank::KIND_COUNT> taken{};      // items moved into its bags
+    std::array<uint32, GuildBank::KIND_COUNT> kept{};       // a crafter's made items of the kind left in its bags
+    std::array<uint32, GuildBank::KIND_COUNT> wanted{};     // GuildBank::Want at the start
+    bool empty = false;    // it wanted a kind the bank had nothing of that it may use
+    bool deposit = false;  // a crafter's deposit happened
 };
 
 // Guild bank supplies (guildmaster spec 2026-10-17, Plan 6b). With AiPlayerbot.GuildBank = 1: free tabs, couriers,
@@ -93,6 +110,25 @@ public:
     static bool IsCourier(Creature const* npc);
     static bool IsCourierFor(Creature const* npc, Player* bot);
 
+    // World thread: a bot at a courier deposits (a crafter) and takes its share. Decisions 3, 5, 7, 8. Items move
+    // only through the core's guild bank swap (see the .cpp); what moved is what its bags say moved.
+    VisitResult Visit(Player* bot, PlayerbotAI* botAI);
+    // World thread, test seam only: put up to `count` of a held item into tab 1 (any item; the core's rules apply).
+    // The count is clamped to what its bags hold; returns what really moved.
+    uint32 Put(Player* bot, uint32 entry, uint32 count);
+    VisitResult Last(bool deposit = false) const;
+    uint64 Day() const;  // WORLD_STATE_CUSTOM_GUILD_DAILY_RESET_TIME: the core's next guild reset (decision 5)
+    GuildBank::ShareState ShareOf(uint32 guid) const;
+    // Supplies of `kind` in its bags that it may use as such (Suits its level and Player::CanUseItem): what a share
+    // tops up. Its own bags only (map or world thread). 0 for Kind::None.
+    static uint32 Carried(Player* bot, PlayerbotAI* botAI, GuildBank::Kind kind);
+    // A crafter's made supplies in its bags (decision 7): a supply kind, not soulbound, useful to a guild with these
+    // member levels, and made by a recipe it knows (CraftMgr::Makes). `held` gets the item counts per kind; `items`
+    // (optional) the stacks. Its own bags only (map or world thread); Visit and the errand check share it.
+    static void MadeSupplies(PlayerbotAI* botAI, Player* bot, GuildBank::Levels const& levels,
+                             std::array<uint32, GuildBank::KIND_COUNT>& held,
+                             std::array<std::vector<Item*>, GuildBank::KIND_COUNT>* items = nullptr);
+
 private:
     GuildBankMgr() = default;
 
@@ -103,6 +139,13 @@ private:
     mutable std::mutex _stockLock;
     std::unordered_map<uint32, BankStock> _stocks;  // guild id -> snapshot
     uint32 _refreshMs = 0;
+
+    // World thread: moves up to `count` of one bag item (a split when part of a stack) into tab 1, where the core
+    // finds a slot or merges; returns what really moved (its bags before minus after; decision 3).
+    uint32 DepositItem(Guild* guild, Player* bot, Item* item, uint32 count);
+    mutable std::mutex _shareLock;
+    std::unordered_map<uint32, GuildBank::ShareState> _shares;  // bot guid -> today's share (lost at a restart)
+    VisitResult _last, _lastDeposit;
 
     // World thread, once at startup (Start). Our own rule (decision 9).
     void SpawnCouriers();

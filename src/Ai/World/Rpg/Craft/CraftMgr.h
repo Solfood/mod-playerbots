@@ -86,6 +86,8 @@ public:
 
     std::vector<CraftRecipeInfo const*> const& RecipesOf(uint32 skill) const;
     CraftRecipeInfo const* Recipe(uint32 spell) const;
+    // A recipe the bot knows creates this item (Plan 6b: a crafter deposits only supplies it makes). False until built.
+    bool Makes(Player* bot, uint32 item) const;
     uint32 VendorUnitPrice(uint32 item) const;
     // The nearest of each it may walk to (Craft::StationOk: never in a zone above its level; an unguided bot up to
     // StationYards, a guided bot only in town, TownYards). nullptr = none.
@@ -163,6 +165,7 @@ private:
     std::vector<CraftRecipeInfo> _recipes;
     std::unordered_map<uint32, std::vector<CraftRecipeInfo const*>> _bySkill;
     std::unordered_map<uint32, CraftRecipeInfo const*> _bySpell;
+    std::unordered_map<uint32, std::vector<CraftRecipeInfo const*>> _byProduct;  // item -> recipes that create it
     std::unordered_map<uint32, uint32> _vendorPrice;                                         // item -> unit price
     std::unordered_map<uint32, std::vector<CraftSpot>> _stations;                            // map -> stations
     std::unordered_map<uint32, std::unordered_map<uint32, std::vector<CraftSpot>>> _vendors;  // item -> map -> vendors
