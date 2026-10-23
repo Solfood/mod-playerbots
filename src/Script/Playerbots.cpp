@@ -22,6 +22,10 @@
 #include "GatherNodeMgr.h"
 #include "GlobalScript.h"
 #include "GuideMgr.h"
+#include "Guild.h"
+#include "GuildBankMgr.h"
+#include "GuildBankOps.h"
+#include "GuildScript.h"
 #include "GuildTaskMgr.h"
 #include "Survival.h"
 #include "PlayerScript.h"
@@ -600,6 +604,13 @@ public:
             CraftMgr::instance().Build();
         }
 
+        // Guild bank supplies (guildmaster Plan 6b): only when it is on; with it off no guild or creature is touched.
+        if (sPlayerbotAIConfig.guildBank.enabled)
+        {
+            LOG_INFO("server.loading", "Giving guild bank tabs and placing guild couriers...");
+            GuildBankMgr::instance().Start();
+        }
+
         LOG_INFO("server.loading", "Playerbots World Thread Processor initialized");
     }
 
@@ -610,6 +621,7 @@ public:
         PlayerbotWorldThreadProcessor::instance().Update(diff);
         sRandomPlayerbotMgr.UpdateAI(diff);  // World thread only
         sRaisingMgr.Update(diff);            // World thread only (honest world raisings)
+        GuildBankMgr::instance().Update(diff);  // World thread only (guild bank snapshots; off: returns at once)
     }
 
     // Runs before the sessions are kicked on server shutdown
@@ -658,6 +670,26 @@ public:
     void OnBattlegroundEnd(Battleground* bg, TeamId /*winnerTeam*/) override { bgStrategies.erase(bg->GetInstanceID()); }
 };
 
+class PlayerbotsGuildScript : public GuildScript
+{
+public:
+    PlayerbotsGuildScript() : GuildScript("PlayerbotsGuildScript", {GUILDHOOK_ON_CREATE, GUILDHOOK_ON_DISBAND}) {}
+
+    // Guild bank supplies (Plan 6b): a new guild gets its six tabs on the world thread; a disbanded one is forgotten.
+    void OnCreate(Guild* guild, Player* /*leader*/, std::string const& /*name*/) override
+    {
+        if (guild && GuildBankMgr::instance().Enabled())
+            PlayerbotWorldThreadProcessor::instance().QueueOperation(
+                std::make_unique<GuildTabsOperation>(guild->GetId()));
+    }
+
+    void OnDisband(Guild* guild) override
+    {
+        if (guild)
+            GuildBankMgr::instance().Forget(guild->GetId());
+    }
+};
+
 // Workaround for missing InitEnabledHooksIfNeeded for new BattlefieldScript in ScriptMgr
 class PlayerbotsBattlefieldScript : public BattlefieldScript
 {
@@ -686,6 +718,7 @@ void AddPlayerbotsScripts()
     new PlayerbotsAllMapScript();
     new PlayerbotsGlobalScript();
     new PlayerbotsWorldScript();
+    new PlayerbotsGuildScript();
     new PlayerBotsBGScript();
     AddPlayerbotsSecureLoginScripts();
     AddPlayerbotsSelfBotAfkScripts();
