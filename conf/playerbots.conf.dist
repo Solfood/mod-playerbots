@@ -1050,6 +1050,30 @@ AiPlayerbot.Crafting.FishMinutes = 10
 AiPlayerbot.Crafting.FishCooldownMinutes = 120
 AiPlayerbot.Crafting.FishSpotYards = 200
 
+# Guild bank supplies (guildmaster Plan 6b). With GuildBank = 1 every guild gets all six bank tabs free (OUR OWN RULE)
+# and tab 1 is named "Supplies"; every rank below guild master may see tab 1, put items in it and take TabSlotsPerDay
+# stacks a day from it. Crafters (World of Craft) deposit the food, drink, healing and mana potions and bandages they
+# make while their guild holds fewer than the Target of that kind, after keeping their own daily share. Members short
+# of food (or drink) take their daily Share of each kind at a guild courier before they buy from a vendor; the share
+# resets at the server's guild daily reset. A guild courier (OUR OWN RULE) is a child NPC by the mailbox of every town
+# whose innkeeper has a mailbox within CourierYards (spawned in memory, never saved). A crafter whose guild is short of
+# a kind makes up to CraftExtra more of it. Off (0): nothing changes. Changing these needs a worldserver restart.
+# Defaults: 0; targets 100, 100, 40, 20, 40; shares 20, 20, 5, 5, 10; 60, 25, 5
+AiPlayerbot.GuildBank = 0
+AiPlayerbot.GuildBank.Target.Food = 100
+AiPlayerbot.GuildBank.Target.Drink = 100
+AiPlayerbot.GuildBank.Target.HealingPotion = 40
+AiPlayerbot.GuildBank.Target.ManaPotion = 20
+AiPlayerbot.GuildBank.Target.Bandage = 40
+AiPlayerbot.GuildBank.Share.Food = 20
+AiPlayerbot.GuildBank.Share.Drink = 20
+AiPlayerbot.GuildBank.Share.HealingPotion = 5
+AiPlayerbot.GuildBank.Share.ManaPotion = 5
+AiPlayerbot.GuildBank.Share.Bandage = 10
+AiPlayerbot.GuildBank.CourierYards = 60
+AiPlayerbot.GuildBank.TabSlotsPerDay = 25
+AiPlayerbot.GuildBank.CraftExtra = 5
+
 # Death knight "raisings" (only with FixedPopulation = 1). None at launch. Once a bot of a faction reaches
 # UnlockLevel, every WaveIntervalHours that faction raises bots that died within RecentDeathHours at
 # MinCandidateLevel or higher: the original character retires (kept in the database) and a level-55

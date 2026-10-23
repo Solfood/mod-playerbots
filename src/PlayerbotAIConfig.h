@@ -13,6 +13,7 @@
 #include "CraftSettings.h"
 #include "DeathRules.h"
 #include "SuppliesRules.h"
+#include "GuildBankRules.h"
 #include "SharedDefines.h"
 #include <algorithm>
 #include <map>
@@ -386,6 +387,7 @@ public:
     Routes::Settings questRoutes;  // guildmaster quest routes (AiPlayerbot.QuestRoutes.*), off by default
     Guides::Settings guideBots;  // AiPlayerbot.GuideBots.* (guildmaster Plan 5c)
     Craft::Settings crafting;    // AiPlayerbot.Crafting.* (guildmaster World of Craft part 1, Plan 6a)
+    GuildBank::Settings guildBank;  // AiPlayerbot.GuildBank.* (guildmaster guild bank supplies, Plan 6b)
     uint32 professionPickMinLevel;
     uint32 professionPickMaxLevel;
     float spiritHealerGraveRadius;

@@ -770,6 +770,21 @@ bool PlayerbotAIConfig::Initialize()
     crafting.fishMinutes = sConfigMgr->GetOption<uint32>("AiPlayerbot.Crafting.FishMinutes", 10);
     crafting.fishCooldownMinutes = sConfigMgr->GetOption<uint32>("AiPlayerbot.Crafting.FishCooldownMinutes", 120);
     crafting.fishSpotYards = sConfigMgr->GetOption<uint32>("AiPlayerbot.Crafting.FishSpotYards", 200);
+    guildBank.enabled = sConfigMgr->GetOption<bool>("AiPlayerbot.GuildBank", false);
+    {
+        char const* const kinds[GuildBank::KIND_COUNT] = {"Food", "Drink", "HealingPotion", "ManaPotion", "Bandage"};
+        GuildBank::Settings const defaults;
+        for (std::size_t k = 0; k < GuildBank::KIND_COUNT; ++k)
+        {
+            guildBank.target[k] = sConfigMgr->GetOption<uint32>(std::string("AiPlayerbot.GuildBank.Target.") + kinds[k],
+                                                                defaults.target[k]);
+            guildBank.share[k] = sConfigMgr->GetOption<uint32>(std::string("AiPlayerbot.GuildBank.Share.") + kinds[k],
+                                                               defaults.share[k]);
+        }
+    }
+    guildBank.courierYards = sConfigMgr->GetOption<uint32>("AiPlayerbot.GuildBank.CourierYards", 60);
+    guildBank.tabSlotsPerDay = sConfigMgr->GetOption<uint32>("AiPlayerbot.GuildBank.TabSlotsPerDay", 25);
+    guildBank.craftExtra = sConfigMgr->GetOption<uint32>("AiPlayerbot.GuildBank.CraftExtra", 5);
     professionPickMinLevel = sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.ProfessionMinLevel", 5);
     professionPickMaxLevel = sConfigMgr->GetOption<uint32>("AiPlayerbot.FixedPopulation.ProfessionMaxLevel", 10);
     if (professionPickMaxLevel < professionPickMinLevel)

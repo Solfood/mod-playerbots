@@ -4,6 +4,7 @@
  * or (at your option) any later version.
  */
 
+#include "BankCommand.h"
 #include "BattleGroundTactics.h"
 #include "Chat.h"
 #include "CraftCommand.h"
@@ -45,6 +46,7 @@ public:
             {"routes", HandleRoutesCommand, SEC_GAMEMASTER, Console::Yes},
             {"guides", HandleGuidesCommand, SEC_GAMEMASTER, Console::Yes},
             {"craft", HandleCraftCommand, SEC_GAMEMASTER, Console::Yes},
+            {"bank", HandleBankCommand, SEC_GAMEMASTER, Console::Yes},
             {"debug", playerbotsDebugCommandTable},
             {"account", playerbotsAccountCommandTable},
         };
@@ -77,6 +79,8 @@ public:
     }
 
     static bool HandleGuidesCommand(ChatHandler* handler, char const* args) { return GuideCommand::Handle(handler, args); }
+
+    static bool HandleBankCommand(ChatHandler* handler, char const* args) { return BankCommand::Handle(handler, args); }
 
     static bool HandleCraftCommand(ChatHandler* handler, char const* args)
     {

@@ -252,6 +252,14 @@ struct NewRpgInfo
     FishGear fishGear;
     uint32 fishAtMs{0};  // getMSTime() a fishing trip last started (the cooldown; 0 = never)
     Supplies::RestState rest;  // honest world rest before a fight (BotSupplies::ShouldRest); cleared by combat
+    // Guild bank supplies (Plan 6b): kept across statuses and AI resets, lost at logout.
+    struct BankState
+    {
+        uint32 tripMs{0};       // the town trip (lastErrandMs) it visited a courier on: one visit per trip
+        uint32 checkedAtMs{0};  // when `reason` was last worked out (at most once a minute)
+        uint8 reason{0};        // GuildBank::Reason from that check
+    };
+    BankState bank;
     bool shortOfMoney{false};     // honest world: below the comfortable money line (BotSupplies::ShortOfMoney)
     uint32 shortCheckedMs{0};     // when that was last worked out (at most every 30 s)
     WorldPosition abandonedTrip;  // where the last town trip given up was going (the next repair trip avoids it)
