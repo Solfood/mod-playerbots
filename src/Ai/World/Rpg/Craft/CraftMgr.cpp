@@ -557,13 +557,18 @@ bool CraftMgr::IsSupply(ItemTemplate const* proto)
                     UINT32_MAX));
                 // An extra only when it is worth something when sold (Task 2 ruling: PlanBatch does not filter it).
                 bool const sells = c.value > 0 && proto->Bonding != BIND_WHEN_PICKED_UP;
-                // Guild bank supplies (Plan 6b, spec §4): a kind its guild is short of is wanted a little more (at
-                // most CraftExtra). No deficit (or guild bank off): exactly as before. An upgrade is still Want::Gear,
-                // which the plan puts before any Want::Supply (WantFor checks `upgrade` first).
-                uint32 const stack = supply ? GuildBank::CraftStack(s.supplyStack,
-                                                                    GuildBankMgr::instance().DeficitFor(bot, proto),
-                                                                    sPlayerbotAIConfig.guildBank.craftExtra)
-                                            : s.supplyStack;
+                // Guild bank supplies (Plan 6b, spec §4): a kind its guild is short of is wanted above what it keeps for
+                // itself (its share) plus at most CraftExtra, so the extra can be deposited. No deficit (or guild bank
+                // off): exactly as before. An upgrade is still Want::Gear, which the plan puts before any Want::Supply
+                // (WantFor checks `upgrade` first).
+                uint32 stack = s.supplyStack;
+                if (supply)
+                    if (uint32 const deficit = GuildBankMgr::instance().DeficitFor(bot, proto))
+                        stack = GuildBank::CraftStack(
+                            s.supplyStack,
+                            GuildBank::Keep(GuildBankMgr::KindOf(proto), BotSupplies::UsesMana(bot),
+                                            sPlayerbotAIConfig.guildBank),
+                            deficit, sPlayerbotAIConfig.guildBank.craftExtra);
                 uint32 const have = held(r->product);
                 c.want = ::Craft::WantFor(upgrade, supply && have < stack, color, sells);
                 c.casts = ::Craft::CastsWanted(c.want, color, have, stack, r->productCount);

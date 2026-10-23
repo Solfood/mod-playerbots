@@ -133,9 +133,19 @@ int main()
     CHECK_EQ(0u, SplitFor(25, 20)); // never more than the stack: the whole stack
 
     // The craft plan's weight (spec §4): small, and none when the guild is not short.
-    CHECK_EQ(5u, CraftStack(5, 0, 5));
-    CHECK_EQ(8u, CraftStack(5, 3, 5));
-    CHECK_EQ(10u, CraftStack(5, 80, 5));
+    // Not short (or the guild bank off): exactly SupplyStack, whatever the keep.
+    CHECK_EQ(5u, CraftStack(5, 0, 0, 5));
+    CHECK_EQ(5u, CraftStack(5, 20, 0, 5));
+    // Short: above its keep (food 20), so the extra can be deposited.
+    CHECK_EQ(23u, CraftStack(5, 20, 3, 5));
+    CHECK_EQ(25u, CraftStack(5, 20, 80, 5));
+    CHECK_EQ(15u, CraftStack(5, 10, 80, 5));  // bandage keep 10
+    // Keep below the stack (potions 5 with a stack of 8, or a mana kind without mana: keep 0): stack + extra.
+    CHECK_EQ(13u, CraftStack(8, 5, 80, 5));
+    CHECK_EQ(10u, CraftStack(5, 0, 80, 5));
+    CHECK_EQ(6u, CraftStack(5, 5, 1, 5));
+    // What it then holds above its keep is what DepositAmount moves: the extra reaches the bank.
+    CHECK_EQ(5u, DepositAmount(CraftStack(5, 20, 80, 5), 20, 0, 100));
 
     // Tabs (spec §1) and one visit per town trip.
     CHECK_EQ(std::string("Supplies"), TabName(0));

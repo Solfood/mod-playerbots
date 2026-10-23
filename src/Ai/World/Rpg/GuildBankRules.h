@@ -189,10 +189,13 @@ inline uint32_t Take(uint32_t want, uint32_t inSlot, uint32_t fits) { return std
 inline uint32_t SplitFor(uint32_t amount, uint32_t stackCount) { return amount < stackCount ? amount : 0; }
 
 // The craft plan's one extra weight (spec §4): a supply recipe of a kind its guild is short of is wanted up to this
-// many held (Crafting.SupplyStack plus at most CraftExtra); with no deficit, exactly as before.
-inline uint32_t CraftStack(uint32_t supplyStack, uint32_t deficit, uint32_t extra)
+// many held: what it keeps for itself before it deposits (Keep, at least Crafting.SupplyStack) plus at most CraftExtra,
+// so the extra can reach the bank. With no deficit (or the guild bank off): exactly Crafting.SupplyStack, as before.
+inline uint32_t CraftStack(uint32_t supplyStack, uint32_t keep, uint32_t deficit, uint32_t extra)
 {
-    return supplyStack + std::min(deficit, extra);
+    if (!deficit)
+        return supplyStack;
+    return std::max(supplyStack, keep) + std::min(deficit, extra);
 }
 
 // Spec §1: plain tab names.

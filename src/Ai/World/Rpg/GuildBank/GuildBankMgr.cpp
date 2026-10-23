@@ -449,8 +449,13 @@ void GuildBankMgr::MadeSupplies(PlayerbotAI* botAI, Player* bot, GuildBank::Leve
 
 GuildBank::Reason GuildBankMgr::WantsVisit(PlayerbotAI* botAI, Player* bot)
 {
-    if (!botAI || !Serves(bot))
+    if (!botAI)
+        return GuildBank::Reason::None;
+    if (!Serves(bot))
+    {
+        botAI->rpgInfo.bank.reason = static_cast<uint8>(GuildBank::Reason::None);  // not stale after `bank off`
         return GuildBank::Reason::None;  // Review Focus 1: nothing else is read
+    }
     NewRpgInfo::BankState& state = botAI->rpgInfo.bank;
     uint32 const now = getMSTime();
     if (state.checkedAtMs && getMSTimeDiff(state.checkedAtMs, now) < MINUTE * IN_MILLISECONDS)
@@ -510,9 +515,10 @@ GuildBank::Reason GuildBankMgr::WantsVisit(PlayerbotAI* botAI, Player* bot)
         }
     }
 
-    // A crafter holding supplies it makes, above its own share, of a kind its guild is short of (Visit's rule).
+    // A crafter holding supplies it makes, above its own share, of a kind its guild is short of (Visit's rule), while
+    // tab 1 has a free slot (a full tab refuses new stacks: no trip each cooldown for nothing).
     bool canDeposit = false;
-    if (CraftMgr::instance().Crafting(bot))
+    if (stock.stacks < GUILD_BANK_MAX_SLOTS && CraftMgr::instance().Crafting(bot))
     {
         std::array<uint32, GuildBank::KIND_COUNT> held{};
         MadeSupplies(botAI, bot, stock.levels, held);
@@ -568,8 +574,10 @@ VisitResult GuildBankMgr::Visit(Player* bot, PlayerbotAI* botAI)
     Stock(r.guild, stock);
     r.before = stock.stock;
 
-    // 3. A crafter deposits what it makes, above its own share, while its guild is below target (decision 7).
-    if (CraftMgr::instance().Crafting(bot))
+    // 3. A crafter deposits what it makes, above its own share, while its guild is below target (decision 7), and
+    // only while tab 1 has a free slot (the snapshot was just refreshed). A full tab is left alone, even where a part
+    // stack could still be topped up: every refused split would leave a copy of the item behind in memory.
+    if (stock.stacks < GUILD_BANK_MAX_SLOTS && CraftMgr::instance().Crafting(bot))
     {
         std::array<std::vector<Item*>, GuildBank::KIND_COUNT> made;
         std::array<uint32, GuildBank::KIND_COUNT> held{};
