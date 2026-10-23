@@ -20,6 +20,8 @@
 #include "GameObject.h"
 #include "GossipDef.h"
 #include "GuideMgr.h"
+#include "GuildBankMgr.h"
+#include "GuildBankOps.h"
 #include "IVMapMgr.h"
 #include "MotionMaster.h"
 #include "MoveSpline.h"
@@ -887,6 +889,17 @@ bool NewRpgWanderNpcAction::Execute(Event /*event*/)
                     info.craft.auctionTripMs = info.lastErrandMs;
                     PlayerbotWorldThreadProcessor::instance().QueueOperation(
                         std::make_unique<AuctionVisitOperation>(bot->GetGUID(), creature->GetGUID()));
+                }
+
+                // Guild bank supplies (Plan 6b): at its faction's guild courier, its bank business in one step on the
+                // world thread (decision 2), once per town trip. Guild bank off: nothing.
+                if (GuildBankMgr::IsCourierFor(creature, bot) && GuildBankMgr::instance().Serves(bot) &&
+                    GuildBank::VisitDue(info.bank.tripMs, info.lastErrandMs))
+                {
+                    info.bank.tripMs = info.lastErrandMs;
+                    info.bank.checkedAtMs = 0;  // worked out again after the visit
+                    PlayerbotWorldThreadProcessor::instance().QueueOperation(
+                        std::make_unique<CourierVisitOperation>(bot->GetGUID(), creature->GetGUID()));
                 }
 
                 // Honest world: any trainer visit catches up on spells skipped at level-up for lack of gold,

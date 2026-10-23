@@ -11,6 +11,7 @@
 #include "CraftMgr.h"
 #include "Creature.h"
 #include "FixedPopulation.h"
+#include "GuildBankMgr.h"
 #include "ItemUsageValue.h"
 #include "Mail.h"
 #include "MarketRules.h"
@@ -105,6 +106,12 @@ uint8 TownErrands::Needed(PlayerbotAI* botAI, Player* bot)
             errands |= TOWN_ERRAND_AUCTION;
     }
 
+    // Guild bank supplies (Plan 6b): a member short of food whose bank has some, or a crafter with supplies its guild
+    // is short of: a guild courier first. Guild bank off (and no seam): never (WantsVisit returns None at once).
+    GuildBank::Reason const bankReason = GuildBankMgr::instance().WantsVisit(botAI, bot);
+    if (bankReason == GuildBank::Reason::Withdraw || bankReason == GuildBank::Reason::Deposit)
+        errands |= TOWN_ERRAND_BANK;
+
     return errands;
 }
 
@@ -120,6 +127,10 @@ bool TownErrands::Serves(Creature const* npc, uint8 errands)
         return true;
     if ((errands & TOWN_ERRAND_SUPPLIES) && BotSupplies::SellsSupplies(npc))
         return true;
+    // Only its own faction's courier is ever in `nearbyNpcs`: the other one is hostile to it, and
+    // PossibleNewRpgTargetsValue drops hostile units.
+    if ((errands & TOWN_ERRAND_BANK) && GuildBankMgr::IsCourier(npc))
+        return true;
     return false;
 }
 
@@ -132,6 +143,14 @@ ObjectGuid TownErrands::ChooseTarget(PlayerbotAI* botAI, Player* bot, uint8 erra
         ObjectGuid const repairer = ChooseTarget(botAI, bot, TOWN_ERRAND_REPAIR, nearbyNpcs, skip);
         if (!repairer.IsEmpty())
             return repairer;
+    }
+
+    // Guild bank supplies (Plan 6b): the courier before a vendor, so the bank serves a member before it pays.
+    if ((errands & TOWN_ERRAND_BANK) && errands != TOWN_ERRAND_BANK)
+    {
+        ObjectGuid const courier = ChooseTarget(botAI, bot, TOWN_ERRAND_BANK, nearbyNpcs, skip);
+        if (!courier.IsEmpty())
+            return courier;
     }
 
     for (ObjectGuid const& guid : nearbyNpcs)
@@ -248,6 +267,13 @@ WorldPosition TownErrands::AuctionTrip(Player* bot)
 {
     CraftSpot const* auctioneer = CraftMgr::instance().NearestAuctioneer(bot, TripYards(bot));
     return auctioneer ? auctioneer->pos : NearestTown(bot);
+}
+
+WorldPosition TownErrands::BankTrip(Player* bot)
+{
+    if (CourierSpawn const* c = GuildBankMgr::instance().NearestCourier(bot, TripYards(bot)))
+        return WorldPosition(c->map, c->x, c->y, c->z, c->o);
+    return NearestTown(bot);
 }
 
 float TownErrands::TripYards(Player* bot)

@@ -23,6 +23,7 @@
 #include "Item.h"
 #include "Log.h"
 #include "MapMgr.h"
+#include "NewRpgInfo.h"
 #include "ObjectMgr.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
@@ -32,6 +33,7 @@
 #include "SpellInfo.h"
 #include "SpellMgr.h"
 #include "Timer.h"
+#include "TownErrands.h"
 #include "WorldState.h"
 #include "WorldStateDefines.h"
 
@@ -233,6 +235,22 @@ uint32 GuildBankMgr::Deficit(uint32 guildId, GuildBank::Kind kind) const
                               sPlayerbotAIConfig.guildBank.target[GuildBank::Index(kind)]);
 }
 
+uint32 GuildBankMgr::DeficitFor(Player* bot, ItemTemplate const* proto) const
+{
+    if (!proto || !Serves(bot))
+        return 0;
+    GuildBank::Kind const kind = KindOf(proto);
+    if (kind == GuildBank::Kind::None)
+        return 0;
+    std::lock_guard<std::mutex> guard(_stockLock);
+    auto const it = _stocks.find(bot->GetGuildId());
+    if (it == _stocks.end() || it->second.tabs == 0 ||
+        !GuildBank::UsefulToGuild(kind, proto->RequiredLevel, it->second.levels))
+        return 0;  // no snapshot yet, or none of its members could use it (it would never be deposited)
+    return GuildBank::Deficit(it->second.stock[GuildBank::Index(kind)],
+                              sPlayerbotAIConfig.guildBank.target[GuildBank::Index(kind)]);
+}
+
 uint32 GuildBankMgr::GuildCount() const
 {
     std::lock_guard<std::mutex> guard(_stockLock);
@@ -358,6 +376,9 @@ void GuildBankMgr::Start()
 
 void GuildBankMgr::Update(uint32 diff)
 {
+    if (!Enabled() && !TestCount())
+        return;
+    Day();  // the copy WantsVisit reads on map threads (one map lookup a world update)
     if (!Enabled())
         return;
     _refreshMs += diff;
@@ -379,7 +400,12 @@ void GuildBankMgr::Update(uint32 diff)
     }
 }
 
-uint64 GuildBankMgr::Day() const { return sWorldState->getWorldState(WORLD_STATE_CUSTOM_GUILD_DAILY_RESET_TIME); }
+uint64 GuildBankMgr::Day()
+{
+    uint64 const day = sWorldState->getWorldState(WORLD_STATE_CUSTOM_GUILD_DAILY_RESET_TIME);
+    _day.store(day, std::memory_order_relaxed);
+    return day;
+}
 
 uint32 GuildBankMgr::Carried(Player* bot, PlayerbotAI* botAI, GuildBank::Kind kind)
 {
@@ -419,6 +445,86 @@ void GuildBankMgr::MadeSupplies(PlayerbotAI* botAI, Player* bot, GuildBank::Leve
         if (items)
             (*items)[k].push_back(item);
     }
+}
+
+GuildBank::Reason GuildBankMgr::WantsVisit(PlayerbotAI* botAI, Player* bot)
+{
+    if (!botAI || !Serves(bot))
+        return GuildBank::Reason::None;  // Review Focus 1: nothing else is read
+    NewRpgInfo::BankState& state = botAI->rpgInfo.bank;
+    uint32 const now = getMSTime();
+    if (state.checkedAtMs && getMSTimeDiff(state.checkedAtMs, now) < MINUTE * IN_MILLISECONDS)
+        return static_cast<GuildBank::Reason>(state.reason);
+    state.checkedAtMs = std::max<uint32>(1, now);
+    state.reason = static_cast<uint8>(GuildBank::Reason::None);
+
+    // Already at a courier on this town trip (still running), no courier of its side in reach (the vendor serves,
+    // Review Focus 4), or no snapshot of its guild's tab 1 yet: no bank errand, and nothing more is read.
+    NewRpgInfo const& info = botAI->rpgInfo;
+    bool const visited = !GuildBank::VisitDue(state.tripMs, info.lastErrandMs) && info.lastErrandMs &&
+                         TownErrands::CooldownLeftMs(info.lastErrandMs);
+    if (visited || !NearestCourier(bot, TownErrands::TripYards(bot)))
+        return GuildBank::Reason::None;
+    BankStock stock;  // a copy, taken under the short stock lock
+    if (!Stock(bot->GetGuildId(), stock) || !stock.tabs)
+        return GuildBank::Reason::None;
+
+    GuildBank::Settings const& s = sPlayerbotAIConfig.guildBank;
+    bool const mana = BotSupplies::UsesMana(bot);
+    uint32 food = 0, drink = 0;
+    BotSupplies::Carried(botAI, bot, food, drink);
+    uint32 const below = sPlayerbotAIConfig.supplies.below;
+    bool const isShort = Supplies::Short(food, drink, mana, below);
+
+    // Short of a kind: the visit would want some of it (Visit's own test: its share tops up what it may use, within
+    // what is left today), and tab 1 has a line of it the bot may use (Suits and CanUseItem, as Visit takes). So a
+    // Withdraw always has something to take, and never repeats with nothing taken.
+    bool useful = false;
+    bool shareLeft = false;
+    if (isShort)
+    {
+        GuildBank::ShareState const share = ShareOf(bot->GetGUID().GetCounter());
+        uint64 const day = DayCopy();  // the world thread's copy: the core's world states have no lock
+        for (GuildBank::Kind kind : {GuildBank::Kind::Food, GuildBank::Kind::Drink})
+        {
+            if (kind == GuildBank::Kind::Drink && !mana)
+                continue;
+            if ((kind == GuildBank::Kind::Food ? food : drink) >= below)
+                continue;  // not short of this one
+            std::size_t const k = GuildBank::Index(kind);
+            uint32 const left = GuildBank::ShareLeft(share, day, kind, mana, s);
+            if (!left || !GuildBank::Want(Carried(bot, botAI, kind), s.share[k], left))
+                continue;
+            shareLeft = true;
+            for (BankStock::Line const& l : stock.lines)
+            {
+                if (l.kind != kind || !l.count || !GuildBank::Suits(kind, l.requiredLevel, bot->GetLevel()))
+                    continue;
+                ItemTemplate const* proto = sObjectMgr->GetItemTemplate(l.entry);
+                if (proto && bot->CanUseItem(proto) == EQUIP_ERR_OK)
+                {
+                    useful = true;
+                    break;
+                }
+            }
+        }
+    }
+
+    // A crafter holding supplies it makes, above its own share, of a kind its guild is short of (Visit's rule).
+    bool canDeposit = false;
+    if (CraftMgr::instance().Crafting(bot))
+    {
+        std::array<uint32, GuildBank::KIND_COUNT> held{};
+        MadeSupplies(botAI, bot, stock.levels, held);
+        for (std::size_t k = 0; k < GuildBank::KIND_COUNT && !canDeposit; ++k)
+            canDeposit = GuildBank::DepositAmount(held[k], GuildBank::Keep(static_cast<GuildBank::Kind>(k), mana, s),
+                                                  stock.stock[k], s.target[k]) > 0;
+    }
+
+    GuildBank::Reason const reason =
+        GuildBank::VisitReason(true, true, false, isShort, useful, shareLeft, canDeposit);
+    state.reason = static_cast<uint8>(reason);
+    return reason;
 }
 
 uint32 GuildBankMgr::DepositItem(Guild* guild, Player* bot, Item* item, uint32 count)

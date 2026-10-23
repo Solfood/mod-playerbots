@@ -556,11 +556,12 @@ bool EconomyCommand::Handle(ChatHandler* handler, char const* args)
         // safe = plays safe on worn-out gear; gather = may gather in its zone; own_town = yards to the nearest
         // town of its level range (0 = none); trip = yards to where a repair trip would walk now (the nearest
         // repairer, else town); camp = yards to the current GO_CAMP target (0 = not on a trip); avoid_fights =
-        // picks no fights (worn out, on a trip).
+        // picks no fights (worn out, on a trip); bank = a guild courier errand (Plan 6b); bank_reason = the last
+        // check's GuildBank::Reason (0 none, 1 withdraw, 2 deposit, 3 the bank had nothing it may use).
         handler->PSendSysMessage(
             "ECONERRANDS name={} mask={} repair={} sell={} ammo={} mail={} cooldown={} town={} own_town={} "
             "bill={} weapon_cost={} junk={} afford={} weapon={} safe={} gather={} zone_above={} trip={} "
-            "trip_at={},{} camp={} avoid_fights={} supplies={}",
+            "trip_at={},{} camp={} avoid_fights={} supplies={} bank={} bank_reason={}",
             bot->GetName(), errands, (errands & TOWN_ERRAND_REPAIR) ? 1 : 0, (errands & TOWN_ERRAND_SELL) ? 1 : 0,
             (errands & TOWN_ERRAND_AMMO) ? 1 : 0, (errands & TOWN_ERRAND_MAIL) ? 1 : 0,
             TownErrands::CooldownLeftMs(botAI->rpgInfo.lastErrandMs) / IN_MILLISECONDS,
@@ -576,7 +577,8 @@ bool EconomyCommand::Handle(ChatHandler* handler, char const* args)
             trip == WorldPosition() ? 0 : static_cast<uint32>(bot->GetExactDist(trip)),
             static_cast<int32>(trip.GetPositionX()), static_cast<int32>(trip.GetPositionY()),
             camp ? static_cast<uint32>(bot->GetExactDist(camp->pos)) : 0,
-            TownErrands::AvoidFights(botAI, bot) ? 1 : 0, (errands & TOWN_ERRAND_SUPPLIES) ? 1 : 0);
+            TownErrands::AvoidFights(botAI, bot) ? 1 : 0, (errands & TOWN_ERRAND_SUPPLIES) ? 1 : 0,
+            (errands & TOWN_ERRAND_BANK) ? 1 : 0, uint32(botAI->rpgInfo.bank.reason));
         return true;
     }
     if (sub == "wander")

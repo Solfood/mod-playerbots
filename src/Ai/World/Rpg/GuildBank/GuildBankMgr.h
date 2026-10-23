@@ -98,6 +98,9 @@ public:
     // Any thread: a copy of the snapshot (false: none yet).
     bool Stock(uint32 guildId, BankStock& out) const;
     uint32 Deficit(uint32 guildId, GuildBank::Kind kind) const;
+    // The craft plan's weight (spec §4): how far its guild is below target of the kind `proto` is, when the item is a
+    // supply useful to its members (0: the bank does not serve it, no snapshot, not a supply, or no deficit).
+    uint32 DeficitFor(Player* bot, ItemTemplate const* proto) const;
     uint32 GuildCount() const;
     // Spec §2 on a real item template (its use spell decides food, drink, healing or mana).
     static GuildBank::Kind KindOf(ItemTemplate const* proto);
@@ -117,7 +120,14 @@ public:
     // The count is clamped to what its bags hold; returns what really moved.
     uint32 Put(Player* bot, uint32 entry, uint32 count);
     VisitResult Last(bool deposit = false) const;
-    uint64 Day() const;  // WORLD_STATE_CUSTOM_GUILD_DAILY_RESET_TIME: the core's next guild reset (decision 5)
+    // World thread only (the core's world states have no lock): WORLD_STATE_CUSTOM_GUILD_DAILY_RESET_TIME, the core's
+    // next guild reset (decision 5). Also kept in a copy that any thread may read (DayCopy).
+    uint64 Day();
+    uint64 DayCopy() const { return _day.load(std::memory_order_relaxed); }
+    // Map thread (the errand check, TownErrands::Needed): why the bot would walk to a guild courier on this town
+    // trip. Worked out at most once a minute per bot and kept in rpgInfo.bank; reads its own bags and copies of the
+    // snapshot and its share under short locks. Serves false: None, before anything else is read.
+    GuildBank::Reason WantsVisit(PlayerbotAI* botAI, Player* bot);
     GuildBank::ShareState ShareOf(uint32 guid) const;
     // Supplies of `kind` in its bags that it may use as such (Suits its level and Player::CanUseItem): what a share
     // tops up. Its own bags only (map or world thread). 0 for Kind::None.
@@ -145,6 +155,7 @@ private:
     uint32 DepositItem(Guild* guild, Player* bot, Item* item, uint32 count);
     mutable std::mutex _shareLock;
     std::unordered_map<uint32, GuildBank::ShareState> _shares;  // bot guid -> today's share (lost at a restart)
+    std::atomic<uint64> _day{0};  // Day() as last read on the world thread (WantsVisit reads this copy)
     VisitResult _last, _lastDeposit;
 
     // World thread, once at startup (Start). Our own rule (decision 9).

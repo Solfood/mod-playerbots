@@ -18,6 +18,7 @@
 #include "GridTerrainData.h"
 #include "GuideMgr.h"
 #include "GuideStepRules.h"
+#include "GuildBankMgr.h"
 #include "IVMapMgr.h"
 #include "NewRpgFish.h"
 #include "NewRpgInfo.h"
@@ -1307,8 +1308,10 @@ bool NewRpgBaseAction::GoRunErrands(bool repairOnly)
     if (!servedHere)
     {
         // World of Craft (Plan 6a): a trip with an auction errand (and no repair) walks to an auctioneer.
+        // Guild bank supplies (Plan 6b): one with a bank errand (and neither) to its faction's guild courier.
         camp = (errands & TOWN_ERRAND_REPAIR)    ? TownErrands::RepairTrip(bot, info.abandonedTrip)
                : (errands & TOWN_ERRAND_AUCTION) ? TownErrands::AuctionTrip(bot)
+               : (errands & TOWN_ERRAND_BANK)    ? TownErrands::BankTrip(bot)
                                                  : TownErrands::NearestTown(bot);
         if (camp == WorldPosition())
             return false;  // no town within reach: keep playing, try again later
@@ -1323,6 +1326,10 @@ bool NewRpgBaseAction::GoRunErrands(bool repairOnly)
         FixedPopulation::Count(EconomyCounter::RepairRescues);
     if (errands & TOWN_ERRAND_SUPPLIES)
         FixedPopulation::Count(EconomyCounter::SuppliesTrips);
+    // Guild bank supplies (Plan 6b): short of food, but its guild bank had nothing it may use: the vendor serves.
+    if ((errands & TOWN_ERRAND_SUPPLIES) && info.bank.reason == static_cast<uint8>(GuildBank::Reason::Empty) &&
+        GuildBankMgr::instance().Serves(bot))
+        FixedPopulation::Count(EconomyCounter::BankEmpty);
     if (servedHere)
         info.ChangeToWanderNpc();
     else

@@ -24,7 +24,8 @@ enum TownErrand : uint8
     TOWN_ERRAND_AMMO = 0x04,
     TOWN_ERRAND_MAIL = 0x08,
     TOWN_ERRAND_AUCTION = 0x10,  // World of Craft (Plan 6a): something to list, or a material its plan misses
-    TOWN_ERRAND_SUPPLIES = 0x20  // short of food (or drink) and able to pay: a vendor that sells them
+    TOWN_ERRAND_SUPPLIES = 0x20,  // short of food (or drink) and able to pay: a vendor that sells them
+    TOWN_ERRAND_BANK = 0x40       // Guild bank supplies (Plan 6b): a guild courier (withdraw or deposit)
 };
 
 class TownErrands
@@ -55,6 +56,8 @@ public:
     // World of Craft (Plan 6a): where an auction trip walks to: the nearest auctioneer it may use on its map in a zone
     // not above its level (TOWN_MAX_DISTANCE), else NearestTown.
     static WorldPosition AuctionTrip(Player* bot);
+    // Guild bank supplies (Plan 6b): the nearest guild courier of its faction within TripYards, else NearestTown.
+    static WorldPosition BankTrip(Player* bot);
     // How far a town trip may walk (levels 1-5 stay closer).
     static float TripYards(Player* bot);
     // On the way to town (honest world, GO_CAMP) with worn-out gear (PlaySafe) or through a zone above the bot's

@@ -22,6 +22,7 @@
 #include "FixedPopulation.h"
 #include "GameObjectData.h"
 #include "GuideMgr.h"
+#include "GuildBankMgr.h"
 #include "HubAuctioneers.h"
 #include "Item.h"
 #include "ItemUsageValue.h"
@@ -556,9 +557,16 @@ bool CraftMgr::IsSupply(ItemTemplate const* proto)
                     UINT32_MAX));
                 // An extra only when it is worth something when sold (Task 2 ruling: PlanBatch does not filter it).
                 bool const sells = c.value > 0 && proto->Bonding != BIND_WHEN_PICKED_UP;
+                // Guild bank supplies (Plan 6b, spec §4): a kind its guild is short of is wanted a little more (at
+                // most CraftExtra). No deficit (or guild bank off): exactly as before. An upgrade is still Want::Gear,
+                // which the plan puts before any Want::Supply (WantFor checks `upgrade` first).
+                uint32 const stack = supply ? GuildBank::CraftStack(s.supplyStack,
+                                                                    GuildBankMgr::instance().DeficitFor(bot, proto),
+                                                                    sPlayerbotAIConfig.guildBank.craftExtra)
+                                            : s.supplyStack;
                 uint32 const have = held(r->product);
-                c.want = ::Craft::WantFor(upgrade, supply && have < s.supplyStack, color, sells);
-                c.casts = ::Craft::CastsWanted(c.want, color, have, s.supplyStack, r->productCount);
+                c.want = ::Craft::WantFor(upgrade, supply && have < stack, color, sells);
+                c.casts = ::Craft::CastsWanted(c.want, color, have, stack, r->productCount);
             }
             if (c.want == ::Craft::Want::None || !c.casts)
                 continue;
