@@ -47,10 +47,13 @@ std::vector<std::string> Words(char const* args)
 
 Player* FindBot(ChatHandler* handler, std::string const& name)
 {
+    // Any online bot without a real player as master: the test guild's clones are bridge bots, not population bots.
+    // Who is served stays GuildBankMgr::Serves.
     Player* bot = ObjectAccessor::FindPlayerByName(name, true);
-    if (!bot || !GET_PLAYERBOT_AI(bot) || !sRandomPlayerbotMgr.IsRandomBot(bot))
+    PlayerbotAI* botAI = bot ? GET_PLAYERBOT_AI(bot) : nullptr;
+    if (!bot || !botAI || IsRealPlayer(botAI->GetMaster()))
     {
-        handler->PSendSysMessage("BANKERR no online population bot named {}", name);
+        handler->PSendSysMessage("BANKERR no online bot named {}", name);
         return nullptr;
     }
     return bot;
