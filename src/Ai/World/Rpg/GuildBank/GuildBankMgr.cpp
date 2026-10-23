@@ -436,7 +436,7 @@ void GuildBankMgr::MadeSupplies(PlayerbotAI* botAI, Player* bot, GuildBank::Leve
     {
         ItemTemplate const* proto = item->GetTemplate();
         GuildBank::Kind const kind = KindOf(proto);
-        if (kind == GuildBank::Kind::None || item->IsSoulBound() ||
+        if (kind == GuildBank::Kind::None || !item->CanBeTraded() ||
             !GuildBank::UsefulToGuild(kind, proto->RequiredLevel, levels) ||
             !CraftMgr::instance().Makes(bot, item->GetEntry()))
             continue;
@@ -479,7 +479,8 @@ GuildBank::Reason GuildBankMgr::WantsVisit(PlayerbotAI* botAI, Player* bot)
     uint32 food = 0, drink = 0;
     BotSupplies::Carried(botAI, bot, food, drink);
     uint32 const below = sPlayerbotAIConfig.supplies.below;
-    bool const isShort = Supplies::Short(food, drink, mana, below);
+    // The food fix's own switch: off, no Withdraw reason (a Deposit is unaffected).
+    bool const isShort = sPlayerbotAIConfig.supplies.supplies && Supplies::Short(food, drink, mana, below);
 
     // Short of a kind: the visit would want some of it (Visit's own test: its share tops up what it may use, within
     // what is left today), and tab 1 has a line of it the bot may use (Suits and CanUseItem, as Visit takes). So a
