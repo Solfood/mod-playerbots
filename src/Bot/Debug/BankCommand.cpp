@@ -17,7 +17,9 @@
 #include "Guild.h"
 #include "GuildBankMgr.h"
 #include "GuildMgr.h"
+#include "MapMgr.h"
 #include "ObjectAccessor.h"
+#include "ObjectMgr.h"
 #include "Player.h"
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
@@ -109,9 +111,26 @@ bool BankCommand::Handle(ChatHandler* handler, char const* args)
     std::string const& sub = words[0];
     if (sub == "stats")
     {
-        // couriers=0 until the couriers are placed (Task 5 adds bank.Couriers().size()).
-        handler->PSendSysMessage("BANKSTAT on={} couriers={} guilds={} test={}", bank.Enabled() ? 1 : 0, 0,
-                                 bank.GuildCount(), bank.TestCount());
+        handler->PSendSysMessage("BANKSTAT on={} couriers={} guilds={} test={}", bank.Enabled() ? 1 : 0,
+                                 bank.Couriers().size(), bank.GuildCount(), bank.TestCount());
+        return true;
+    }
+    if (sub == "couriers")
+    {
+        // One line per courier (our own rule); inn= is the innkeeper of the picked town. Two inns whose mailboxes are
+        // within 100 yd are one town: one courier per side, named after the first inn.
+        for (CourierSpawn const& c : bank.Couriers())
+        {
+            CreatureTemplate const* inn = sObjectMgr->GetCreatureTemplate(c.innEntry);
+            std::string name = inn ? inn->Name : "?";
+            std::replace(name.begin(), name.end(), ' ', '_');
+            // live: the creature stands in the world now (its grid is loaded: a player or bot is near)
+            Map* map = sMapMgr->FindBaseMap(c.map);
+            bool const live = map && map->GetCreatureBySpawnIdStore().count(c.spawnId) > 0;
+            handler->PSendSysMessage("BANKCOURIER spawn={} entry={} map={} x={:.1f} y={:.1f} side={} inn={} live={}",
+                                     c.spawnId, c.entry, c.map, c.x, c.y, c.alliance ? "A" : "H", name, live ? 1 : 0);
+        }
+        handler->PSendSysMessage("BANKOK couriers n={} towns={}", bank.Couriers().size(), bank.TownCount());
         return true;
     }
     if (sub == "show" && words.size() >= 2)

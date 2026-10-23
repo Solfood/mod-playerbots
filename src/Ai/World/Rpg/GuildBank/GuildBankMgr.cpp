@@ -9,13 +9,19 @@
 #include <algorithm>
 
 #include "BotSupplies.h"
+#include "CourierRules.h"
+#include "Creature.h"
+#include "CreatureData.h"
+#include "DBCStores.h"
 #include "DatabaseEnv.h"
 #include "FixedPopulation.h"
 #include "Guild.h"
 #include "GuildBankAccess.h"
 #include "GuildMgr.h"
+#include "GameObjectData.h"
 #include "Item.h"
 #include "Log.h"
+#include "MapMgr.h"
 #include "ObjectMgr.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
@@ -48,6 +54,12 @@ void PotionEffects(ItemTemplate const* proto, bool& heals, bool& mana)
                 mana = true;
         }
     }
+}
+
+bool OnContinent(uint32 mapId)
+{
+    MapEntry const* map = sMapStore.LookupEntry(mapId);
+    return map && map->IsContinent();
 }
 }  // namespace
 
@@ -224,10 +236,105 @@ uint32 GuildBankMgr::GuildCount() const
     return static_cast<uint32>(_stocks.size());
 }
 
+void GuildBankMgr::SpawnCouriers()
+{
+    // OUR OWN RULE (spec §6, decision 9): a child NPC by the mailbox of every inn town, in memory only (dbData =
+    // false: never saved). Once per boot: the list is computed again at the next start, so a restart never doubles.
+    if (!_couriers.empty())
+        return;
+    // Read the core's spawn lists first; AddCreData below adds to the creature list, so no spawning while reading it.
+    std::vector<Courier::Inn> inns;
+    std::vector<uint32> innEntries;
+    for (auto const& [spawnId, data] : sObjectMgr->GetAllCreatureData())
+    {
+        if (!OnContinent(data.mapid))
+            continue;
+        CreatureTemplate const* t = sObjectMgr->GetCreatureTemplate(data.id);
+        if (!t || !(t->npcflag & UNIT_NPC_FLAG_INNKEEPER))
+            continue;
+        FactionTemplateEntry const* faction = sFactionTemplateStore.LookupEntry(t->faction);
+        if (!faction)
+            continue;
+        inns.push_back({data.mapid, data.posX, data.posY, data.posZ, !(faction->hostileMask & FACTION_MASK_ALLIANCE),
+                        !(faction->hostileMask & FACTION_MASK_HORDE)});
+        innEntries.push_back(data.id);
+    }
+    std::vector<Courier::Mailbox> boxes;
+    for (auto const& [spawnId, data] : sObjectMgr->GetAllGOData())
+    {
+        if (!OnContinent(data.mapid))
+            continue;
+        GameObjectTemplate const* go = sObjectMgr->GetGameObjectTemplate(data.id);
+        if (go && go->type == GAMEOBJECT_TYPE_MAILBOX)
+            boxes.push_back({data.mapid, data.posX, data.posY, data.posZ});
+    }
+    GuildBank::Settings const& s = sPlayerbotAIConfig.guildBank;
+    std::vector<Courier::Pick> const picks = Courier::PickTowns(inns, boxes, static_cast<float>(s.courierYards),
+                                                                static_cast<float>(s.townApartYards));
+    for (Courier::Pick const& p : picks)
+    {
+        Courier::Mailbox const& box = boxes[p.mailbox];
+        for (Courier::Spot const& spot : Courier::Spots(box, inns[p.inn], p.alliance, p.horde))
+        {
+            uint32 const entry = Courier::EntryFor(spot.alliance);
+            ObjectGuid::LowType const spawnId =
+                sObjectMgr->AddCreData(entry, box.map, spot.x, spot.y, spot.z, spot.o, Courier::RESPAWN_SECONDS);
+            if (!spawnId)
+            {
+                LOG_ERROR("playerbots", "Guild bank: a courier (creature {}) was not spawned on map {} at {} {}", entry,
+                          box.map, spot.x, spot.y);
+                continue;
+            }
+            _couriersByMap[box.map].push_back(_couriers.size());
+            _couriers.push_back(
+                {spawnId, entry, box.map, spot.x, spot.y, spot.z, spot.o, spot.alliance, innEntries[p.inn]});
+        }
+    }
+    _towns = static_cast<uint32>(picks.size());
+    FixedPopulation::Count(EconomyCounter::Couriers, _couriers.size());
+    LOG_INFO("server.loading", ">> Guild bank: {} couriers in {} towns (our own rule)", _couriers.size(), _towns);
+}
+
+CourierSpawn const* GuildBankMgr::NearestCourier(Player* bot, float maxYards) const
+{
+    if (!bot)
+        return nullptr;
+    auto const it = _couriersByMap.find(bot->GetMapId());
+    if (it == _couriersByMap.end())
+        return nullptr;
+    bool const alliance = bot->GetTeamId() == TEAM_ALLIANCE;
+    CourierSpawn const* best = nullptr;
+    float bestYards = maxYards;
+    for (std::size_t i : it->second)
+    {
+        CourierSpawn const& c = _couriers[i];
+        if (c.alliance != alliance)
+            continue;
+        float const yards = bot->GetExactDist(c.x, c.y, c.z);
+        if (yards <= bestYards)
+        {
+            best = &c;
+            bestYards = yards;
+        }
+    }
+    return best;
+}
+
+bool GuildBankMgr::IsCourier(Creature const* npc)
+{
+    return npc && (npc->GetEntry() == Courier::ORC_ENTRY || npc->GetEntry() == Courier::HUMAN_ENTRY);
+}
+
+bool GuildBankMgr::IsCourierFor(Creature const* npc, Player* bot)
+{
+    return npc && bot && npc->GetEntry() == Courier::EntryFor(bot->GetTeamId() == TEAM_ALLIANCE);
+}
+
 void GuildBankMgr::Start()
 {
     if (!Enabled())
         return;
+    SpawnCouriers();  // couriers before tabs: the boot log shows both
     uint32 guilds = 0;
     uint32 given = 0;
     if (QueryResult result = CharacterDatabase.Query("SELECT guildid FROM guild"))
