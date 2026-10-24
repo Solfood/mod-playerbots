@@ -9,6 +9,7 @@
 #ifndef PLAYERBOTS_GUIDESTEPRULES_H
 #define PLAYERBOTS_GUIDESTEPRULES_H
 
+#include <array>
 #include <cstdint>
 #include <vector>
 
@@ -285,6 +286,31 @@ constexpr uint32_t STALL_TELEPORTS = 2;
 inline bool TeleportStalled(uint32_t teleportsAtStart, uint32_t teleportsNow)
 {
     return teleportsNow >= teleportsAtStart + STALL_TELEPORTS;
+}
+
+// A quest only a script credits (GM-BOTAI-0187): nothing to kill, use or bring (RequiredNpcOrGo, RequiredItemId all
+// 0) and no area trigger explores it (areatrigger_involvedrelation). What finishes it is a script event: a gossip
+// choice (5929/5930 Great Bear Spirit: SmartAI on gossip select gives the credit), an escort, a spell. Bots never pick
+// gossip options, so the loader blocks the quest's ACCEPT, OBJECTIVE and TURNIN steps; it looks only at quests a
+// guide has an OBJECTIVE step for (a quest with nothing to do and no objective step is a plain delivery).
+struct QuestCredit
+{
+    std::array<int32_t, 4> npcOrGo{};  // RequiredNpcOrGo: > 0 a creature, < 0 a game object
+    std::array<uint32_t, 6> items{};   // RequiredItemId
+    bool areaTrigger = false;          // an area trigger explores it
+};
+
+inline bool ScriptCreditOnly(QuestCredit const& c)
+{
+    if (c.areaTrigger)
+        return false;
+    for (int32_t const target : c.npcOrGo)
+        if (target)
+            return false;
+    for (uint32_t const item : c.items)
+        if (item)
+            return false;
+    return true;
 }
 
 // A boat, zeppelin or portal step that has not arrived rideMinutes after the bot reached the dock: the bot is moved to

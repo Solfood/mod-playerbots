@@ -32,6 +32,9 @@
 
 namespace
 {
+// Guides::ScriptCreditOnly: a gossip choice, an escort or a spell finishes it, never a bot.
+constexpr char const* SCRIPT_ONLY = "only a script credits it (a gossip choice, an escort)";
+
 uint8 TeamOf(Player* bot) { return bot->GetTeamId() == TEAM_ALLIANCE ? Guides::TEAM_ALLIANCE : Guides::TEAM_HORDE; }
 
 bool SafeId(std::string const& id)
@@ -127,6 +130,42 @@ void GuideMgr::Build()
         if (wanted.count(data.id))
             _spawns[data.id].push_back(WorldPosition(data.mapid, data.posX, data.posY, data.posZ));
 
+    // Quests only a script credits (GM-BOTAI-0187): among those a guide has an OBJECTIVE step for, the ones with
+    // nothing to kill, use or bring and no area trigger. Their ACCEPT, OBJECTIVE and TURNIN steps are blocked below:
+    // a bot that took one would hold a log slot for good and work its objective or hand-in for ever.
+    std::unordered_set<uint32> explored;
+    if (QueryResult r = WorldDatabase.Query("SELECT DISTINCT quest FROM areatrigger_involvedrelation"))
+        do
+        {
+            explored.insert((*r)[0].Get<uint32>());
+        } while (r->NextRow());
+    for (Guides::Guide const& g : _guides)
+        for (Guides::Step const& s : g.steps)
+        {
+            if (s.kind != Guides::StepKind::Objective || _scriptOnly.count(s.quest))
+                continue;
+            Quest const* q = sObjectMgr->GetQuestTemplate(s.quest);
+            if (!q)
+                continue;
+            Guides::QuestCredit c;
+            for (uint8 i = 0; i < QUEST_OBJECTIVES_COUNT; ++i)
+                c.npcOrGo[i] = q->RequiredNpcOrGo[i];
+            for (uint8 i = 0; i < QUEST_ITEM_OBJECTIVES_COUNT; ++i)
+                c.items[i] = q->RequiredItemId[i];
+            c.areaTrigger = explored.count(s.quest) > 0;
+            if (Guides::ScriptCreditOnly(c))
+                _scriptOnly.insert(s.quest);
+        }
+    {
+        std::vector<uint32> ids(_scriptOnly.begin(), _scriptOnly.end());
+        std::sort(ids.begin(), ids.end());
+        std::string shown;
+        for (size_t i = 0; i < ids.size() && i < 40; ++i)
+            shown += (i ? "," : "") + std::to_string(ids[i]);
+        LOG_INFO("server.loading", ">> Guides: {} quests only a script credits, their steps blocked: {}{}", ids.size(),
+                 shown.empty() ? "-" : shown, ids.size() > 40 ? ",..." : "");
+    }
+
     _info.resize(_guides.size());
     for (size_t gi = 0; gi < _guides.size(); ++gi)
         for (Guides::Step& s : _guides[gi].steps)
@@ -201,6 +240,8 @@ GuideStepInfo GuideMgr::Resolve(Guides::Step& s)
                 if (!Routes::RoutedKind(routes.KindOf(s.quest)))
                     in.blocked = "needs a quest skill bots lack (Plan 5b)";
             }
+            if (!in.blocked && _scriptOnly.count(s.quest))
+                in.blocked = SCRIPT_ONLY;
             break;
         }
         case K::Objective:
@@ -214,6 +255,11 @@ GuideStepInfo GuideMgr::Resolve(Guides::Step& s)
             if (!Routes::RoutedKind(routes.KindOf(s.quest)))
             {
                 in.blocked = "needs a quest skill bots lack (Plan 5b)";
+                break;
+            }
+            if (_scriptOnly.count(s.quest))
+            {
+                in.blocked = SCRIPT_ONLY;
                 break;
             }
             // The database's spots for this objective first (the mobs that drop its item or that it kills); the

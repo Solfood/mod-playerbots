@@ -159,6 +159,21 @@ int main()
     CHECK_TRUE(ActivityFor(7) == Activity::Guide);
     CHECK_TRUE(!TeleportStalled(3, 4));
     CHECK_TRUE(TeleportStalled(3, 5));
+
+    // quests only a script credits (GM-BOTAI-0187): no creature, object or item to get, and no area trigger
+    QuestCredit qc;                                          // 5929/5930 Great Bear Spirit: a gossip choice
+    CHECK_TRUE(ScriptCreditOnly(qc));
+    qc.areaTrigger = true;                                   // explored by walking into an area trigger
+    CHECK_TRUE(!ScriptCreditOnly(qc));
+    qc = QuestCredit{};
+    qc.npcOrGo[2] = 299;                                     // kill a creature
+    CHECK_TRUE(!ScriptCreditOnly(qc));
+    qc = QuestCredit{};
+    qc.npcOrGo[0] = -1557;                                   // use a game object
+    CHECK_TRUE(!ScriptCreditOnly(qc));
+    qc = QuestCredit{};
+    qc.items[5] = 750;                                       // bring an item
+    CHECK_TRUE(!ScriptCreditOnly(qc));
     CHECK_TRUE(!RideTimedOut(25 * 60000 - 1, 25));
     CHECK_TRUE(RideTimedOut(25 * 60000, 25));
     CHECK_TRUE(!ShouldSave(true, 29999));
