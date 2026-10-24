@@ -14,10 +14,10 @@
 #include <vector>
 
 #include "Chat.h"
+#include "GameObject.h"
 #include "Guild.h"
 #include "GuildBankMgr.h"
 #include "GuildMgr.h"
-#include "MailAction.h"
 #include "MapMgr.h"
 #include "MotionMaster.h"
 #include "ObjectAccessor.h"
@@ -95,6 +95,29 @@ bool Show(ChatHandler* handler, std::vector<std::string> const& words)
             << sPlayerbotAIConfig.guildBank.target[k];
     handler->PSendSysMessage("{}", out.str());
     return true;
+}
+
+// The nearest mailbox the bot can use where it stands: the core's own reach test (Player::GetGameObjectIfCanInteractWith,
+// what taking mail checks). MailProcessor::FindMailbox takes the first mailbox in an unsorted 100-yard list, and a
+// courier town can have several (Orgrimmar's has them at 2.5, 58 and 70 yards): the far one was refused.
+ObjectGuid MailboxInReach(Player* bot, PlayerbotAI* botAI)
+{
+    GuidVector const gos = *botAI->GetAiObjectContext()->GetValue<GuidVector>("nearest game objects");
+    ObjectGuid best;
+    float bestYards = 0.0f;
+    for (ObjectGuid const& guid : gos)
+    {
+        GameObject* go = bot->GetGameObjectIfCanInteractWith(guid, GAMEOBJECT_TYPE_MAILBOX);
+        if (!go)
+            continue;
+        float const yards = bot->GetExactDist(go);
+        if (best.IsEmpty() || yards < bestYards)
+        {
+            best = guid;
+            bestYards = yards;
+        }
+    }
+    return best;
 }
 
 void PrintBot(ChatHandler* handler, Player* bot)
@@ -225,9 +248,9 @@ bool BankCommand::Handle(ChatHandler* handler, char const* args)
     }
     if (sub == "mail")
     {
-        // Test seam: take its mail at a mailbox within reach (the courier stands by one): c05's fixture items.
+        // Test seam: take its mail at the nearest mailbox within reach (the courier stands by one): c05's fixture items.
         PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
-        ObjectGuid const mailbox = botAI ? MailProcessor::FindMailbox(botAI) : ObjectGuid::Empty;
+        ObjectGuid const mailbox = botAI ? MailboxInReach(bot, botAI) : ObjectGuid::Empty;
         if (mailbox.IsEmpty())
         {
             handler->PSendSysMessage("BANKERR no mailbox in reach of {}", bot->GetName());
