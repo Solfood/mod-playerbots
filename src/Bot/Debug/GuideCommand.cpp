@@ -81,12 +81,13 @@ void PrintBot(ChatHandler* handler, Player* bot)
 constexpr uint32 HEARTHSTONE_ITEM = 6948;
 constexpr uint32 HEARTHSTONE_SPELL = 8690;
 
-// `guides rescue moonglade` (GM-BOTAI-0189): every online population bot in Moonglade with a quest of the druid's
-// detour in its log (Guides::MOONGLADE_QUESTS; Great Bear Spirit is credited only by a gossip choice) drops those
-// quests, as a player does from the quest log, and uses its own hearthstone: the real item, its cooldown and cast (no
-// teleport). One with no stone, or the stone on cooldown, or a cast that did not start, is listed and stays. Its
-// guide place needs nothing: the converter drops the detour's steps and RestoreSeq puts a saved place on one of them
-// at the step after it; the step it worked is forgotten. Console commands run on the world thread.
+// `guides rescue moonglade` (GM-BOTAI-0189, fix round 1 GM-BOTAI-0191): every online population bot in Moonglade
+// with a quest of a druid Moonglade chain in its log (Guides::MOONGLADE_QUESTS, the same list as convert.py's
+// DETOUR_QUESTS; bots have no way out of Moonglade, and Great Bear Spirit is credited only by a gossip choice) drops
+// those quests, as a player does from the quest log, and uses its own hearthstone: the real item, its cooldown and
+// cast (no teleport). One with no stone, or the stone on cooldown, or a cast that did not start, is listed and stays.
+// Its guide place needs nothing: the converter drops the chains' steps and RestoreSeq puts a saved place on one of
+// them at the step after it; the step it worked is forgotten. Console commands run on the world thread.
 bool RescueMoonglade(ChatHandler* handler)
 {
     GuideMgr& guides = GuideMgr::instance();

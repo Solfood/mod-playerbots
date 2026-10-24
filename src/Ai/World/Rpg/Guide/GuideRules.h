@@ -357,16 +357,21 @@ inline uint32_t RestoreSeq(Guide const& g, uint32_t seq, uint32_t line)
     return std::min<uint32_t>(seq, static_cast<uint32_t>(g.steps.size()));
 }
 
-// The druid's Moonglade detour (GM-BOTAI-0189): the quests guildmaster's converter drops (convert.py DETOUR_QUESTS),
-// Alliance id first. Great Bear Spirit is credited only by a gossip choice, so druids that took it stood in Moonglade
-// for days; `guides rescue moonglade` takes these out of their logs and sends them home by hearthstone.
+// The druid's Moonglade detours (GM-BOTAI-0189, fix round 1 GM-BOTAI-0191): every druid class chain that goes to
+// Moonglade, which guildmaster's converter drops. Keep this list equal to DETOUR_QUESTS in guildmaster
+// server/guides/convert.py. Bots have no way out of Moonglade and Great Bear Spirit is credited only by a gossip
+// choice, so druids that took one stood there for days; `guides rescue moonglade` takes these out of their logs and
+// sends them home by hearthstone.
 constexpr uint32_t MOONGLADE_ZONE = 493;
 constexpr uint32_t MOONGLADE_QUESTS[] = {
-    5925, 5926,  // Heeding the Call
-    5921, 5922,  // Moonglade
-    5929, 5930,  // Great Bear Spirit
-    5931, 5932,  // Back to Darnassus, Back to Thunder Bluff
-    6001, 6002,  // Body and Heart
+    5923, 5924, 5925, 5926,              // Heeding the Call (Alliance variants, Horde)
+    5921, 5922,                          // Moonglade
+    5929, 5930,                          // Great Bear Spirit
+    5931, 5932,                          // Back to Darnassus, Back to Thunder Bluff
+    6001, 6002,                          // Body and Heart
+    6121, 6122, 6123, 6124, 6125,        // Cure Poison, Alliance: Lessons Anew ... Power over Poison
+    6126, 6127, 6128, 6129, 6130,        // Cure Poison, Horde
+    26, 27, 28, 29, 30, 31, 272, 5061,   // Aquatic Form: A Lesson to Learn, Trial of the Lake, of the Sea Lion
 };
 
 inline bool MoongladeQuest(uint32_t quest)

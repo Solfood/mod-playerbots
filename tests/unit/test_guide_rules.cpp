@@ -91,10 +91,13 @@ int main()
     CHECK_EQ(6u, RestoreSeq(human, 4, 9999));  // past every line: the guide is done
     CHECK_EQ(4u, RestoreSeq(human, 4, 0));     // no line: keep the number
     CHECK_EQ(6u, RestoreSeq(human, 40, 0));    // never past the end
-    // the Moonglade detour's quests, both factions (GM-BOTAI-0189)
-    for (uint32_t q : {5925u, 5926u, 5921u, 5922u, 5929u, 5930u, 5931u, 5932u, 6001u, 6002u})
+    // the Moonglade detours' quests, both factions (GM-BOTAI-0189, fix round 1): convert.py's DETOUR_QUESTS
+    for (uint32_t q : {5923u, 5924u, 5925u, 5926u, 5921u, 5922u, 5929u, 5930u, 5931u, 5932u, 6001u, 6002u, 6121u,
+                       6122u, 6123u, 6124u, 6125u, 6126u, 6127u, 6128u, 6129u, 6130u, 26u, 27u, 28u, 29u, 30u, 31u,
+                       272u, 5061u})
         CHECK_TRUE(MoongladeQuest(q));
-    CHECK_TRUE(!MoongladeQuest(6126));  // Lessons Anew: a later druid trip, not the detour
+    CHECK_EQ(30u, sizeof(MOONGLADE_QUESTS) / sizeof(MOONGLADE_QUESTS[0]));
+    CHECK_TRUE(!MoongladeQuest(5062));
     CHECK_TRUE(!MoongladeQuest(0));
     CHECK_EQ(0x00020003u, StepKey(1, 3));
     CHECK_EQ(0x00010000u, StepKey(0, 0));  // never 0
