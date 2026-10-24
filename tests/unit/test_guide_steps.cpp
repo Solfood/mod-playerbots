@@ -202,6 +202,12 @@ int main()
     CHECK_TRUE(!NoProgressWatched(StepKind::Accept, true));
     CHECK_TRUE(!NoProgressWatched(StepKind::Goto, true));
 
+    // the accept guard (fix round 3): only a bot with a guide, paused or not
+    CHECK_TRUE(RefusesUnroutedQuests(true, 0));
+    CHECK_TRUE(RefusesUnroutedQuests(true, 7));    // paused in Moonglade: its guide is kept
+    CHECK_TRUE(!RefusesUnroutedQuests(true, -1));  // a death knight below 58: no guide, its starting chain as before
+    CHECK_TRUE(!RefusesUnroutedQuests(false, 3));  // not enrolled
+
     // a TURNIN of a quest bots cannot finish (fix round 2): blocked unless complete
     f = F(StepKind::TurnIn);
     f.quest = QuestState::InLog;

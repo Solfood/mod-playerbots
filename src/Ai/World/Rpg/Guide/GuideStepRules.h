@@ -295,6 +295,11 @@ inline bool TeleportStalled(uint32_t teleportsAtStart, uint32_t teleportsNow)
     return teleportsNow >= teleportsAtStart + STALL_TELEPORTS;
 }
 
+// Who refuses quests of a kind bots cannot do (fix round 2 GM-BOTAI-0192, narrowed in fix round 3 GM-BOTAI-0195): a
+// bot enrolled in guides that has a guide (`guide` >= 0), paused or not. One with no guide for its level (a death
+// knight below 58, in its scripted starting chain) keeps the old rules, or it would refuse that chain's quests.
+inline bool RefusesUnroutedQuests(bool enrolled, int guide) { return enrolled && guide >= 0; }
+
 // No progress (GM-BOTAI-0188, a safety net): a bot working one seated OBJECTIVE step for NO_PROGRESS_MINUTES while
 // the quest's objective counts have not changed skips the step this session, as a stall does. The stuck teleport
 // only counts a bot that cannot move; a bot standing by an objective nothing it does can credit (the Great Bear
