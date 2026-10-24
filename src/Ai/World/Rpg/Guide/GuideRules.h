@@ -336,7 +336,10 @@ inline std::string ShortName(std::string const& title)
 }
 
 // A saved place (step number + the step's file line) in a guide that may have changed since: the same number if the
-// line still matches, else the first step with that line, else the number, kept inside the guide.
+// line still matches, else the first step with that line. A line that is gone (the converter dropped its step, as it
+// drops the druid's Moonglade detour, GM-BOTAI-0189) gives the first step after it: the converter writes a guide's
+// steps in file-line order, so that is where the guide goes on, and keeping the number would skip as many steps as
+// were dropped before it. Line 0 (saved past the guide's end) keeps the number, kept inside the guide.
 inline uint32_t RestoreSeq(Guide const& g, uint32_t seq, uint32_t line)
 {
     if (seq < g.steps.size() && g.steps[seq].line == line)
@@ -344,7 +347,34 @@ inline uint32_t RestoreSeq(Guide const& g, uint32_t seq, uint32_t line)
     for (size_t i = 0; i < g.steps.size(); ++i)
         if (g.steps[i].line == line)
             return static_cast<uint32_t>(i);
+    if (line)
+    {
+        for (size_t i = 0; i < g.steps.size(); ++i)
+            if (g.steps[i].line > line)
+                return static_cast<uint32_t>(i);
+        return static_cast<uint32_t>(g.steps.size());  // past its last line: the guide is done
+    }
     return std::min<uint32_t>(seq, static_cast<uint32_t>(g.steps.size()));
+}
+
+// The druid's Moonglade detour (GM-BOTAI-0189): the quests guildmaster's converter drops (convert.py DETOUR_QUESTS),
+// Alliance id first. Great Bear Spirit is credited only by a gossip choice, so druids that took it stood in Moonglade
+// for days; `guides rescue moonglade` takes these out of their logs and sends them home by hearthstone.
+constexpr uint32_t MOONGLADE_ZONE = 493;
+constexpr uint32_t MOONGLADE_QUESTS[] = {
+    5925, 5926,  // Heeding the Call
+    5921, 5922,  // Moonglade
+    5929, 5930,  // Great Bear Spirit
+    5931, 5932,  // Back to Darnassus, Back to Thunder Bluff
+    6001, 6002,  // Body and Heart
+};
+
+inline bool MoongladeQuest(uint32_t quest)
+{
+    for (uint32_t const q : MOONGLADE_QUESTS)
+        if (q == quest)
+            return true;
+    return false;
 }
 
 // Where a bot that stands on another map than its next step can cross (Plan 5c): a boat, zeppelin or portal step

@@ -86,8 +86,16 @@ int main()
     // the saved place after the file changed (Review Focus 2)
     CHECK_EQ(2u, RestoreSeq(human, 2, 35));    // unchanged
     CHECK_EQ(1u, RestoreSeq(human, 4, 22));    // steps moved: found by its line
-    CHECK_EQ(4u, RestoreSeq(human, 4, 9999));  // line gone: keep the number
-    CHECK_EQ(6u, RestoreSeq(human, 40, 9999)); // never past the end
+    CHECK_EQ(2u, RestoreSeq(human, 4, 33));    // line gone (its step dropped): the first step after that line
+    CHECK_EQ(1u, RestoreSeq(human, 0, 15));
+    CHECK_EQ(6u, RestoreSeq(human, 4, 9999));  // past every line: the guide is done
+    CHECK_EQ(4u, RestoreSeq(human, 4, 0));     // no line: keep the number
+    CHECK_EQ(6u, RestoreSeq(human, 40, 0));    // never past the end
+    // the Moonglade detour's quests, both factions (GM-BOTAI-0189)
+    for (uint32_t q : {5925u, 5926u, 5921u, 5922u, 5929u, 5930u, 5931u, 5932u, 6001u, 6002u})
+        CHECK_TRUE(MoongladeQuest(q));
+    CHECK_TRUE(!MoongladeQuest(6126));  // Lessons Anew: a later druid trip, not the detour
+    CHECK_TRUE(!MoongladeQuest(0));
     CHECK_EQ(0x00020003u, StepKey(1, 3));
     CHECK_EQ(0x00010000u, StepKey(0, 0));  // never 0
 

@@ -13,14 +13,17 @@
 #include <vector>
 
 #include "Chat.h"
+#include "Event.h"
 #include "GuideMgr.h"
 #include "NewRpgInfo.h"
 #include "ObjectAccessor.h"
 #include "Player.h"
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
+#include "QuestPackets.h"
 #include "RandomPlayerbotMgr.h"
 #include "RouteMgr.h"
+#include "WorldSession.h"
 
 namespace
 {
@@ -74,6 +77,62 @@ void PrintBot(ChatHandler* handler, Player* bot)
                              botAI->rpgInfo.StatusName(), bot->GetLevel(), bot->GetMapId(), bot->GetZoneId(),
                              guides.SeatOf(bot->GetGUID().GetCounter()));
 }
+
+constexpr uint32 HEARTHSTONE_ITEM = 6948;
+constexpr uint32 HEARTHSTONE_SPELL = 8690;
+
+// `guides rescue moonglade` (GM-BOTAI-0189): every online population bot in Moonglade with a quest of the druid's
+// detour in its log (Guides::MOONGLADE_QUESTS; Great Bear Spirit is credited only by a gossip choice) drops those
+// quests, as a player does from the quest log, and uses its own hearthstone: the real item, its cooldown and cast (no
+// teleport). One with no stone, or the stone on cooldown, or a cast that did not start, is listed and stays. Its
+// guide place needs nothing: the converter drops the detour's steps and RestoreSeq puts a saved place on one of them
+// at the step after it; the step it worked is forgotten. Console commands run on the world thread.
+bool RescueMoonglade(ChatHandler* handler)
+{
+    GuideMgr& guides = GuideMgr::instance();
+    uint32 n = 0, abandoned = 0, hearthed = 0, noHearth = 0;
+    for (auto const& [guid, bot] : sRandomPlayerbotMgr.GetAllBots())
+    {
+        PlayerbotAI* botAI = bot ? GET_PLAYERBOT_AI(bot) : nullptr;
+        if (!botAI || !bot->IsInWorld() || !sRandomPlayerbotMgr.IsRandomBot(bot) ||
+            bot->GetZoneId() != Guides::MOONGLADE_ZONE)
+            continue;
+        uint32 dropped = 0;
+        for (uint8 slot = 0; slot < MAX_QUEST_LOG_SIZE; ++slot)
+        {
+            uint32 const quest = bot->GetQuestSlotQuestId(slot);
+            if (!quest || !Guides::MoongladeQuest(quest))
+                continue;
+            // CMSG_QUESTLOG_REMOVE_QUEST, as NewRpgBaseAction::AbandonQuestSlot sends it (the core's own abandon)
+            WorldPacket packet(CMSG_QUESTLOG_REMOVE_QUEST);
+            packet << slot;
+            WorldPackets::Quest::QuestLogRemoveQuest remove(std::move(packet));
+            remove.Read();
+            bot->GetSession()->HandleQuestLogRemoveQuest(remove);
+            ++dropped;
+        }
+        if (!dropped)
+            continue;
+        ++n;
+        abandoned += dropped;
+        NewRpgInfo& info = botAI->rpgInfo;
+        guides.Unseat(bot->GetGUID().GetCounter());
+        info.guide.step = NewRpgInfo::GuideState::Step{};
+        bool const hasStone = bot->HasItemCount(HEARTHSTONE_ITEM, 1);
+        bool const ready = hasStone && !bot->HasSpellCooldown(HEARTHSTONE_SPELL);
+        bool const cast = ready && botAI->DoSpecificAction("hearthstone", Event(), true);
+        // failed: in combat, or the cast refused; run the command again later
+        char const* hearth = cast ? "cast" : !hasStone ? "none" : !ready ? "cooldown" : "failed";
+        if (cast)
+            info.ChangeToIdle();  // the stone's 10 s cast: the AI waits (UseHearthStone), then IDLE picks again
+        ++(cast ? hearthed : noHearth);
+        handler->PSendSysMessage("GUIDERESCUE name={} guid={} level={} dropped={} hearth={}", bot->GetName(),
+                                 bot->GetGUID().GetCounter(), bot->GetLevel(), dropped, hearth);
+    }
+    handler->PSendSysMessage("GUIDEOK rescue moonglade n={} abandoned={} hearthed={} no_hearth={}", n, abandoned,
+                             hearthed, noHearth);
+    return true;
+}
 }  // namespace
 
 bool GuideCommand::Handle(ChatHandler* handler, char const* args)
@@ -82,7 +141,7 @@ bool GuideCommand::Handle(ChatHandler* handler, char const* args)
     if (words.empty())
     {
         handler->PSendSysMessage("GUIDEERR usage: guides stats | load | blocked [n] | on|off|bot|reload <name> | "
-                                 "set <name> <guide id> <seq> | seats <guide id> <seq> <n>");
+                                 "set <name> <guide id> <seq> | seats <guide id> <seq> <n> | rescue moonglade");
         return false;
     }
     GuideMgr& guides = GuideMgr::instance();
@@ -144,6 +203,13 @@ bool GuideCommand::Handle(ChatHandler* handler, char const* args)
         guides.SetPhantomSeats(key, Num(words[3]));
         handler->PSendSysMessage("GUIDEOK seats key={} seats={}", key, guides.Seats(key));
         return true;
+    }
+    if (sub == "rescue")
+    {
+        if (words.size() == 2 && words[1] == "moonglade")
+            return RescueMoonglade(handler);
+        handler->PSendSysMessage("GUIDEERR usage: guides rescue moonglade");
+        return false;
     }
     if (words.size() < 2)
     {
