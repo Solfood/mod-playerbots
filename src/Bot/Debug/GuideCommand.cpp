@@ -152,10 +152,10 @@ bool GuideCommand::Handle(ChatHandler* handler, char const* args)
     if (sub == "stats")
     {
         handler->PSendSysMessage("GUIDESTAT on={} built={} guides={} steps={} blocked_load={} fixed_load={} "
-                                 "script_only={} file_errors={} build_ms={} test_guided={} seated={} maxseat={}",
+                                 "rep_only={} file_errors={} build_ms={} test_guided={} seated={} maxseat={}",
                                  sPlayerbotAIConfig.guideBots.enabled ? 1 : 0, guides.Built() ? 1 : 0,
                                  guides.AllGuides().size(), guides.StepCount(), guides.BlockedAtLoad(),
-                                 guides.FixedAtLoad(), guides.ScriptOnlyQuests(), guides.LoadErrors().size(),
+                                 guides.FixedAtLoad(), guides.RepOnlyQuests(), guides.LoadErrors().size(),
                                  guides.BuildMs(),
                                  guides.TestGuidedCount(), guides.Seated(), guides.MaxSeats());
         return true;

@@ -104,7 +104,7 @@ public:
     uint32 StepCount() const { return _stepCount; }
     uint32 BlockedAtLoad() const { return _blockedAtLoad; }
     uint32 FixedAtLoad() const { return _fixedAtLoad; }
-    uint32 ScriptOnlyQuests() const { return static_cast<uint32>(_scriptOnly.size()); }  // Guides::ScriptCreditOnly
+    uint32 RepOnlyQuests() const { return static_cast<uint32>(_repOnly.size()); }  // Guides::RepOrKillsOnly
     uint32 BuildMs() const { return _buildMs; }
     std::vector<std::string> const& LoadErrors() const { return _errors; }
 
@@ -131,7 +131,8 @@ private:
     std::unordered_map<uint32, std::vector<uint32>> _starters, _enders;  // quest -> creature entries
     std::unordered_map<uint32, std::vector<WorldPosition>> _spawns;      // creature entry -> spawns (guide NPCs only)
     std::unordered_map<uint32, std::vector<WorldPosition>> _questSpots;  // quest -> all objective spots
-    std::unordered_set<uint32> _scriptOnly;  // quests with an OBJECTIVE step that only a script credits (blocked)
+    std::unordered_set<uint32> _repOnly;     // quests with an OBJECTIVE step needing only reputation or kills (blocked)
+    std::unordered_set<uint32> _unworkable;  // quests with an OBJECTIVE step blocked at load (TURNIN: complete only)
     std::vector<std::string> _errors;
     uint32 _stepCount = 0, _blockedAtLoad = 0, _fixedAtLoad = 0, _buildMs = 0;
 

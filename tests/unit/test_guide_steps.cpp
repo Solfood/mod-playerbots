@@ -179,25 +179,34 @@ int main()
     CHECK_TRUE(!NoProgressTick(np, 0, 3600000));            // one long gap (dead, a lag spike) counts as 10 s at most
     CHECK_EQ(NO_PROGRESS_MAX_TICK_MS, np.stillMs);
 
-    // quests only a script credits (GM-BOTAI-0187): no creature, object or item to get, and no area trigger
-    QuestCredit qc;                                          // 5929/5930 Great Bear Spirit: a gossip choice
-    CHECK_TRUE(ScriptCreditOnly(qc));
-    qc.areaTrigger = true;                                   // explored by walking into an area trigger
-    CHECK_TRUE(!ScriptCreditOnly(qc));
+    // quests whose only objective is reputation or player kills (GM-BOTAI-0187, fix round 2)
+    QuestCredit qc;                                          // 10819 / 11501: nothing to do, the core completes it
+    CHECK_TRUE(!RepOrKillsOnly(qc));
+    qc.repOrKills = true;                                    // 1368 Gelkis Alliance: RequiredFactionId1 92
+    CHECK_TRUE(RepOrKillsOnly(qc));
+    qc.npcOrGo[2] = 299;                                     // ... and a kill: bots do that part
+    CHECK_TRUE(!RepOrKillsOnly(qc));
     qc = QuestCredit{};
-    qc.npcOrGo[2] = 299;                                     // kill a creature
-    CHECK_TRUE(!ScriptCreditOnly(qc));
+    qc.repOrKills = true;
+    qc.npcOrGo[0] = -1557;                                   // ... and a game object
+    CHECK_TRUE(!RepOrKillsOnly(qc));
     qc = QuestCredit{};
-    qc.npcOrGo[0] = -1557;                                   // use a game object
-    CHECK_TRUE(!ScriptCreditOnly(qc));
-    qc = QuestCredit{};
-    qc.items[5] = 750;                                       // bring an item
-    CHECK_TRUE(!ScriptCreditOnly(qc));
-    CHECK_TRUE(!RideTimedOut(25 * 60000 - 1, 25));
-    CHECK_TRUE(RideTimedOut(25 * 60000, 25));
-    CHECK_TRUE(!ShouldSave(true, 29999));
-    CHECK_TRUE(ShouldSave(true, 30000));
-    CHECK_TRUE(!ShouldSave(false, 999999));
+    qc.repOrKills = true;
+    qc.items[5] = 750;                                       // ... and an item
+    CHECK_TRUE(!RepOrKillsOnly(qc));
+
+    // a TURNIN of a quest bots cannot finish (fix round 2): blocked unless complete
+    f = F(StepKind::TurnIn);
+    f.quest = QuestState::InLog;
+    f.questRouted = false;                                   // 5930 Great Bear Spirit, an event
+    CHECK_TRUE(Judge(f) == Verdict::Blocked);
+    f.quest = QuestState::Complete;
+    CHECK_TRUE(Judge(f) == Verdict::Work);
+    f.rewarded = true;
+    CHECK_TRUE(Judge(f) == Verdict::Done);
+    f = F(StepKind::TurnIn);
+    f.quest = QuestState::InLog;
+    CHECK_TRUE(Judge(f) == Verdict::Work);                   // a routed quest: finish it first, as before
 
     // the gathering walk guard: 5 yards closer resets; 60 s without is a give-up
     Approach a;

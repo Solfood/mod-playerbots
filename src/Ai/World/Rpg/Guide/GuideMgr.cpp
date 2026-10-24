@@ -32,8 +32,8 @@
 
 namespace
 {
-// Guides::ScriptCreditOnly: a gossip choice, an escort or a spell finishes it, never a bot.
-constexpr char const* SCRIPT_ONLY = "only a script credits it (a gossip choice, an escort)";
+// Guides::RepOrKillsOnly: bots grind neither reputation nor player kills on purpose.
+constexpr char const* REP_OR_KILLS_ONLY = "needs only reputation or player kills";
 
 uint8 TeamOf(Player* bot) { return bot->GetTeamId() == TEAM_ALLIANCE ? Guides::TEAM_ALLIANCE : Guides::TEAM_HORDE; }
 
@@ -130,19 +130,20 @@ void GuideMgr::Build()
         if (wanted.count(data.id))
             _spawns[data.id].push_back(WorldPosition(data.mapid, data.posX, data.posY, data.posZ));
 
-    // Quests only a script credits (GM-BOTAI-0187): among those a guide has an OBJECTIVE step for, the ones with
-    // nothing to kill, use or bring and no area trigger. Their ACCEPT, OBJECTIVE and TURNIN steps are blocked below:
-    // a bot that took one would hold a log slot for good and work its objective or hand-in for ever.
-    std::unordered_set<uint32> explored;
-    if (QueryResult r = WorldDatabase.Query("SELECT DISTINCT quest FROM areatrigger_involvedrelation"))
+    // Quests whose only objective is reputation or player kills (GM-BOTAI-0187, fix round 2 GM-BOTAI-0192), among
+    // those a guide has an OBJECTIVE step for. Their ACCEPT, OBJECTIVE and TURNIN steps are blocked below: a bot that
+    // took one would hold a log slot for good and work its objective or hand-in for ever.
+    std::unordered_set<uint32> repOrKills;
+    if (QueryResult r = WorldDatabase.Query("SELECT ID FROM quest_template WHERE RequiredFactionId1 <> 0 OR "
+                                            "RequiredFactionId2 <> 0 OR RequiredPlayerKills <> 0"))
         do
         {
-            explored.insert((*r)[0].Get<uint32>());
+            repOrKills.insert((*r)[0].Get<uint32>());
         } while (r->NextRow());
     for (Guides::Guide const& g : _guides)
         for (Guides::Step const& s : g.steps)
         {
-            if (s.kind != Guides::StepKind::Objective || _scriptOnly.count(s.quest))
+            if (s.kind != Guides::StepKind::Objective || _repOnly.count(s.quest))
                 continue;
             Quest const* q = sObjectMgr->GetQuestTemplate(s.quest);
             if (!q)
@@ -152,18 +153,18 @@ void GuideMgr::Build()
                 c.npcOrGo[i] = q->RequiredNpcOrGo[i];
             for (uint8 i = 0; i < QUEST_ITEM_OBJECTIVES_COUNT; ++i)
                 c.items[i] = q->RequiredItemId[i];
-            c.areaTrigger = explored.count(s.quest) > 0;
-            if (Guides::ScriptCreditOnly(c))
-                _scriptOnly.insert(s.quest);
+            c.repOrKills = repOrKills.count(s.quest) > 0;
+            if (Guides::RepOrKillsOnly(c))
+                _repOnly.insert(s.quest);
         }
     {
-        std::vector<uint32> ids(_scriptOnly.begin(), _scriptOnly.end());
+        std::vector<uint32> ids(_repOnly.begin(), _repOnly.end());
         std::sort(ids.begin(), ids.end());
         std::string shown;
         for (size_t i = 0; i < ids.size() && i < 40; ++i)
             shown += (i ? "," : "") + std::to_string(ids[i]);
-        LOG_INFO("server.loading", ">> Guides: {} quests only a script credits, their steps blocked: {}{}", ids.size(),
-                 shown.empty() ? "-" : shown, ids.size() > 40 ? ",..." : "");
+        LOG_INFO("server.loading", ">> Guides: {} quests that need only reputation or player kills, their steps "
+                 "blocked: {}{}", ids.size(), shown.empty() ? "-" : shown, ids.size() > 40 ? ",..." : "");
     }
 
     _info.resize(_guides.size());
@@ -172,6 +173,9 @@ void GuideMgr::Build()
         {
             _info[gi].push_back(Resolve(s));
             ++_stepCount;
+            // a quest whose objective step is blocked (or not a kind bots do): its TURNIN only takes it complete
+            if (s.kind == Guides::StepKind::Objective && _info[gi].back().blocked)
+                _unworkable.insert(s.quest);
         }
 
     if (QueryResult r = PlayerbotsDatabase.Query("SELECT bot, guide, seq, line FROM playerbots_guide_progress"))
@@ -240,8 +244,8 @@ GuideStepInfo GuideMgr::Resolve(Guides::Step& s)
                 if (!Routes::RoutedKind(routes.KindOf(s.quest)))
                     in.blocked = "needs a quest skill bots lack (Plan 5b)";
             }
-            if (!in.blocked && _scriptOnly.count(s.quest))
-                in.blocked = SCRIPT_ONLY;
+            if (!in.blocked && _repOnly.count(s.quest))
+                in.blocked = REP_OR_KILLS_ONLY;
             break;
         }
         case K::Objective:
@@ -257,9 +261,9 @@ GuideStepInfo GuideMgr::Resolve(Guides::Step& s)
                 in.blocked = "needs a quest skill bots lack (Plan 5b)";
                 break;
             }
-            if (_scriptOnly.count(s.quest))
+            if (_repOnly.count(s.quest))
             {
-                in.blocked = SCRIPT_ONLY;
+                in.blocked = REP_OR_KILLS_ONLY;
                 break;
             }
             // The database's spots for this objective first (the mobs that drop its item or that it kills); the
@@ -483,6 +487,8 @@ Guides::StepFacts GuideMgr::Facts(Player* bot, int gi, uint32 seq, uint32 raceBi
             }
             if (s.kind == K::Objective)
                 f.objectiveDone = ObjectiveDone(bot, q, s.objective);
+            if (s.kind == K::TurnIn)
+                f.questRouted = Routes::RoutedKind(RouteMgr::instance().KindOf(s.quest)) && !_unworkable.count(s.quest);
             break;
         }
         case K::Grind:

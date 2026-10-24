@@ -50,6 +50,7 @@ struct StepFacts
     bool rewarded = false;
     bool grey = false;           // the quest gives no XP to the bot any more
     bool canTake = true;         // the core's CanTakeQuest (prerequisites, race, class, exclusive group)
+    bool questRouted = true;     // TURNIN: a kind bots do (Plan 5a) and no objective step of it blocked at load
     bool objectiveDone = false;  // objective n is met (decision 13)
     uint32_t questMinLevel = 0;
     uint32_t level = 1;
@@ -81,6 +82,11 @@ inline Verdict Judge(StepFacts const& f)
             if (f.rewarded)
                 return Verdict::Done;
             if (f.quest == QuestState::None || f.quest == QuestState::Failed)
+                return Verdict::Blocked;
+            // A quest bots cannot finish (an event, an escort, an objective blocked at load) that it holds anyway (the
+            // core can add a chain's next quest on a hand-in, GM-BOTAI-0192): only a complete one is handed in, else
+            // "finish it first" would hold it for good (38 druids by the Great Bear Spirit).
+            if (!f.questRouted && f.quest != QuestState::Complete)
                 return Verdict::Blocked;
             return f.otherMap ? Verdict::Away : Verdict::Work;  // complete: hand it in; in the log: finish it first
         case StepKind::Objective:
@@ -318,21 +324,21 @@ inline bool NoProgressTick(NoProgress& n, uint32_t progress, uint32_t elapsedMs)
     return n.stillMs >= NO_PROGRESS_MINUTES * 60000u;
 }
 
-// A quest only a script credits (GM-BOTAI-0187): nothing to kill, use or bring (RequiredNpcOrGo, RequiredItemId all
-// 0) and no area trigger explores it (areatrigger_involvedrelation). What finishes it is a script event: a gossip
-// choice (5929/5930 Great Bear Spirit: SmartAI on gossip select gives the credit), an escort, a spell. Bots never pick
-// gossip options, so the loader blocks the quest's ACCEPT, OBJECTIVE and TURNIN steps; it looks only at quests a
-// guide has an OBJECTIVE step for (a quest with nothing to do and no objective step is a plain delivery).
+// A quest whose only objective is reputation or player kills (GM-BOTAI-0187, narrowed in fix round 2 GM-BOTAI-0192):
+// nothing to kill, use or bring (RequiredNpcOrGo, RequiredItemId all 0) and a RequiredFactionId or RequiredPlayerKills.
+// Bots grind neither on purpose, so the 5a classifier's "deliver" is wrong for it; the loader blocks its ACCEPT,
+// OBJECTIVE and TURNIN steps (1368 Gelkis Alliance). A quest with nothing at all to do is left alone: the core
+// completes it on accept. Event, escort and area-trigger quests (SpecialFlags 2) are blocked already as not routed.
 struct QuestCredit
 {
     std::array<int32_t, 4> npcOrGo{};  // RequiredNpcOrGo: > 0 a creature, < 0 a game object
     std::array<uint32_t, 6> items{};   // RequiredItemId
-    bool areaTrigger = false;          // an area trigger explores it
+    bool repOrKills = false;           // RequiredFactionId1/2 or RequiredPlayerKills set
 };
 
-inline bool ScriptCreditOnly(QuestCredit const& c)
+inline bool RepOrKillsOnly(QuestCredit const& c)
 {
-    if (c.areaTrigger)
+    if (!c.repOrKills)
         return false;
     for (int32_t const target : c.npcOrGo)
         if (target)

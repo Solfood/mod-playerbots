@@ -735,9 +735,15 @@ uint32 NewRpgBaseAction::BestRewardIndex(Quest const* quest)
 
 // Quest routes: a routed bot takes only quests its route can do (RouteMgr::MayAccept). Guides (Plan 5c): a guided bot
 // takes only its guide's next quests (GuideMgr::MayAccept). Any other bot as before.
+// A bot enrolled in guides takes no quest of a kind bots cannot do, even while its guide is paused (fix round 2,
+// GM-BOTAI-0192). The likely way the Moonglade druids got Great Bear Spirit (an event, its guide step blocked): the
+// guide paused there (no flight it knows out), the bot played as a plain bot, and this 80-yard search took it.
 bool NewRpgBaseAction::WouldAccept(Quest const* quest)
 {
     if (!IsQuestWorthDoing(quest) || !IsQuestCapableDoing(quest))
+        return false;
+    if (GuideMgr::instance().Enrolled(bot) &&
+        !Routes::RoutedKind(RouteMgr::instance().KindOf(quest->GetQuestId())))
         return false;
     if (GuideMgr::instance().Guided(bot))
         return GuideMgr::instance().MayAccept(bot, quest);
