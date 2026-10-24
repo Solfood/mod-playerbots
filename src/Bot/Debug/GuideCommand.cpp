@@ -23,6 +23,7 @@
 #include "QuestPackets.h"
 #include "RandomPlayerbotMgr.h"
 #include "RouteMgr.h"
+#include "SpellAuraDefines.h"
 #include "WorldSession.h"
 
 namespace
@@ -81,13 +82,15 @@ void PrintBot(ChatHandler* handler, Player* bot)
 constexpr uint32 HEARTHSTONE_ITEM = 6948;
 constexpr uint32 HEARTHSTONE_SPELL = 8690;
 
-// `guides rescue moonglade` (GM-BOTAI-0189, fix round 1 GM-BOTAI-0191): every online population bot in Moonglade
-// with a quest of a druid Moonglade chain in its log (Guides::MOONGLADE_QUESTS, the same list as convert.py's
-// DETOUR_QUESTS; bots have no way out of Moonglade, and Great Bear Spirit is credited only by a gossip choice) drops
-// those quests, as a player does from the quest log, and uses its own hearthstone: the real item, its cooldown and
-// cast (no teleport). One with no stone, or the stone on cooldown, or a cast that did not start, is listed and stays.
-// Its guide place needs nothing: the converter drops the chains' steps and RestoreSeq puts a saved place on one of
-// them at the step after it; the step it worked is forgotten. Console commands run on the world thread.
+// `guides rescue moonglade` (GM-BOTAI-0189, fix rounds GM-BOTAI-0191 and GM-BOTAI-0194). Every online population
+// bot drops the quests of the druid Moonglade chains from its log (Guides::MOONGLADE_QUESTS, the same list as
+// convert.py's DETOUR_QUESTS), wherever it is, as a player does from the quest log. In Moonglade, a bot that held one
+// and any druid (Guides::RescueHearths) uses its own hearthstone: the real item, its cooldown and cast, no teleport;
+// a shapeshift or a mount is dropped first. Bots have no way out of Moonglade, and Great Bear Spirit is credited only
+// by a gossip choice. One with no stone, the stone on cooldown, or no cast started is listed and stays; a later run
+// finds it again (a druid). Its guide place needs nothing: the converter drops the chains' steps and RestoreSeq puts
+// a saved place on one of them at the step after it; the step it worked is forgotten. Console commands run on the
+// world thread.
 bool RescueMoonglade(ChatHandler* handler)
 {
     GuideMgr& guides = GuideMgr::instance();
@@ -95,8 +98,7 @@ bool RescueMoonglade(ChatHandler* handler)
     for (auto const& [guid, bot] : sRandomPlayerbotMgr.GetAllBots())
     {
         PlayerbotAI* botAI = bot ? GET_PLAYERBOT_AI(bot) : nullptr;
-        if (!botAI || !bot->IsInWorld() || !sRandomPlayerbotMgr.IsRandomBot(bot) ||
-            bot->GetZoneId() != Guides::MOONGLADE_ZONE)
+        if (!botAI || !bot->IsInWorld() || !sRandomPlayerbotMgr.IsRandomBot(bot))
             continue;
         uint32 dropped = 0;
         for (uint8 slot = 0; slot < MAX_QUEST_LOG_SIZE; ++slot)
@@ -112,23 +114,39 @@ bool RescueMoonglade(ChatHandler* handler)
             bot->GetSession()->HandleQuestLogRemoveQuest(remove);
             ++dropped;
         }
-        if (!dropped)
+        abandoned += dropped;
+        bool const inMoonglade = bot->GetZoneId() == Guides::MOONGLADE_ZONE;
+        if (dropped && !inMoonglade)
+            handler->PSendSysMessage("GUIDERESCUE name={} guid={} level={} dropped={} hearth=- zone={}",
+                                     bot->GetName(), bot->GetGUID().GetCounter(), bot->GetLevel(), dropped,
+                                     bot->GetZoneId());
+        if (!Guides::RescueHearths(inMoonglade, dropped, bot->getClass()))
             continue;
         ++n;
-        abandoned += dropped;
         NewRpgInfo& info = botAI->rpgInfo;
         guides.Unseat(bot->GetGUID().GetCounter());
         info.guide.step = NewRpgInfo::GuideState::Step{};
         bool const hasStone = bot->HasItemCount(HEARTHSTONE_ITEM, 1);
-        bool const ready = hasStone && !bot->HasSpellCooldown(HEARTHSTONE_SPELL);
-        bool const cast = ready && botAI->DoSpecificAction("hearthstone", Event(), true);
-        // failed: in combat, or the cast refused; run the command again later
-        char const* hearth = cast ? "cast" : !hasStone ? "none" : !ready ? "cooldown" : "failed";
+        bool const ready = hasStone && !bot->HasSpellCooldown(HEARTHSTONE_SPELL) && !bot->IsInCombat();
+        if (ready)
+        {
+            // travel or cat form, or a mount, refuses the stone's cast (review M2)
+            bot->RemoveAurasByType(SPELL_AURA_MOD_SHAPESHIFT);
+            if (bot->IsMounted())
+            {
+                bot->RemoveAurasByType(SPELL_AURA_MOUNTED);
+                bot->Dismount();
+            }
+        }
+        // counted only when the cast really started: UseItemAction returns true once the use packet is sent
+        bool const cast =
+            ready && botAI->DoSpecificAction("hearthstone", Event(), true) && bot->IsNonMeleeSpellCast(false);
+        char const* hearth = cast ? "cast" : !hasStone ? "none" : !ready ? "cooldown_or_combat" : "failed";
         if (cast)
             info.ChangeToIdle();  // the stone's 10 s cast: the AI waits (UseHearthStone), then IDLE picks again
         ++(cast ? hearthed : noHearth);
-        handler->PSendSysMessage("GUIDERESCUE name={} guid={} level={} dropped={} hearth={}", bot->GetName(),
-                                 bot->GetGUID().GetCounter(), bot->GetLevel(), dropped, hearth);
+        handler->PSendSysMessage("GUIDERESCUE name={} guid={} level={} dropped={} hearth={} zone={}", bot->GetName(),
+                                 bot->GetGUID().GetCounter(), bot->GetLevel(), dropped, hearth, bot->GetZoneId());
     }
     handler->PSendSysMessage("GUIDEOK rescue moonglade n={} abandoned={} hearthed={} no_hearth={}", n, abandoned,
                              hearthed, noHearth);

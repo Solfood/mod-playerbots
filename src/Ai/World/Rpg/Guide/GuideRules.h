@@ -382,6 +382,14 @@ inline bool MoongladeQuest(uint32_t quest)
     return false;
 }
 
+// Who the rescue hearths (fix round 2, GM-BOTAI-0194): a bot in Moonglade that held a detour quest, or any druid there
+// (nothing in Moonglade is for a bot, and a druid whose quests a first run already dropped is found again).
+constexpr uint8_t DRUID_CLASS_ID = 11;
+inline bool RescueHearths(bool inMoonglade, uint32_t droppedQuests, uint8_t playerClass)
+{
+    return inMoonglade && (droppedQuests > 0 || playerClass == DRUID_CLASS_ID);
+}
+
 // Where a bot that stands on another map than its next step can cross (Plan 5c): a boat, zeppelin or portal step
 // whose spot is on `fromMap` and whose next spot is on `toMap`. Its race's start guide is searched first, then every
 // guide of its faction in file order. guide -1: none (the guide is paused).

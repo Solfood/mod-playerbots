@@ -99,6 +99,11 @@ int main()
     CHECK_EQ(30u, sizeof(MOONGLADE_QUESTS) / sizeof(MOONGLADE_QUESTS[0]));
     CHECK_TRUE(!MoongladeQuest(5062));
     CHECK_TRUE(!MoongladeQuest(0));
+    CHECK_TRUE(RescueHearths(true, 1, 11));
+    CHECK_TRUE(RescueHearths(true, 0, 11));    // a druid a first run already cleared (stone on cooldown then)
+    CHECK_TRUE(RescueHearths(true, 2, 1));
+    CHECK_TRUE(!RescueHearths(true, 0, 1));    // a warrior passing through
+    CHECK_TRUE(!RescueHearths(false, 3, 11));  // elsewhere: its quests are dropped, no hearth
     CHECK_EQ(0x00020003u, StepKey(1, 3));
     CHECK_EQ(0x00010000u, StepKey(0, 0));  // never 0
 
