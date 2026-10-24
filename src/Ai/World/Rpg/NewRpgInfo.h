@@ -206,6 +206,7 @@ struct NewRpgInfo
             uint32 key{0};
             uint32 workedMs{0};          // FOLLOW_GUIDE ticks on this step
             uint32 teleportsAtStart{0};  // stuckTeleports when it started (TeleportStalled)
+            Guides::NoProgress noProgress{};  // seated OBJECTIVE: its quest's counts unchanged (NoProgressTick)
             uint32 flightTries{0};
             uint32 atNpcMs{0};           // when it reached a giver, ender, innkeeper or flight master; RIDE: stepped on a deck
             Routes::HubWalk walk{};      // travel: no closer for HUB_WALK_STALL_MINUTES = stalled

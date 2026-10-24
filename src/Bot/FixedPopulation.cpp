@@ -22,7 +22,8 @@ constexpr std::array<char const*, static_cast<std::size_t>(EconomyCounter::Count
     "training_spells",    "training_skipped", "training_copper", "mounts_bought", "tools_bought",
     "professions_picked", "errands_started",  "mails_collected", "spirit_healer",
     "town_trips_abandoned", "bot_deaths",      "retreats_started", "retreats_ended", "route_drops", "hub_walks_given_up",
-    "guide_steps_done", "guide_steps_blocked", "guide_steps_stalled", "guide_steps_crowded", "guides_paused",
+    "guide_steps_done", "guide_steps_blocked", "guide_steps_stalled", "guide_steps_no_progress",
+    "guide_steps_crowded", "guides_paused",
     "guide_rides_failed", "guide_rides_teleported", "crafts_made", "crafts_equipped", "gather_yield", "smelts",
     "ah_listed", "ah_sold", "ah_bought", "ah_gold_in", "ah_gold_out", "craft_trips_abandoned", "food_bought",
     "drink_bought", "supplies_copper", "supplies_trips", "rests_before_pull", "rests_gave_up",
@@ -31,8 +32,8 @@ constexpr std::array<char const*, static_cast<std::size_t>(EconomyCounter::Count
     "healers_unsafe", "healer_refusals", "corpse_waits", "revive_moves",
     "hearth_rescues", "lost_walks", "sickness_waits", "landing_refusals",
     "profession_training", "fishing_trips", "fish_caught", "fishing_abandoned",
-    "fishing_no_spot", "fishing_skill_raised", "couriers", "bank_tabs_given", "bank_deposits", "bank_items_in", "bank_withdrawals",
-    "bank_items_out", "bank_empty"};
+    "fishing_no_spot", "fishing_skill_raised", "couriers", "bank_tabs_given", "bank_deposits", "bank_items_in",
+    "bank_withdrawals", "bank_items_out", "bank_empty"};
 // A std::array fills missing names with nullptr (no compile error), so check the last one is there.
 static_assert(COUNTER_NAMES.back() != nullptr, "COUNTER_NAMES needs a name for every EconomyCounter");
 }  // namespace

@@ -160,6 +160,25 @@ int main()
     CHECK_TRUE(!TeleportStalled(3, 4));
     CHECK_TRUE(TeleportStalled(3, 5));
 
+    // no progress (GM-BOTAI-0188): 30 minutes on one seated objective with its counts unchanged skips it
+    CHECK_EQ(30u, NO_PROGRESS_MINUTES);
+    NoProgress np;
+    CHECK_TRUE(!NoProgressTick(np, 0, 5000));                // the first look only notes the counts
+    for (uint32_t i = 0; i < 30 * 6 - 1; ++i)               // 10 s ticks: 29 min 50 s
+        CHECK_TRUE(!NoProgressTick(np, 0, 10000));
+    CHECK_TRUE(NoProgressTick(np, 0, 10000));               // 30 minutes
+    np = NoProgress{};
+    NoProgressTick(np, 2, 0);
+    for (uint32_t i = 0; i < 30 * 6 - 1; ++i)
+        NoProgressTick(np, 2, 10000);
+    CHECK_TRUE(!NoProgressTick(np, 3, 10000));              // a kill or a loot just in time: the clock starts again
+    CHECK_EQ(0u, np.stillMs);
+    CHECK_TRUE(!NoProgressTick(np, 3, 10000));
+    np = NoProgress{};
+    NoProgressTick(np, 0, 0);
+    CHECK_TRUE(!NoProgressTick(np, 0, 3600000));            // one long gap (dead, a lag spike) counts as 10 s at most
+    CHECK_EQ(NO_PROGRESS_MAX_TICK_MS, np.stillMs);
+
     // quests only a script credits (GM-BOTAI-0187): no creature, object or item to get, and no area trigger
     QuestCredit qc;                                          // 5929/5930 Great Bear Spirit: a gossip choice
     CHECK_TRUE(ScriptCreditOnly(qc));

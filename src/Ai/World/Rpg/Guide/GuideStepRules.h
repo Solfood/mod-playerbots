@@ -9,6 +9,7 @@
 #ifndef PLAYERBOTS_GUIDESTEPRULES_H
 #define PLAYERBOTS_GUIDESTEPRULES_H
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <vector>
@@ -286,6 +287,35 @@ constexpr uint32_t STALL_TELEPORTS = 2;
 inline bool TeleportStalled(uint32_t teleportsAtStart, uint32_t teleportsNow)
 {
     return teleportsNow >= teleportsAtStart + STALL_TELEPORTS;
+}
+
+// No progress (GM-BOTAI-0188, a safety net): a bot working one seated OBJECTIVE step for NO_PROGRESS_MINUTES while
+// the quest's objective counts have not changed skips the step this session, as a stall does. The stuck teleport
+// only counts a bot that cannot move; a bot standing by an objective nothing it does can credit (the Great Bear
+// Spirit wants a gossip choice) worked it for days. The clock lives with the step, so leaving FOLLOW_GUIDE for a rest
+// or an errand does not start it again; a long gap between two ticks (dead, a lag spike) counts as
+// NO_PROGRESS_MAX_TICK_MS at most.
+constexpr uint32_t NO_PROGRESS_MINUTES = 30;
+constexpr uint32_t NO_PROGRESS_MAX_TICK_MS = 10000;
+
+struct NoProgress
+{
+    bool seen = false;      // the counts were noted once on this step
+    uint32_t progress = 0;  // the sum of the quest's objective counts when last seen
+    uint32_t stillMs = 0;   // work on the step since they last changed
+};
+
+inline bool NoProgressTick(NoProgress& n, uint32_t progress, uint32_t elapsedMs)
+{
+    if (!n.seen || progress != n.progress)
+    {
+        n.seen = true;
+        n.progress = progress;
+        n.stillMs = 0;
+        return false;
+    }
+    n.stillMs += std::min(elapsedMs, NO_PROGRESS_MAX_TICK_MS);
+    return n.stillMs >= NO_PROGRESS_MINUTES * 60000u;
 }
 
 // A quest only a script credits (GM-BOTAI-0187): nothing to kill, use or bring (RequiredNpcOrGo, RequiredItemId all
