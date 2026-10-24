@@ -105,6 +105,15 @@ bool NewRpgFishAction::Start(PlayerbotAI* botAI, Player* bot)
 {
     NewRpgInfo& info = botAI->rpgInfo;
     info.fishAtMs = std::max<uint32>(1, getMSTime());  // the cooldown runs from the start, whatever ends the trip
+    // Our own rule: a Fishing skill below FISH_START_SKILL is raised to it first (at 1 no water ever qualified).
+    uint16 const pure = bot->GetPureSkillValue(SKILL_FISHING);
+    uint32 const raised = Fish::StartSkill(bot->HasSkill(SKILL_FISHING), pure);
+    if (raised != pure)
+    {
+        uint16 const maxSkill = std::max<uint16>(bot->GetPureMaxSkillValue(SKILL_FISHING), static_cast<uint16>(raised));
+        bot->SetSkill(SKILL_FISHING, bot->GetSkillStep(SKILL_FISHING), static_cast<uint16>(raised), maxSkill);
+        FixedPopulation::Count(EconomyCounter::FishingSkillRaised);
+    }
     WorldPosition spot = PickSpot(botAI, bot);
     if (!spot.IsValid())
     {
@@ -148,7 +157,7 @@ WorldPosition NewRpgFishAction::PickSpot(PlayerbotAI* botAI, Player* bot)
                 zoneSkill = sObjectMgr->GetFishingBaseSkillLevel(zoneAt);
             if (!Fish::WaterOk(true, zoneAt == zone, BotDeaths::Avoids(botAI, mapId, x, y),
                                BotDeaths::FarAboveAt(bot, x, y, water),
-                               Fish::CatchPct(skill, static_cast<uint32>(std::max<int32>(0, zoneSkill)))))
+                               Fish::CatchPct(skill, zoneSkill)))
                 continue;
             waters.emplace_back(mapId, x, y, water);
         }

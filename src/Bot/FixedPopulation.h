@@ -96,6 +96,7 @@ enum class EconomyCounter : uint8
     FishCaught,           // items random bots looted from their fishing bobbers
     FishingAbandoned,     // fishing trips given up: no pole, a walk that got nowhere, casts that failed, the backstop
     FishingNoSpot,        // fishing trips not started: no fishable water near (the cooldown still runs)
+    FishingSkillRaised,   // Fishing skills raised to FISH_START_SKILL before a trip (our own rule, GM-BOTAI-0184)
     Couriers,             // guild couriers spawned at startup (our own rule; a count, not a rate)
     BankTabsGiven,        // guild bank tabs given free (our own rule)
     BankDeposits,         // courier visits that deposited at least one supply

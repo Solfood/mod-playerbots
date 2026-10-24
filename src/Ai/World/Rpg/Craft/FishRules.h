@@ -22,7 +22,8 @@ namespace Fish
 constexpr uint32_t FISHING_POLE = 6256;
 constexpr uint32_t MINUTE_MS = 60 * 1000;
 constexpr uint32_t WALK_MINUTES = 10;      // the shopping and the walk to the shore: at most this long
-constexpr uint32_t MIN_CATCH_PCT = 20;     // a spot whose water it catches fish in less often is not picked
+constexpr uint32_t MIN_CATCH_PCT = 15;     // a spot whose water it catches fish in less often is not picked
+constexpr uint32_t FISH_START_SKILL = 10;  // our own rule: a bot's Fishing skill is raised to this before a trip
 constexpr float RING_STEP_YARDS = 25.0f;   // the spot picker probes rings this far apart...
 constexpr uint32_t RING_DIRECTIONS = 16;   // ... in this many directions
 constexpr uint32_t MAX_PATH_CHECKS = 3;    // shore spots whose path it checks before it gives up
@@ -48,11 +49,22 @@ inline bool MayStart(bool hasSkill, bool guided, bool inCombat, bool dead, bool 
     return hasPole || (polePrice && money >= reserve + polePrice);
 }
 
-// The core's catch chance (GameObject::Use, a fishing bobber): (skill / (zone skill + 95))^2, at least 1 %.
-inline uint32_t CatchPct(uint32_t skill, uint32_t zoneSkill)
+// The Fishing skill a bot fishes with (our own rule, GM-BOTAI-0184): every bot starts at 1, and at 1 the catch chance
+// is about 1 % in every water, so no spot ever qualified. A bot that has learned Fishing and is below
+// FISH_START_SKILL is raised to it when it considers a trip; one at or above it keeps its own value (never lowered),
+// and a bot without the skill gets none.
+inline uint32_t StartSkill(bool hasSkill, uint32_t skill)
+{
+    return hasSkill && skill < FISH_START_SKILL ? FISH_START_SKILL : skill;
+}
+
+// The core's catch chance (GameObject::Use, a fishing bobber): (skill / (zone skill + 95))^2, at least 1 %. The zone
+// skill can be negative (skill_fishing_base_level has waters at -70 and -20) and is used as is, like the core does;
+// a zone skill of -95 or less leaves nothing to miss.
+inline uint32_t CatchPct(uint32_t skill, int32_t zoneSkill)
 {
     double const noMiss = double(zoneSkill) + 95.0;
-    if (double(skill) >= noMiss)
+    if (noMiss <= 0.0 || double(skill) >= noMiss)
         return 100;
     uint32_t const pct = static_cast<uint32_t>(std::pow(double(skill) / noMiss, 2) * 100.0);
     return pct < 1 ? 1 : pct;

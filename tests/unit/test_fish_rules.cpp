@@ -31,6 +31,23 @@ int main()
     CHECK_EQ(100u, CatchPct(120, 25));   // skill >= zone skill + 95
     CHECK_EQ(25u, CatchPct(60, 25));     // (60 / 120)^2
     CHECK_EQ(1u, CatchPct(1, 300));      // at least 1 %
+    CHECK_EQ(1u, CatchPct(1, 25));       // skill 1 (every bot's start): too rare everywhere
+    CHECK_EQ(16u, CatchPct(10, -70));    // negative zone skill used as is: (10 / 25)^2
+    CHECK_TRUE(WaterOk(true, true, false, false, CatchPct(10, -70)));   // passes MIN_CATCH_PCT 15
+    CHECK_EQ(1u, CatchPct(10, -20));     // (10 / 75)^2 = 1.8 %
+    CHECK_TRUE(!WaterOk(true, true, false, false, CatchPct(10, -20)));
+    CHECK_EQ(100u, CatchPct(1, -95));    // noMiss 0 or less: nothing to miss
+    CHECK_EQ(100u, CatchPct(0, -200));
+    CHECK_TRUE(WaterOk(true, true, false, false, 15));   // the bar is 15 %
+    CHECK_TRUE(!WaterOk(true, true, false, false, 14));
+
+    // The start skill: raised to 10, never lowered, only with the skill learned.
+    CHECK_EQ(10u, FISH_START_SKILL);
+    CHECK_EQ(10u, StartSkill(true, 1));
+    CHECK_EQ(10u, StartSkill(true, 9));
+    CHECK_EQ(10u, StartSkill(true, 10));
+    CHECK_EQ(57u, StartSkill(true, 57));
+    CHECK_EQ(0u, StartSkill(false, 0));
     CHECK_TRUE(!WaterOk(true, true, false, false, CatchPct(30, 25)));  // 6 %: too rare
     CHECK_TRUE(WaterOk(true, true, false, false, CatchPct(60, 25)));
     CHECK_TRUE(!WaterOk(false, true, false, false, 100));  // too shallow, or land
