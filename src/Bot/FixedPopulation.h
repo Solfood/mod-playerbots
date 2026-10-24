@@ -53,7 +53,7 @@ enum class EconomyCounter : uint8
     GuideStepsDone,     // guides (Plan 5c): steps a bot passed as done (rewarded, in the log, grey, arrived)
     GuideStepsBlocked,  // steps passed as blocked (no giver, a quest skill, a missing prerequisite, never taken)
     GuideStepsStalled,  // steps skipped for the session after a stall
-    GuideStepsNoProgress,  // of those: a seated objective whose counts did not move for 30 minutes (GM-BOTAI-0188)
+    GuideStepsNoProgress,  // of those: an objective (or unfinished hand-in) unmoved for 30 minutes
     GuideStepsCrowded,  // times a bot found its step full and nothing free ahead
     GuidesPaused,       // guides paused for a session (none for the bot, finished, no way to its next step)
     GuideRidesFailed,   // boats, zeppelins and portals that never took a bot there in RideMinutes (guide paused)

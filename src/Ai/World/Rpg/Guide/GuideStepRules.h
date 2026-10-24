@@ -311,6 +311,14 @@ struct NoProgress
     uint32_t stillMs = 0;   // work on the step since they last changed
 };
 
+// The steps the clock watches (fix round 2, GM-BOTAI-0193): a seated OBJECTIVE, and a TURNIN whose quest is in the
+// log but not complete, which works the same objectives ("finish it first"): skipping only the OBJECTIVE moved a bot
+// from one to the other.
+inline bool NoProgressWatched(StepKind kind, bool questIncomplete)
+{
+    return Seated(kind) || (kind == StepKind::TurnIn && questIncomplete);
+}
+
 inline bool NoProgressTick(NoProgress& n, uint32_t progress, uint32_t elapsedMs)
 {
     if (!n.seen || progress != n.progress)

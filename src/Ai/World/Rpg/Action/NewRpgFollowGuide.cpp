@@ -112,9 +112,11 @@ bool NewRpgFollowGuideAction::Execute(Event /*event*/)
             return RideTimeout(w, dock);
         return GiveUp(w);
     }
-    // No progress (GM-BOTAI-0188): a seated objective whose counts have not moved in NO_PROGRESS_MINUTES of work is
-    // skipped this session, as a stall is (a script-credited objective the loader did not catch, a mob nobody finds).
-    if (Guides::Seated(step.kind) && bot->IsAlive() &&
+    // No progress (GM-BOTAI-0188): a seated objective, or a hand-in still working its quest (fix round 2,
+    // GM-BOTAI-0193), whose counts have not moved in NO_PROGRESS_MINUTES of work is skipped this session, as a stall
+    // is (a script-credited objective the loader did not catch, a mob nobody finds).
+    bool const incomplete = bot->GetQuestStatus(step.quest) == QUEST_STATUS_INCOMPLETE;
+    if (Guides::NoProgressWatched(step.kind, incomplete) && bot->IsAlive() &&
         Guides::NoProgressTick(s.noProgress, RouteMgr::Progress(bot, step.quest), elapsed))
     {
         FixedPopulation::Count(EconomyCounter::GuideStepsNoProgress);

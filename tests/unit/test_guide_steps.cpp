@@ -195,6 +195,13 @@ int main()
     qc.items[5] = 750;                                       // ... and an item
     CHECK_TRUE(!RepOrKillsOnly(qc));
 
+    // the no-progress clock watches seated objectives and unfinished hand-ins (fix round 2)
+    CHECK_TRUE(NoProgressWatched(StepKind::Objective, false));
+    CHECK_TRUE(NoProgressWatched(StepKind::TurnIn, true));
+    CHECK_TRUE(!NoProgressWatched(StepKind::TurnIn, false));  // complete: walking to the ender
+    CHECK_TRUE(!NoProgressWatched(StepKind::Accept, true));
+    CHECK_TRUE(!NoProgressWatched(StepKind::Goto, true));
+
     // a TURNIN of a quest bots cannot finish (fix round 2): blocked unless complete
     f = F(StepKind::TurnIn);
     f.quest = QuestState::InLog;
