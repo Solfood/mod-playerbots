@@ -166,6 +166,9 @@ bool NewRpgCraftAction::Shop(NewRpgInfo::CraftTrip& trip)
                 ++it;
         }
     }
+    // GM-BOTAI-0200: what it wears before it makes anything; a piece made on this trip is put on as it is made.
+    for (Craft::WornPiece const& piece : OwnWorn())
+        trip.wornAtStart.push_back(piece.guid);
     trip.phase = PHASE_MAKE;
     trip.target = WorldPosition();
     return true;
@@ -299,13 +302,13 @@ bool NewRpgCraftAction::Make(NewRpgInfo::CraftTrip& trip)
     return true;
 }
 
-GuidSet NewRpgCraftAction::OwnWorn() const
+std::vector<Craft::WornPiece> NewRpgCraftAction::OwnWorn() const
 {
-    GuidSet worn;
+    std::vector<Craft::WornPiece> worn;
     for (uint8 slot = EQUIPMENT_SLOT_START; slot < EQUIPMENT_SLOT_END; ++slot)
         if (Item* item = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slot))
             if (item->GetGuidValue(ITEM_FIELD_CREATOR) == bot->GetGUID())
-                worn.insert(item->GetGUID());
+                worn.push_back({item->GetGUID().GetCounter(), item->GetEntry()});
     return worn;
 }
 
@@ -335,14 +338,11 @@ bool NewRpgCraftAction::UseResults(NewRpgInfo::CraftTrip& trip)
                 return true;
         }
     }
-    // Wear what it made that beats what it wears (the same upgrade test the equip action uses), then count it: only a
-    // piece it put on now (final review M1: an older copy it already wore is not counted again).
-    GuidSet const before = OwnWorn();
+    // Wear what it made that beats what it wears (the same upgrade test the equip action uses), then count what this
+    // trip made that it wears and did not wear when it began crafting (GM-BOTAI-0200: most pieces are already on, put
+    // there by the item push result's equip action as they were made; final review M1: an older copy is not counted).
     botAI->DoSpecificAction("equip upgrade", Event(), true);
-    for (ObjectGuid const& guid : OwnWorn())
-        if (!before.count(guid))
-            if (Item* item = bot->GetItemByGuid(guid))
-                if (std::find(trip.products.begin(), trip.products.end(), item->GetEntry()) != trip.products.end())
-                    FixedPopulation::Count(EconomyCounter::CraftsEquipped);
+    FixedPopulation::Count(EconomyCounter::CraftsEquipped,
+                           Craft::NewlyWorn(trip.wornAtStart, OwnWorn(), trip.products));
     return End(false);
 }

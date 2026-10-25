@@ -2,6 +2,7 @@
 #include <map>
 #include <set>
 #include <string>
+#include <vector>
 
 #include "../../src/Ai/World/Rpg/Craft/HubAuctioneers.h"
 #include "../../src/Ai/World/Rpg/Craft/MarketRules.h"
@@ -267,5 +268,16 @@ int main()
     CHECK_TRUE(GearSlot(1) != GearSlot(5));  // head and chest differ
     CHECK_TRUE(GearSlot(13) != GearSlot(14));
     CHECK_EQ(11u, GearSlot(11));             // anything else: its own inventory type
+    // GM-BOTAI-0200: crafts_equipped counts this trip's products it wears at the end and did not wear at its start.
+    // The stock "equip upgrades packet action" (item push result, relevance 100) puts a fresh piece on the moment it
+    // is made, so the piece is already worn when the trip's own "equip upgrade" runs: it must still count.
+    std::vector<uint32_t> const products = {4239, 7281};  // the gloves and bracers it made
+    std::vector<uint32_t> const atStart = {900};           // an older self-made piece it already wore
+    CHECK_EQ(0u, NewlyWorn(atStart, {}, products));                                // wears nothing it made
+    CHECK_EQ(0u, NewlyWorn(atStart, {{900, 4239}}, products));                     // the older copy: not again
+    CHECK_EQ(1u, NewlyWorn(atStart, {{900, 4239}, {1001, 7281}}, products));       // the fresh bracers
+    CHECK_EQ(2u, NewlyWorn({}, {{1000, 4239}, {1001, 7281}}, products));           // both fresh pieces
+    CHECK_EQ(0u, NewlyWorn({}, {{1002, 2309}}, products));                         // a self-made piece of another trip
+    CHECK_EQ(0u, NewlyWorn({}, {{1000, 4239}}, {}));                               // the trip made no gear
     return UnitFailures();
 }

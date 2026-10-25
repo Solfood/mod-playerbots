@@ -127,6 +127,7 @@ struct NewRpgInfo
         uint32 castsDone{0};                  // casts of batch[step] made
         uint32 made{0};                       // casts made on this trip (smelting included)
         std::vector<uint32> products;         // gear it made (counted as worn after the trip if it wears it)
+        std::vector<uint32> wornAtStart;      // self-made pieces it wore when it began crafting (item guid counters)
         WorldPosition target{};               // the vendor or station it walks to now (empty = none)
         Guides::Approach approach{};          // no 5 yards closer in 60 s of walking: the trip is given up
         uint32 lastTickMs{0};                 // the approach clock's last tick (0 = none yet)

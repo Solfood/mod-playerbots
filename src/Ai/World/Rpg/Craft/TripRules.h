@@ -9,6 +9,7 @@
 #ifndef PLAYERBOTS_CRAFTTRIPRULES_H
 #define PLAYERBOTS_CRAFTTRIPRULES_H
 
+#include <algorithm>
 #include <cstdint>
 #include <vector>
 
@@ -57,6 +58,29 @@ inline bool StationOk(bool zoneAboveLevel, float yards, bool guided, uint32_t st
 // GameObjectFocusCheck) with a 2-yard margin, and at least 3 yards. The focus object may sit inside a forge's model, so
 // a fixed few yards could never be reached.
 inline float StationArriveYards(uint32_t focusDist) { return focusDist > 5 ? float(focusDist) - 2.0f : 3.0f; }
+
+// A piece it wears that it made itself (ITEM_FIELD_CREATOR is the bot): its item guid counter and item entry.
+struct WornPiece
+{
+    uint32_t guid;
+    uint32_t entry;
+};
+
+// crafts_equipped (GM-BOTAI-0200): the pieces of gear this trip made (`products`) that it wears at the trip's end and
+// did not wear when it began crafting (`wornAtStart`, guid counters). Not a before/after of the trip's own "equip
+// upgrade": the stock "equip upgrades packet action" (item push result, relevance 100) puts a fresh piece on the moment
+// the craft makes it, so it is already worn by then (GM-BOTAI-0159's count stayed 0). An older copy it wore before the
+// trip is not counted again (final review M1).
+inline uint32_t NewlyWorn(std::vector<uint32_t> const& wornAtStart, std::vector<WornPiece> const& wornNow,
+                          std::vector<uint32_t> const& products)
+{
+    uint32_t count = 0;
+    for (WornPiece const& piece : wornNow)
+        if (std::find(wornAtStart.begin(), wornAtStart.end(), piece.guid) == wornAtStart.end() &&
+            std::find(products.begin(), products.end(), piece.entry) != products.end())
+            ++count;
+    return count;
+}
 
 // One auction house visit per town trip: the trip is known by the errand clock it started (lastErrandMs).
 inline bool AuctionVisitDue(uint32_t visitedTripMs, uint32_t tripMs) { return tripMs && visitedTripMs != tripMs; }
