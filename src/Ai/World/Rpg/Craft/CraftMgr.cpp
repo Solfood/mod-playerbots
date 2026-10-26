@@ -326,6 +326,8 @@ bool CraftMgr::Crafting(Player* bot) const
     return _test.count(bot->GetGUID().GetCounter()) > 0;
 }
 
+bool CraftMgr::MarketOn() { return sPlayerbotAIConfig.fixedPopulation && MarketBook::instance().Loaded(); }
+
 void CraftMgr::SetTestCrafting(uint32 guid, bool on)
 {
     std::lock_guard<std::mutex> guard(_testLock);
@@ -424,16 +426,20 @@ uint32 CraftMgr::GatherValue(uint16 skill, uint32 level) const
         return 0;
     uint64 sum = 0;
     uint32 n = 0;
-    std::lock_guard<std::mutex> guard(_seenLock);
+    MarketBook const& book = MarketBook::instance();
+    bool const market = MarketOn();
     for (auto const& [item, itemLevel] : it->second)
     {
         if (itemLevel + 10 < level || itemLevel > level + 5)
             continue;  // what a bot of this level finds
         ItemTemplate const* proto = sObjectMgr->GetItemTemplate(item);
         uint32 value = proto ? proto->SellPrice : 0;
-        auto const seen = _seen.find(item);
-        if (seen != _seen.end() && seen->second > value)
-            value = seen->second;  // spec §2: the auction price when known
+        // spec §2: the auction price when known. Plan 7a: what it sold for lately at any house, else the cheapest a
+        // visit last saw (market off: only that, as before the book).
+        ::Craft::MarketView const v = market ? book.ViewAll(item) : ::Craft::MarketView{};
+        uint64 const auction = v.soldUnits ? v.recentPerUnit : book.LastSeen(item);
+        if (auction > value)
+            value = static_cast<uint32>(std::min<uint64>(auction, UINT32_MAX));
         sum += value;
         ++n;
     }
@@ -449,12 +455,6 @@ uint16 CraftMgr::GatherAimFor(Player* bot) const
             skills.push_back(skill);
     uint32 const level = bot->GetLevel();
     return Craft::GatherAim(skills, [this, level](uint16 skill) { return GatherValue(skill, level); });
-}
-
-void CraftMgr::NoteSeenPrice(uint32 item, uint32 perUnit)
-{
-    std::lock_guard<std::mutex> guard(_seenLock);
-    _seen[item] = perUnit;
 }
 
 bool CraftMgr::HasTools(Player* bot, CraftRecipeInfo const& recipe) const
@@ -480,6 +480,7 @@ bool CraftMgr::IsSupply(ItemTemplate const* proto)
 {
     Craft::Settings const& s = sPlayerbotAIConfig.crafting;
     AiObjectContext* context = botAI->GetAiObjectContext();
+    bool const marketOn = MarketOn();  // Plan 7a: products valued by the market book
     std::map<uint32, uint32> inventory;
     for (Item* item : botAI->GetInventoryItems())
         inventory[item->GetEntry()] += item->GetCount();
@@ -555,9 +556,15 @@ bool CraftMgr::IsSupply(ItemTemplate const* proto)
                 bool const supply = IsSupply(proto) && bot->CanUseItem(proto) == EQUIP_ERR_OK;
                 // Valued at the start price an auction visit asks for it (Task 10: gear by item level, the same
                 // rule as AuctionVisitOperation::List), so a gear extra is not undervalued at the material rate.
+                // Plan 7a: by what it sold for lately at any house when it sold (so BuyMaterial may pay market
+                // prices for its inputs); market off or no sales: the start price, as before.
                 bool const gear = upgrade || proto->InventoryType != INVTYPE_NON_EQUIP;
                 c.value = static_cast<uint32>(std::min<uint64>(
-                    ::Craft::StartPrice(proto->SellPrice, r->productCount, gear, proto->ItemLevel, s.materialPricePct),
+                    ::Craft::MarketValue(
+                        marketOn ? MarketBook::instance().ViewAll(r->product) : ::Craft::MarketView{},
+                        ::Craft::StartPrice(proto->SellPrice, r->productCount, gear, proto->ItemLevel,
+                                            s.materialPricePct),
+                        r->productCount),
                     UINT32_MAX));
                 // An extra only when it is worth something when sold (Task 2 ruling: PlanBatch does not filter it).
                 bool const sells = c.value > 0 && proto->Bonding != BIND_WHEN_PICKED_UP;
@@ -810,7 +817,8 @@ void CraftMgr::NoteAuctionMail(Player* bot, Mail const* mail) const
     // The core's subject: "<item>:0:<answer>:<auction id>:<count>" (AuctionEntry::BuildAuctionMailSubject).
     uint32_t item = 0;
     uint32_t answer = 0;
-    if (!::Craft::ReadAuctionMailSubject(mail->subject, item, answer))
+    uint32_t count = 0;
+    if (!::Craft::ReadAuctionMailSubject(mail->subject, item, answer, &count))
         return;
     if (answer != AUCTION_SUCCESSFUL && answer != AUCTION_EXPIRED)
         return;  // won items, outbid refunds, pending-sale notes: nothing to count
@@ -822,8 +830,19 @@ void CraftMgr::NoteAuctionMail(Player* bot, Mail const* mail) const
         FixedPopulation::Count(EconomyCounter::AuctionGoldIn, mail->money);  // the price (no cut on this server)
         state.returned.erase(item);
     }
-    else if (::Craft::OnReturn(++state.returned[item]) == ::Craft::AfterReturn::Vendor)
-        MarkForVendor(botAI, item);  // spec §4: relisted once at RelistPct, then the vendor's (for a day)
+    else
+    {
+        // Plan 7a, spec B: a return at the house it last listed the item at (unknown, e.g. listed before a restart:
+        // not noted). Market off: nothing noted.
+        auto const listed = state.listedHouse.find(item);
+        if (MarketOn() && listed != state.listedHouse.end() && count)
+        {
+            MarketBook::instance().NoteReturn(listed->second, item, count);
+            FixedPopulation::Count(EconomyCounter::MarketReturnsNoted);
+        }
+        if (::Craft::OnReturn(++state.returned[item]) == ::Craft::AfterReturn::Vendor)
+            MarkForVendor(botAI, item);  // spec §4: relisted once at RelistPct, then the vendor's (for a day)
+    }
     if (state.liveListings)
         --state.liveListings;
 }

@@ -217,6 +217,17 @@ int main()
     CHECK_TRUE(!ReadAuctionMailSubject("2589:0", item, answer));
     CHECK_TRUE(!ReadAuctionMailSubject("2589:1:2:5:1", item, answer));  // the second field is always 0
     CHECK_TRUE(!ReadAuctionMailSubject(":0:2:5:1", item, answer));
+    // Plan 7a Task 3: the count (5th field), for the market book's returns
+    uint32_t count = 0;
+    CHECK_TRUE(ReadAuctionMailSubject("2589:0:3:77:20", item, answer, &count));
+    CHECK_EQ(2589u, item);
+    CHECK_EQ(3u, answer);
+    CHECK_EQ(20u, count);
+    CHECK_TRUE(ReadAuctionMailSubject("774:0:2:99:1", item, answer, &count));
+    CHECK_EQ(1u, count);
+    CHECK_TRUE(!ReadAuctionMailSubject("2589:0:3:77:", item, answer, &count));  // no count
+    CHECK_TRUE(!ReadAuctionMailSubject("2589:0:3", item, answer, &count));
+    CHECK_TRUE(!ReadAuctionMailSubject("2589:0:3:77:2x", item, answer, &count));
     // Fix round 1, I1: "vendor it" lasts VENDOR_MARK_MS (a day), then the item may go back to the auction house
     CHECK_TRUE(!VendorMarkOn(0, 5000));                               // never marked
     CHECK_TRUE(VendorMarkOn(5000, 5000));

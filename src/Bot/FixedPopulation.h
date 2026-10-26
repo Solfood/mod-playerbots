@@ -105,6 +105,9 @@ enum class EconomyCounter : uint8
     BankWithdrawals,      // courier visits that took at least one supply
     BankItemsOut,         // supply items taken
     BankEmpty,            // a member short of food went to town and its guild bank had nothing it could use
+    MarketSalesNoted,     // auction buyouts noted in the market book (Plan 7a)
+    MarketReturnsNoted,   // unsold auctions back by mail noted in the market book
+    MarketWantsNoted,     // missing materials an auction visit found no auction it could buy for (once a visit)
     Count
 };
 

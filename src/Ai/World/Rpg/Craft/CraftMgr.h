@@ -83,6 +83,10 @@ public:
     bool Crafting(Player* bot) const;
     void SetTestCrafting(uint32 guid, bool on);
     uint32 TestCount() const { return _testCount.load(std::memory_order_relaxed); }
+    // The smart market (Plan 7a) is on: FixedPopulation on and the market book loaded (AiPlayerbot.Crafting = 1).
+    // Crafting(bot) covers neither. Off: nothing is noted in the book and prices are as before it (its saved days are
+    // not read).
+    static bool MarketOn();
 
     std::vector<CraftRecipeInfo const*> const& RecipesOf(uint32 skill) const;
     CraftRecipeInfo const* Recipe(uint32 spell) const;
@@ -115,12 +119,12 @@ public:
     // In a crafting town: a station (anvil, forge, fire) or a material vendor within TownYards.
     bool InCraftTown(Player* bot) const;
     static constexpr uint32 PLAN_REUSE_MS = 5 * IN_MILLISECONDS;
-    // Copper a node or skin of that kind is worth to a bot of `level` (vendor value, or the auction price last seen).
+    // Copper a node or skin of that kind is worth to a bot of `level` (vendor value, or the market book's recent sale
+    // price, else the auction price last seen).
     uint32 GatherValue(uint16 skill, uint32 level) const;
     // What its gathering trip looks for (spec §2, Craft::GatherAim): what its recipes need, else what is worth most to
     // a bot of its level. 0 = anything.
     uint16 GatherAimFor(Player* bot) const;
-    void NoteSeenPrice(uint32 item, uint32 perUnit);
     // What it holds back for its next auction visit (spec §4 "What it lists"), best value first, at most one stack per
     // free listing slot. Map or world thread (the bot's own data).
     std::vector<Item*> HeldForAuction(PlayerbotAI* botAI, Player* bot) const;
@@ -176,8 +180,6 @@ private:
     size_t _vendorCount = 0;
     size_t _auctioneerCount = 0;
     std::vector<HubSpawn> _hubs;
-    mutable std::mutex _seenLock;
-    std::unordered_map<uint32, uint32> _seen;  // item -> the cheapest buyout per unit an auction visit last saw
 };
 
 #endif

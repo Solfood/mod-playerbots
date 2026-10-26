@@ -20,6 +20,7 @@
 #include "Item.h"
 #include "Mail.h"
 #include "ItemUsageValue.h"
+#include "MarketBook.h"
 #include "MarketRules.h"
 #include "NewRpgInfo.h"
 #include "ObjectMgr.h"
@@ -70,8 +71,8 @@ bool AuctionVisitOperation::Execute()
     }
     NewRpgInfo::CraftState& state = botAI->rpgInfo.craft;
     state.liveListings = live;
-    List(bot, botAI, npc, cheapest, live);
-    Buy(bot, botAI, npc, auctions);
+    List(bot, botAI, npc, house->houseId, cheapest, live);
+    Buy(bot, botAI, npc, house->houseId, auctions);
     // What is still missing now was looked for here: no new trip for it until the set changes or EmptyCooldownMinutes
     // pass (fix round 1, I3).
     state.missingCheckedSig = ::Craft::MissingSignature(state.missing);
@@ -80,12 +81,14 @@ bool AuctionVisitOperation::Execute()
     return true;
 }
 
-void AuctionVisitOperation::List(Player* bot, PlayerbotAI* botAI, Creature* npc,
+void AuctionVisitOperation::List(Player* bot, PlayerbotAI* botAI, Creature* npc, uint32 house,
                                  std::unordered_map<uint32, uint64> const& cheapest, uint32& live)
 {
     ::Craft::Settings const& s = sPlayerbotAIConfig.crafting;
     NewRpgInfo::CraftState& state = botAI->rpgInfo.craft;
     CraftMgr& crafts = CraftMgr::instance();
+    MarketBook& book = MarketBook::instance();
+    bool const market = CraftMgr::MarketOn();  // off: today's AskPrice (Crafting(bot) does not cover FixedPopulation)
     uint32 const maxListings = ::Supplies::ListingCap(s.maxListings, BotSupplies::ShortCached(botAI),
                                                       sPlayerbotAIConfig.supplies.shortListPct);
     for (Item* item : crafts.HeldForAuction(botAI, bot))
@@ -99,15 +102,18 @@ void AuctionVisitOperation::List(Player* bot, PlayerbotAI* botAI, Creature* npc,
         auto const seen = cheapest.find(entry);
         uint64 const theirs = seen == cheapest.end() ? 0 : seen->second;
         if (theirs)
-            crafts.NoteSeenPrice(entry, static_cast<uint32>(std::min<uint64>(theirs, UINT32_MAX)));
+            book.NoteSeen(house, entry, static_cast<uint32>(std::min<uint64>(theirs, UINT32_MAX)));
         // A returned item it asked a price for is relisted at RelistPct of it; anything else is priced afresh (gear
         // by item level). Either can come out at the vendor value: WorthListing decides (Task 3 note).
         auto const asked = state.askedPerUnit.find(entry);
         bool const relist = state.returned.count(entry) && asked != state.askedPerUnit.end();
         bool const gear = proto->InventoryType != INVTYPE_NON_EQUIP;
+        // Plan 7a, spec B: priced from what it sold for at this house lately (MarketAsk; with no days, AskPrice).
         uint64 const price =
-            ::Craft::AskPrice(relist, relist ? asked->second : 0, count, proto->SellPrice, gear, proto->ItemLevel,
-                              theirs, s.materialPricePct, s.undercutPct, s.relistPct);
+            market ? ::Craft::MarketAsk(relist, relist ? asked->second : 0, count, proto->SellPrice, gear,
+                                        proto->ItemLevel, theirs, book.View(house, entry), s)
+                   : ::Craft::AskPrice(relist, relist ? asked->second : 0, count, proto->SellPrice, gear,
+                                       proto->ItemLevel, theirs, s.materialPricePct, s.undercutPct, s.relistPct);
         if (price > MAX_MONEY_AMOUNT || !::Craft::WorthListing(price, proto->SellPrice, count))
         {
             CraftMgr::MarkForVendor(botAI, entry);  // not worth listing now: the vendor gets it, for a day
@@ -129,6 +135,7 @@ void AuctionVisitOperation::List(Player* bot, PlayerbotAI* botAI, Creature* npc,
         }
         ++live;
         state.askedPerUnit[entry] = static_cast<uint32>(std::min<uint64>(price / count, UINT32_MAX));
+        state.listedHouse[entry] = house;  // where a return of it is noted (CraftMgr::NoteAuctionMail)
         FixedPopulation::Count(EconomyCounter::AuctionsListed);
         if (before > bot->GetMoney())
             FixedPopulation::Count(EconomyCounter::AuctionGoldOut, before - bot->GetMoney());
@@ -136,10 +143,12 @@ void AuctionVisitOperation::List(Player* bot, PlayerbotAI* botAI, Creature* npc,
     state.liveListings = live;
 }
 
-void AuctionVisitOperation::Buy(Player* bot, PlayerbotAI* botAI, Creature* npc, AuctionHouseObject* auctions)
+void AuctionVisitOperation::Buy(Player* bot, PlayerbotAI* botAI, Creature* npc, uint32 house,
+                                AuctionHouseObject* auctions)
 {
     NewRpgInfo::CraftState& state = botAI->rpgInfo.craft;
     AiObjectContext* context = botAI->GetAiObjectContext();
+    bool const market = CraftMgr::MarketOn();  // off: no sale or want is noted
     uint64 const reserve = EarnedTraining::RepairReserve(bot);
     std::unordered_map<uint32, bool> upgrade;      // item -> the upgrade test, judged once a visit
     std::unordered_set<uint32> slots;              // equipment slots it picked an upgrade for (Craft::GearSlot)
@@ -161,14 +170,20 @@ void AuctionVisitOperation::Buy(Player* bot, PlayerbotAI* botAI, Creature* npc, 
         uint32 id;        // the auction
         uint32 buyout;
         uint32 material;  // a missing material it buys (0: gear)
+        uint32 count;     // the auction's itemCount
+        uint32 item;      // the auction's item entry
     };
     std::vector<Pick> picks;
     std::vector<uint32> materials;  // the missing materials it picks (one auction each)
+    bool walkedAll = true;  // false: MAX_BUYS cut the walk short (not every auction was looked at)
     // Picks first, buys after: a buyout removes the auction from the map this loop walks.
     for (auto const& [id, auction] : auctions->GetAuctions())
     {
         if (picks.size() >= MAX_BUYS)
+        {
+            walkedAll = false;
             break;
+        }
         if (auction->owner == bot->GetGUID() || !auction->buyout)
             continue;
         uint32 const entry = auction->item_template;
@@ -184,7 +199,7 @@ void AuctionVisitOperation::Buy(Player* bot, PlayerbotAI* botAI, Creature* npc, 
                 ::Craft::BuyMaterial(true, auction->buyout, other == state.missingOtherCost.end() ? 0 : other->second,
                                      value == state.missingValue.end() ? 0 : value->second, bot->GetMoney(), reserve))
             {
-                picks.push_back({id, auction->buyout, entry});
+                picks.push_back({id, auction->buyout, entry, auction->itemCount, entry});
                 materials.push_back(entry);
             }
             continue;
@@ -208,11 +223,20 @@ void AuctionVisitOperation::Buy(Player* bot, PlayerbotAI* botAI, Creature* npc, 
         // spec §4: an upgrade for itself (the same test the equip action uses), one of each, never to resell.
         if (::Craft::BuyGear(it->second, auction->buyout, bot->GetMoney(), reserve))
         {
-            picks.push_back({id, auction->buyout, 0});
+            picks.push_back({id, auction->buyout, 0, auction->itemCount, entry});
             slots.insert(::Craft::GearSlot(proto->InventoryType));
             it->second = false;
         }
     }
+    // Plan 7a, spec B: a missing material the whole walk found no auction it could pick for (none listed, too few,
+    // or too dear) is an unmet want here, once a visit. Saved for the app only: no bot rule reads wants.
+    if (market && walkedAll)
+        for (auto const& want : state.missing)
+            if (std::find(materials.begin(), materials.end(), want.first) == materials.end())
+            {
+                MarketBook::instance().NoteWant(house, want.first);
+                FixedPopulation::Count(EconomyCounter::MarketWantsNoted);
+            }
     for (Pick const& pick : picks)
     {
         if (!::Craft::CanPay(bot->GetMoney(), pick.buyout, reserve))
@@ -225,6 +249,12 @@ void AuctionVisitOperation::Buy(Player* bot, PlayerbotAI* botAI, Creature* npc, 
             continue;  // refused (sold meanwhile, or the seller is on its own account)
         FixedPopulation::Count(EconomyCounter::AuctionsBought);
         FixedPopulation::Count(EconomyCounter::AuctionGoldOut, before - bot->GetMoney());
+        if (market)
+        {
+            // Plan 7a, spec B: a sale at this house, at what the buyer paid (no cut on this server).
+            MarketBook::instance().NoteSale(house, pick.item, pick.count, before - bot->GetMoney());
+            FixedPopulation::Count(EconomyCounter::MarketSalesNoted);
+        }
         if (pick.material)
         {
             // Bought: no longer missing (a refused buy leaves it for the next visit).

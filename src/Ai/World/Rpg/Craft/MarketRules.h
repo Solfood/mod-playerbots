@@ -188,17 +188,29 @@ inline uint64_t MarketAsk(bool relist, uint64_t lastPerUnit, uint32_t count, uin
 }
 
 // The core's auction mail subject (AuctionEntry::BuildAuctionMailSubject): "<item>:0:<answer>:<auction id>:<count>".
-// Reads the item and the answer (the core's MailAuctionAnswers: 2 sold, 3 expired). False when it is not that form.
-inline bool ReadAuctionMailSubject(std::string const& subject, uint32_t& item, uint32_t& answer)
+// Reads the item and the answer (the core's MailAuctionAnswers: 2 sold, 3 expired), and with `count` the stack's count
+// (the last field; Plan 7a: the market book's returns). False when it is not that form.
+inline bool ReadAuctionMailSubject(std::string const& subject, uint32_t& item, uint32_t& answer,
+                                   uint32_t* count = nullptr)
 {
-    uint64_t fields[3] = {0, 0, 0};
+    uint64_t fields[5] = {0, 0, 0, 0, 0};
+    size_t const wanted = count ? 5 : 3;
     size_t pos = 0;
-    for (uint64_t& field : fields)
+    for (size_t i = 0; i < wanted; ++i)
     {
+        uint64_t& field = fields[i];
         size_t const start = pos;
         while (pos < subject.size() && subject[pos] >= '0' && subject[pos] <= '9' && pos - start < 10)
             field = field * 10 + uint64_t(subject[pos++] - '0');
-        if (pos == start || pos >= subject.size() || subject[pos] != ':' || field > 0xFFFFFFFFu)
+        if (pos == start || field > 0xFFFFFFFFu)
+            return false;
+        if (i + 1 == 5)
+        {
+            if (pos != subject.size())
+                return false;  // the count ends the subject
+            break;
+        }
+        if (pos >= subject.size() || subject[pos] != ':')
             return false;
         ++pos;
     }
@@ -206,6 +218,8 @@ inline bool ReadAuctionMailSubject(std::string const& subject, uint32_t& item, u
         return false;
     item = static_cast<uint32_t>(fields[0]);
     answer = static_cast<uint32_t>(fields[2]);
+    if (count)
+        *count = static_cast<uint32_t>(fields[4]);
     return true;
 }
 // "Vendor it" (not worth listing, back twice, or refused by the core) lasts a day; then the item may be listed again

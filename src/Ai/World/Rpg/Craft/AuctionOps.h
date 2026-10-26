@@ -34,9 +34,10 @@ public:
     bool IsValid() const override { return ObjectAccessor::FindPlayer(_bot) != nullptr; }
 
 private:
-    void List(Player* bot, PlayerbotAI* botAI, Creature* npc, std::unordered_map<uint32, uint64> const& cheapest,
-              uint32& live);
-    void Buy(Player* bot, PlayerbotAI* botAI, Creature* npc, AuctionHouseObject* auctions);
+    // `house`: the core's AuctionHouseEntry::houseId of this auctioneer (the market book's key, Plan 7a).
+    void List(Player* bot, PlayerbotAI* botAI, Creature* npc, uint32 house,
+              std::unordered_map<uint32, uint64> const& cheapest, uint32& live);
+    void Buy(Player* bot, PlayerbotAI* botAI, Creature* npc, uint32 house, AuctionHouseObject* auctions);
 
     ObjectGuid _bot;
     ObjectGuid _auctioneer;

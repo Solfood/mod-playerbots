@@ -33,7 +33,7 @@ constexpr std::array<char const*, static_cast<std::size_t>(EconomyCounter::Count
     "hearth_rescues", "lost_walks", "sickness_waits", "landing_refusals",
     "profession_training", "fishing_trips", "fish_caught", "fishing_abandoned",
     "fishing_no_spot", "fishing_skill_raised", "couriers", "bank_tabs_given", "bank_deposits", "bank_items_in",
-    "bank_withdrawals", "bank_items_out", "bank_empty"};
+    "bank_withdrawals", "bank_items_out", "bank_empty", "market_sales", "market_returns", "market_wants"};
 // A std::array fills missing names with nullptr (no compile error), so check the last one is there.
 static_assert(COUNTER_NAMES.back() != nullptr, "COUNTER_NAMES needs a name for every EconomyCounter");
 }  // namespace
