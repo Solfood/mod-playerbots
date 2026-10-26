@@ -303,8 +303,10 @@ bool NewRpgFollowGuideAction::Fly(GuideMgr::Work const& w, Guides::Step const& s
     {
         usable = sTravelMgr.GetNearestFlightMasterInfo(
             bot, Guides::FLY_MASTER_WALK_YARDS,
-            [&knownPath](TravelMgr::FlightMasterInfo const& info)
-            { return info.taxiNodeId && !knownPath(info.taxiNodeId).empty(); });
+            [this, &knownPath](TravelMgr::FlightMasterInfo const& info)
+            { return info.taxiNodeId && MasterZoneOk(info) && !knownPath(info.taxiNodeId).empty(); });
+        if (usable && !MasterWalkSafe(*usable))
+            usable = nullptr;  // fix round 2 (review I2): the walk there crosses a zone above its level
         if (usable && bot->GetDistance(usable->pos) <= FLIGHT_MASTER_YARDS)
         {
             fm = usable;
@@ -328,7 +330,9 @@ bool NewRpgFollowGuideAction::Fly(GuideMgr::Work const& w, Guides::Step const& s
         {
             TaxiNodesEntry const* n = sTaxiNodesStore.LookupEntry(node);
             float const nodeToLanding = std::hypot(n->x - landing.GetPositionX(), n->y - landing.GetPositionY());
-            if (bot->GetExactDist2d(n->x, n->y) <= FLIGHT_MASTER_YARDS)
+            // On the checked walk (its start, mid-walk, or after a restart mid-walk): on foot (fix round 2, C1).
+            if (Guides::OnPartialWalk(Guides::SegmentYards(bot->GetPositionX(), bot->GetPositionY(), n->x, n->y,
+                                                           landing.GetPositionX(), landing.GetPositionY())))
                 walkRest = true;
             else if (triesLeft && Guides::PartialWorth(nodeToLanding, landingYards))
             {
@@ -338,8 +342,13 @@ bool NewRpgFollowGuideAction::Fly(GuideMgr::Work const& w, Guides::Step const& s
                 {
                     TravelMgr::FlightMasterInfo const* m = sTravelMgr.GetNearestFlightMasterInfo(
                         bot, Guides::FLY_MASTER_WALK_YARDS,
-                        [&knownPathTo, node](TravelMgr::FlightMasterInfo const& info)
-                        { return info.taxiNodeId && !knownPathTo(info.taxiNodeId, node).empty(); });
+                        [this, &knownPathTo, node](TravelMgr::FlightMasterInfo const& info)
+                        {
+                            return info.taxiNodeId && MasterZoneOk(info) &&
+                                   !knownPathTo(info.taxiNodeId, node).empty();
+                        });
+                    if (m && !MasterWalkSafe(*m))
+                        m = nullptr;  // fix round 2 (review I2)
                     if (m && bot->GetDistance(m->pos) <= FLIGHT_MASTER_YARDS)
                     {
                         fm = m;
@@ -411,24 +420,52 @@ uint32 NewRpgFollowGuideAction::PartialNode(WorldPosition const& landing)
     }
     if (!best)
         return 0;
-    // The walk from there, a straight line sampled every PARTIAL_SAMPLE_YARDS: no point in a zone above its level
-    // (TravelMgr::IsZoneAboveLevel, the honest world's zone rule). Fix round GM-BOTAI-0092: no walk through a high zone.
+    // The walk from there: no zone above its level on the way (WalkSafe). Fix round GM-BOTAI-0092 stays.
     TaxiNodesEntry const* n = sTaxiNodesStore.LookupEntry(best);
+    if (!WalkSafe(n->x, n->y, landing.GetPositionX(), landing.GetPositionY()))
+        return 0;
+    s.partialNode = best;
+    return best;
+}
+
+bool NewRpgFollowGuideAction::WalkSafe(float ax, float ay, float bx, float by)
+{
+    // A straight line sampled every PARTIAL_SAMPLE_YARDS: no point in a zone above its level
+    // (TravelMgr::IsZoneAboveLevel, the honest world's zone rule).
     Map* const map = bot->GetMap();
-    uint32 const samples = Guides::PartialSamples(bestYards);
+    uint32 const samples = Guides::PartialSamples(std::hypot(bx - ax, by - ay));
     for (uint32 i = 0; i < samples; ++i)
     {
         float const t = samples > 1 ? float(i) / float(samples - 1) : 1.0f;
-        float const x = n->x + (landing.GetPositionX() - n->x) * t;
-        float const y = n->y + (landing.GetPositionY() - n->y) * t;
+        float const x = ax + (bx - ax) * t;
+        float const y = ay + (by - ay) * t;
         float const z = map->GetHeight(x, y, MAX_HEIGHT);
         if (z <= INVALID_HEIGHT)
             continue;
         if (sTravelMgr.IsZoneAboveLevel(map->GetZoneId(bot->GetPhaseMask(), x, y, z), bot->GetLevel()))
-            return 0;
+            return false;
     }
-    s.partialNode = best;
-    return best;
+    return true;
+}
+
+bool NewRpgFollowGuideAction::MasterZoneOk(TravelMgr::FlightMasterInfo const& m)
+{
+    // Fix round 2 (review I2): a flight master it walks to stands in no zone above its level (as GuardFlight's test).
+    return !sTravelMgr.IsZoneAboveLevel(m.zoneId, bot->GetLevel());
+}
+
+bool NewRpgFollowGuideAction::MasterWalkSafe(TravelMgr::FlightMasterInfo const& m)
+{
+    // The straight walk from here to it, checked once per flight master per step (GuideState::Step). Near it: no walk.
+    if (bot->GetDistance(m.pos) <= FLIGHT_MASTER_YARDS)
+        return true;
+    NewRpgInfo::GuideState::Step& s = botAI->rpgInfo.guide.step;
+    if (s.masterChecked != m.dbGuid + 1)
+    {
+        s.masterChecked = m.dbGuid + 1;
+        s.masterSafe = WalkSafe(bot->GetPositionX(), bot->GetPositionY(), m.pos.GetPositionX(), m.pos.GetPositionY());
+    }
+    return s.masterSafe;
 }
 
 bool NewRpgFollowGuideAction::Hearth(GuideMgr::Work const& w, Guides::Step const& step, GuideStepInfo const& in,

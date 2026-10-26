@@ -217,6 +217,8 @@ struct NewRpgInfo
             bool sailed{false};          // RIDE: its boat has moved since it stepped aboard
             bool partialChecked{false};  // FLY (GM-BOTAI-0209): partialNode worked out for this step
             uint32 partialNode{0};       // FLY: the known node nearest the landing, safe walk from it (0 = none)
+            uint32 masterChecked{0};     // FLY (fix round 2): the flight master (spawn guid + 1) masterSafe is for
+            bool masterSafe{false};      // FLY: the straight walk to it crosses no zone above its level
         } step;
     };
     GuideState guide;

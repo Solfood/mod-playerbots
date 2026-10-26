@@ -54,6 +54,12 @@ private:
     // GM-BOTAI-0209: the taxi node it knows on this map nearest `landing`, when the straight walk from it to `landing`
     // crosses no zone above its level; 0 when there is none. Worked out once per step (GuideState::Step).
     uint32 PartialNode(WorldPosition const& landing);
+    // Fix round 2 (review I2): the straight walk from (ax, ay) to (bx, by) crosses no zone above its level.
+    bool WalkSafe(float ax, float ay, float bx, float by);
+    // Fix round 2 (review I2): a flight master it would walk to stands in no zone above its level, and the walk there
+    // is safe.
+    bool MasterZoneOk(TravelMgr::FlightMasterInfo const& m);
+    bool MasterWalkSafe(TravelMgr::FlightMasterInfo const& m);
     bool Hearth(GuideMgr::Work const& w, Guides::Step const& step, GuideStepInfo const& in, uint32 elapsed);
     bool TalkTo(GuideMgr::Work const& w, Guides::Step const& step, GuideStepInfo const& in, uint32 elapsed);
     bool Ride(GuideMgr::Work const& w, Guides::Step const& step, GuideStepInfo const& in, uint32 elapsed);

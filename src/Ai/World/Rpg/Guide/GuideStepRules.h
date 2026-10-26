@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <vector>
 
@@ -291,6 +292,27 @@ constexpr float PARTIAL_SAMPLE_YARDS = 50.0f;
 inline bool PartialWorth(float nodeToLanding, float botToLanding)
 {
     return nodeToLanding >= 0.0f && botToLanding >= 0.0f && nodeToLanding + PARTIAL_GAIN_YARDS <= botToLanding;
+}
+
+// Fix round 2 (GM-BOTAI-0210, review C1): the walk from the known node goes on while the bot is within
+// PARTIAL_LANE_YARDS of the checked straight line from that node to the landing (`yardsToSegment`, < 0: not on this
+// map), not only at its start: else past 500 yards out the step was Away and its guide paused halfway, and again at
+// once after a restart mid-walk.
+constexpr float PARTIAL_LANE_YARDS = 500.0f;
+inline bool OnPartialWalk(float yardsToSegment)
+{
+    return yardsToSegment >= 0.0f && yardsToSegment <= PARTIAL_LANE_YARDS;
+}
+
+// The 2D distance from (px, py) to the segment (ax, ay) - (bx, by).
+inline float SegmentYards(float px, float py, float ax, float ay, float bx, float by)
+{
+    float const dx = bx - ax, dy = by - ay;
+    float const len2 = dx * dx + dy * dy;
+    float t = len2 > 0.0f ? ((px - ax) * dx + (py - ay) * dy) / len2 : 0.0f;
+    t = t < 0.0f ? 0.0f : (t > 1.0f ? 1.0f : t);
+    float const ex = ax + t * dx - px, ey = ay + t * dy - py;
+    return std::sqrt(ex * ex + ey * ey);
 }
 
 // Points checked on the walk from the known node to the landing (both ends included).

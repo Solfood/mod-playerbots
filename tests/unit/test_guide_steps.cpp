@@ -288,6 +288,18 @@ int main()
     CHECK_TRUE(!PartialWorth(30.0f, 40.0f));        // standing at that node: nothing to gain (walkRest decides)
     CHECK_TRUE(!PartialWorth(-1.0f, 5000.0f));      // node on another map
     CHECK_TRUE(!PartialWorth(100.0f, -1.0f));       // landing on another map
+    // Fix round 2 (review C1): mid-walk it keeps walking. Crossroads (0, 0) to Thunder Bluff (0, 2730): 800 yards
+    // out on the line, 1900 from the landing, the node 800 off (no longer "at the node") still walks; so after a
+    // restart there. Off the line by more than PARTIAL_LANE_YARDS: not this walk (Razor Hill).
+    CHECK_TRUE(OnPartialWalk(SegmentYards(0.0f, 800.0f, 0.0f, 0.0f, 0.0f, 2730.0f)));
+    CHECK_TRUE(OnPartialWalk(SegmentYards(300.0f, 1500.0f, 0.0f, 0.0f, 0.0f, 2730.0f)));   // a detour round a hill
+    CHECK_TRUE(!OnPartialWalk(SegmentYards(600.0f, 1500.0f, 0.0f, 0.0f, 0.0f, 2730.0f)));
+    CHECK_TRUE(!OnPartialWalk(SegmentYards(0.0f, -3300.0f, 0.0f, 0.0f, 0.0f, 2730.0f)));  // behind the node
+    CHECK_TRUE(OnPartialWalk(SegmentYards(0.0f, 2900.0f, 0.0f, 0.0f, 0.0f, 2730.0f)));    // just past the landing
+    CHECK_TRUE(!OnPartialWalk(-1.0f));
+    CHECK_EQ(500.0f, SegmentYards(500.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f));                 // a node at the landing
+    CHECK_TRUE(PlanFly(true, false, false, false, 1900.0f, false, false, false, true) == FlyPlan::Walk);  // mid-walk
+    CHECK_TRUE(PlanFly(false, false, false, false, 1900.0f, false, false, false, true) == FlyPlan::Walk);
     CHECK_EQ(1u, PartialSamples(0.0f));
     CHECK_EQ(2u, PartialSamples(10.0f));
     CHECK_EQ(56u, PartialSamples(2700.0f));
