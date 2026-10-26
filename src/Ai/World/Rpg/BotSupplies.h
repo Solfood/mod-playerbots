@@ -21,6 +21,10 @@ class BotSupplies
 public:
     static bool On(PlayerbotAI* botAI, Player* bot);
     static bool UsesMana(Player* bot);
+    // The food cheat (AiPlayerbot.BotCheats "food", GM-BOTAI-0207): EatAction and DrinkAction sit it down with a free
+    // refill (aura 25990) and use no item, so it needs no food or drink: no supplies errand, no shopping for them, and
+    // they leave the "short of money" line.
+    static bool FreeFood(PlayerbotAI* botAI);
     // Food (heals while sitting) and drink (mana while sitting); alcohol and buff-only items are neither.
     static bool IsFood(ItemTemplate const* proto);
     static bool IsDrink(ItemTemplate const* proto);

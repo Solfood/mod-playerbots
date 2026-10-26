@@ -835,7 +835,9 @@ AiPlayerbot.FixedPopulation.TownTripTimeoutSeconds = 1200
 # errand takes it to a vendor that sells food or drink. At any vendor it tops up each kind it holds fewer than half of
 # SuppliesStack of: the best food and drink it may use that it can pay for (never above its level), about
 # SuppliesStack of each, spending at most SuppliesMoneyPct percent of its money on one visit (a mana user splits it
-# between food and drink). It buys no potions on this path. Food 20 levels below the bot no longer counts.
+# between food and drink). It buys no potions on this path. Food 20 levels below the bot no longer counts. With the
+# "food" bot cheat on, food and drink are free (a refill with no item): no errand and no shopping for them, and their
+# cost leaves the ShortOfMoney line.
 # Defaults: 1, 5, 20, 25
 AiPlayerbot.FixedPopulation.Supplies = 1
 AiPlayerbot.FixedPopulation.SuppliesBelow = 5

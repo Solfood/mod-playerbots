@@ -115,6 +115,8 @@ bool BotSupplies::On(PlayerbotAI* botAI, Player* bot)
 
 bool BotSupplies::UsesMana(Player* bot) { return bot->GetMaxPower(POWER_MANA) > 0; }
 
+bool BotSupplies::FreeFood(PlayerbotAI* botAI) { return botAI && botAI->HasCheat(BotCheatMask::food); }
+
 bool BotSupplies::IsFood(ItemTemplate const* proto) { return UseSpellApplies(proto, SPELL_AURA_MOD_REGEN); }
 
 bool BotSupplies::IsDrink(ItemTemplate const* proto) { return UseSpellApplies(proto, SPELL_AURA_MOD_POWER_REGEN); }
@@ -138,7 +140,7 @@ void BotSupplies::Carried(PlayerbotAI* botAI, Player* bot, uint32& food, uint32&
 bool BotSupplies::NeedTrip(PlayerbotAI* botAI, Player* bot)
 {
     Supplies::Settings const& s = sPlayerbotAIConfig.supplies;
-    if (!s.supplies || !On(botAI, bot))
+    if (!s.supplies || !On(botAI, bot) || FreeFood(botAI))
         return false;
     // Cheap test first: nothing to do when even the cheapest food that suits it is out of its budget.
     if (Supplies::Budget(bot->GetMoney(), s.moneyPct) < Supplies::MinPackPrice(bot->GetLevel()))
@@ -171,7 +173,7 @@ bool BotSupplies::SellsSupplies(Creature const* npc)
 void BotSupplies::Shop(PlayerbotAI* botAI, Player* bot, Creature* vendor)
 {
     Supplies::Settings const& s = sPlayerbotAIConfig.supplies;
-    if (!s.supplies || !vendor || !On(botAI, bot))
+    if (!s.supplies || !vendor || !On(botAI, bot) || FreeFood(botAI))
         return;
     VendorItemData const* list = sObjectMgr->GetNpcVendorItemList(vendor->GetEntry());
     if (!list)
@@ -240,7 +242,8 @@ bool BotSupplies::ShortOfMoney(PlayerbotAI* botAI, Player* bot)
     info.shortCheckedMs = std::max<uint32>(1, now);
     bool const isShort = On(botAI, bot) &&
                          Supplies::ShortOfMoney(bot->GetMoney(), EarnedTraining::RepairReserve(bot), bot->GetLevel(),
-                                                UsesMana(bot), info.route.retreating, sPlayerbotAIConfig.supplies);
+                                                UsesMana(bot), info.route.retreating, sPlayerbotAIConfig.supplies,
+                                                FreeFood(botAI));
     if (isShort != info.shortOfMoney)
         FixedPopulation::Count(isShort ? EconomyCounter::ShortOfMoney : EconomyCounter::ShortOfMoneyEnded);
     info.shortOfMoney = isShort;

@@ -58,6 +58,10 @@ int main()
     Settings off = s;
     off.supplies = false;
     CHECK_TRUE(!NeedTrip(0, 0, true, 100000, 12, off));
+    // GM-BOTAI-0207: the food cheat covers food and drink: never a supplies errand for them.
+    CHECK_TRUE(!NeedTrip(0, 0, true, 874, 12, s, true));
+    CHECK_TRUE(!NeedTrip(0, 0, false, 100000, 12, s, true));
+    CHECK_TRUE(NeedTrip(0, 0, true, 874, 12, s, false));
 
     // At a vendor: tops up below half a stack (10) or below SuppliesBelow.
     CHECK_TRUE(WantsMore(0, s));
@@ -163,6 +167,11 @@ int main()
     Settings noShort = s;
     noShort.shortOfMoney = false;
     CHECK_TRUE(!ShortOfMoney(0, 300, 12, true, false, noShort));
+    // GM-BOTAI-0207: with the food cheat the line is the repair reserve alone (its food is free).
+    CHECK_EQ(300u, static_cast<uint32_t>(ComfortLine(300, 12, true, s, true)));
+    CHECK_TRUE(!ShortOfMoney(900, 300, 12, true, false, s, true));  // short with paid food, comfortable with free
+    CHECK_TRUE(ShortOfMoney(299, 300, 12, true, false, s, true));   // still short of its repair reserve
+    CHECK_TRUE(!ShortOfMoney(0, 0, 1, false, false, s, true));      // nothing to pay for: not short
 
     // Effects: weights x3, listings 10 -> 20, node reach 15 -> 45 yards; never lower than usual.
     CHECK_EQ(45u, ShortWeight(15, true, 3));

@@ -93,11 +93,14 @@ inline bool Short(uint32_t food, uint32_t drink, bool usesMana, uint32_t below)
 // rarely needs a trip of its own.
 inline bool WantsMore(uint32_t have, Settings const& s) { return have < s.below || have < s.stack / 2; }
 
-// The errand: short, and the budget pays for at least the cheapest purchase that counts.
+// The errand: short, and the budget pays for at least the cheapest purchase that counts. `freeFood`: the food cheat
+// (AiPlayerbot.BotCheats "food", GM-BOTAI-0207) sits it down with a free refill, so food and drink are covered: no
+// errand and no shopping for them.
 inline bool NeedTrip(uint32_t food, uint32_t drink, bool usesMana, uint64_t money, uint32_t botLevel,
-                     Settings const& s)
+                     Settings const& s, bool freeFood = false)
 {
-    return s.supplies && Short(food, drink, usesMana, s.below) && Budget(money, s.moneyPct) >= MinPackPrice(botLevel);
+    return !freeFood && s.supplies && Short(food, drink, usesMana, s.below) &&
+           Budget(money, s.moneyPct) >= MinPackPrice(botLevel);
 }
 
 // Choosing what to buy from a vendor's list: the highest required level wins, then the cheaper purchase.
@@ -179,7 +182,8 @@ inline RestStep RestTick(RestState& state, bool needs, uint32_t nowMs, uint32_t 
 inline bool Resting(RestStep step) { return step == RestStep::Start || step == RestStep::Continue; }
 
 // "Short of money" (honest world): money below a comfortable line, its repair reserve plus what a supplies stack of
-// its level costs. Not "broke" (a retreat, which wins): it still quests and fights, it only leans toward earning.
+// its level costs (nothing with the food cheat, GM-BOTAI-0207: its food is free). Not "broke" (a retreat, which
+// wins): it still quests and fights, it only leans toward earning.
 
 // The vendor tier a bot of `botLevel` buys from: the highest of 1, 5, 15, ... 75 at or below its level.
 inline uint32_t BestTier(uint32_t botLevel)
@@ -199,15 +203,16 @@ inline uint64_t StackCost(uint32_t botLevel, uint32_t stack, bool usesMana)
     return usesMana ? kind * 2 : kind;
 }
 
-inline uint64_t ComfortLine(uint64_t repairReserve, uint32_t botLevel, bool usesMana, Settings const& s)
+inline uint64_t ComfortLine(uint64_t repairReserve, uint32_t botLevel, bool usesMana, Settings const& s,
+                            bool freeFood = false)
 {
-    return repairReserve + StackCost(botLevel, s.stack, usesMana) * s.shortStackPct / 100;
+    return repairReserve + (freeFood ? 0 : StackCost(botLevel, s.stack, usesMana) * s.shortStackPct / 100);
 }
 
 inline bool ShortOfMoney(uint64_t money, uint64_t repairReserve, uint32_t botLevel, bool usesMana, bool retreating,
-                         Settings const& s)
+                         Settings const& s, bool freeFood = false)
 {
-    return s.shortOfMoney && !retreating && money < ComfortLine(repairReserve, botLevel, usesMana, s);
+    return s.shortOfMoney && !retreating && money < ComfortLine(repairReserve, botLevel, usesMana, s, freeFood);
 }
 
 // A roll weight (gathering, craft trips) while short.
