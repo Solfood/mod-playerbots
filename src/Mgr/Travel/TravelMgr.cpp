@@ -4393,6 +4393,28 @@ TravelMgr::FlightMasterInfo const* TravelMgr::GetNearestFlightMasterInfo(Player*
     return nearest;
 }
 
+TravelMgr::FlightMasterInfo const* TravelMgr::GetNearestFlightMasterInfo(
+    Player* bot, float maxYards, std::function<bool(FlightMasterInfo const&)> const& usable) const
+{
+    auto const& flightMasterCache =
+        (bot->GetTeamId() == TEAM_ALLIANCE) ? allianceFlightMasterCache : hordeFlightMasterCache;
+
+    FlightMasterInfo const* nearest = nullptr;
+    float nearestDistance = maxYards * maxYards;
+    for (auto const& [dbGuid, info] : flightMasterCache)
+    {
+        if (info.pos.GetMapId() != bot->GetMapId())
+            continue;
+        float const distance = bot->GetExactDist2dSq(info.pos);
+        if (distance <= nearestDistance && usable(info))
+        {
+            nearestDistance = distance;
+            nearest = &info;
+        }
+    }
+    return nearest;
+}
+
 std::vector<uint32> TravelMgr::GetFlightNodesInZone(uint32 zoneId, TeamId team, uint32 excludeNode) const
 {
     auto const& cache = (team == TEAM_ALLIANCE) ? allianceFlightMasterCache : hordeFlightMasterCache;

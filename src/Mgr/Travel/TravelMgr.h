@@ -13,6 +13,7 @@
 #include "GridDefines.h"
 #include "PlayerbotAIConfig.h"
 #include <boost/functional/hash.hpp>
+#include <functional>
 #include <map>
 #include <random>
 
@@ -875,6 +876,10 @@ public:
     void Init();
 
     FlightMasterInfo const* GetNearestFlightMasterInfo(Player* bot) const;
+    // GM-BOTAI-0203: the nearest flight master of the bot's faction on its map within maxYards that `usable` accepts;
+    // nullptr when there is none. Read-only.
+    FlightMasterInfo const* GetNearestFlightMasterInfo(Player* bot, float maxYards,
+                                                       std::function<bool(FlightMasterInfo const&)> const& usable) const;
     std::vector<std::vector<uint32>> GetOptimalFlightDestinations(Player* bot);
     const std::vector<WorldLocation> GetTeleportLocations(Player* bot);
     const std::vector<WorldLocation> GetTravelHubs(Player* bot);

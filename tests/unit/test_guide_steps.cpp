@@ -259,5 +259,16 @@ int main()
     CHECK_TRUE(PlanFly(true, false, false, false, FLY_WALK_YARDS) == FlyPlan::Walk);
     CHECK_TRUE(PlanFly(true, false, false, false, FLY_WALK_YARDS + 1.0f) == FlyPlan::Away);
     CHECK_TRUE(PlanFly(true, true, true, false, 300.0f) == FlyPlan::Fly);      // a known flight still wins
+    // GM-BOTAI-0203: no flight here, but a flight master it can use (its faction, this map, every node of the way
+    // known) in walking reach: it walks there and flies (Razor Hill to Orgrimmar's flight master for "Fly to Thunder
+    // Bluff"). Last arg: usableMasterInReach.
+    CHECK_TRUE(PlanFly(true, false, false, false, 5000.0f, true) == FlyPlan::WalkToMaster);
+    CHECK_TRUE(PlanFly(true, true, false, false, 5000.0f, true) == FlyPlan::WalkToMaster);  // the one here: unknown way
+    CHECK_TRUE(PlanFly(true, false, false, false, -1.0f, true) == FlyPlan::WalkToMaster);   // landing spot not on map
+    CHECK_TRUE(PlanFly(false, false, false, false, 5000.0f, true) == FlyPlan::Away);        // refused twice
+    CHECK_TRUE(PlanFly(true, false, false, false, 5000.0f, false) == FlyPlan::Away);        // none it can use: as before
+    CHECK_TRUE(PlanFly(true, true, true, false, 5000.0f, true) == FlyPlan::Fly);            // arrived: it flies
+    CHECK_TRUE(PlanFly(true, false, false, false, 800.0f, true) == FlyPlan::Walk);          // a short walk still wins
+    CHECK_TRUE(PlanFly(true, false, false, true, 5000.0f, true) == FlyPlan::Walk);          // at the destination
     return UnitFailures();
 }

@@ -270,21 +270,31 @@ inline IdleChoice GuidedIdle(bool retreating) { return retreating ? IdleChoice::
 // and it plays as an unguided bot. It no longer walks far to where the flight lands (seen live: Westfall to
 // Thelsamar through Burning Steppes, Moonglade to Thunder Bluff through Winterspring). Never a teleport: decision
 // 0004 covers only failed boat, zeppelin and tram rides.
+// GM-BOTAI-0203: no flight here, but a flight master of its faction on this map within FLY_MASTER_WALK_YARDS knows a
+// way to the step's node along nodes the bot all knows (`usableMasterInReach`): it walks to the nearest such flight
+// master and flies from there (WalkToMaster; once within FLIGHT_MASTER_YARDS of it, that is the one "here"). 37 bots paused for
+// good at Razor Hill and in Mulgore ("Fly to Thunder Bluff", Orgrimmar's flight master 1400 yards off), again after
+// every restart. With no such flight master (none in reach, or a node it does not know) it is Away, as before.
 constexpr float FLY_WALK_YARDS = 1000.0f;
+constexpr float FLY_MASTER_WALK_YARDS = 2500.0f;
 
 enum class FlyPlan : uint8_t
 {
     Fly = 0,
     Walk,
     Away,
+    WalkToMaster,
 };
 
-inline FlyPlan PlanFly(bool triesLeft, bool flightMasterHere, bool pathKnown, bool atDestination, float landingYards)
+inline FlyPlan PlanFly(bool triesLeft, bool flightMasterHere, bool pathKnown, bool atDestination, float landingYards,
+                       bool usableMasterInReach = false)
 {
     if (triesLeft && flightMasterHere && pathKnown)
         return FlyPlan::Fly;
     if (atDestination || (landingYards >= 0.0f && landingYards <= FLY_WALK_YARDS))
         return FlyPlan::Walk;
+    if (triesLeft && usableMasterInReach)
+        return FlyPlan::WalkToMaster;
     return FlyPlan::Away;
 }
 
