@@ -280,15 +280,16 @@ bool NewRpgFollowGuideAction::Fly(GuideMgr::Work const& w, Guides::Step const& s
     bool const sameMap = fm && fm->taxiNodeId && fm->pos.GetMapId() == bot->GetMapId();
     bool here = sameMap && bot->GetDistance(fm->pos) <= FLIGHT_MASTER_YARDS;
     bool const atDestination = sameMap && fm->taxiNodeId == step.node;
-    // Every node from `from` to the step's node known (as a player's taxi map offers it).
-    auto knownPath = [this, &step](uint32 from) -> std::vector<uint32>
+    // Every node from `from` to `to` known (as a player's taxi map offers it).
+    auto knownPathTo = [this](uint32 from, uint32 to) -> std::vector<uint32>
     {
-        std::vector<uint32> way = sTravelNodeMap.FindTaxiPath(from, step.node);
+        std::vector<uint32> way = sTravelNodeMap.FindTaxiPath(from, to);
         bool ok = way.size() >= 2;
         for (uint32 node : way)
             ok = ok && (bot->isTaxiCheater() || bot->m_taxi.IsTaximaskNodeKnown(node));
         return ok ? way : std::vector<uint32>();
     };
+    auto knownPath = [&knownPathTo, &step](uint32 from) { return knownPathTo(from, step.node); };
     std::vector<uint32> path;
     if (triesLeft && here)
         path = knownPath(fm->taxiNodeId);
@@ -315,16 +316,59 @@ bool NewRpgFollowGuideAction::Fly(GuideMgr::Work const& w, Guides::Step const& s
     float const landingYards = landing != WorldPosition() && landing.GetMapId() == bot->GetMapId()
                                    ? bot->GetExactDist2d(landing.GetPositionX(), landing.GetPositionY())
                                    : -1.0f;
-    switch (Guides::PlanFly(triesLeft, here, known, atDestination, landingYards, usable != nullptr))
+    // GM-BOTAI-0209 (fix round 1): no flight to the step's node from here or from a flight master in reach: the node it
+    // knows nearest the landing, with a walk from it through no zone above its level (PartialNode). Standing there:
+    // the rest on foot (walkRest). Else, when that node is worth it (Guides::PartialWorth), a flight there from the
+    // flight master here, or a walk first to the nearest one in reach that knows a way there.
+    bool partialHere = false, partialReach = false, walkRest = false;
+    TravelMgr::FlightMasterInfo const* walkToMaster = usable;
+    std::vector<uint32> partialPath;
+    if (!known && !usable && sameMap && !atDestination && landingYards > Guides::FLY_WALK_YARDS)
+        if (uint32 const node = PartialNode(landing))
+        {
+            TaxiNodesEntry const* n = sTaxiNodesStore.LookupEntry(node);
+            float const nodeToLanding = std::hypot(n->x - landing.GetPositionX(), n->y - landing.GetPositionY());
+            if (bot->GetExactDist2d(n->x, n->y) <= FLIGHT_MASTER_YARDS)
+                walkRest = true;
+            else if (triesLeft && Guides::PartialWorth(nodeToLanding, landingYards))
+            {
+                if (here)
+                    partialPath = knownPathTo(fm->taxiNodeId, node);
+                if (partialPath.empty())
+                {
+                    TravelMgr::FlightMasterInfo const* m = sTravelMgr.GetNearestFlightMasterInfo(
+                        bot, Guides::FLY_MASTER_WALK_YARDS,
+                        [&knownPathTo, node](TravelMgr::FlightMasterInfo const& info)
+                        { return info.taxiNodeId && !knownPathTo(info.taxiNodeId, node).empty(); });
+                    if (m && bot->GetDistance(m->pos) <= FLIGHT_MASTER_YARDS)
+                    {
+                        fm = m;
+                        partialPath = knownPathTo(fm->taxiNodeId, node);
+                    }
+                    else if (m)
+                    {
+                        walkToMaster = m;
+                        partialReach = true;
+                    }
+                }
+                partialHere = !partialPath.empty();
+            }
+        }
+    switch (Guides::PlanFly(triesLeft, here, known, atDestination, landingYards, usable != nullptr, partialHere,
+                            partialReach, walkRest))
     {
         case Guides::FlyPlan::Fly:
             ++s.flightTries;
             info.ChangeToTravelFlight(fm->templateEntry, fm->pos, std::move(path));
             return true;
+        case Guides::FlyPlan::FlyPartial:  // to the known node nearest the landing; the rest on foot after (0209)
+            ++s.flightTries;
+            info.ChangeToTravelFlight(fm->templateEntry, fm->pos, std::move(partialPath));
+            return true;
         case Guides::FlyPlan::Walk:  // landed, or nearly there: the last bit on foot, as before (fix round 1)
             return WalkTo(w, landing, elapsed);
         case Guides::FlyPlan::WalkToMaster:  // to the flight master it can use; once there the step flies (0203)
-            return WalkTo(w, usable->pos, elapsed);
+            return WalkTo(w, walkToMaster->pos, elapsed);
         case Guides::FlyPlan::Away:
             break;
     }
@@ -341,6 +385,50 @@ bool NewRpgFollowGuideAction::Fly(GuideMgr::Work const& w, Guides::Step const& s
     }
     info.ChangeToIdle();
     return true;
+}
+
+uint32 NewRpgFollowGuideAction::PartialNode(WorldPosition const& landing)
+{
+    NewRpgInfo::GuideState::Step& s = botAI->rpgInfo.guide.step;
+    if (s.partialChecked)
+        return s.partialNode;
+    s.partialChecked = true;
+    s.partialNode = 0;
+    // The known node on this map nearest the landing (any node of the other faction is never known).
+    uint32 best = 0;
+    float bestYards = 0.0f;
+    for (uint32 id = 1; id < sTaxiNodesStore.GetNumRows(); ++id)
+    {
+        TaxiNodesEntry const* n = sTaxiNodesStore.LookupEntry(id);
+        if (!n || n->map_id != bot->GetMapId() || !bot->m_taxi.IsTaximaskNodeKnown(id))
+            continue;
+        float const yards = std::hypot(n->x - landing.GetPositionX(), n->y - landing.GetPositionY());
+        if (!best || yards < bestYards)
+        {
+            best = id;
+            bestYards = yards;
+        }
+    }
+    if (!best)
+        return 0;
+    // The walk from there, a straight line sampled every PARTIAL_SAMPLE_YARDS: no point in a zone above its level
+    // (TravelMgr::IsZoneAboveLevel, the honest world's zone rule). Fix round GM-BOTAI-0092: no walk through a high zone.
+    TaxiNodesEntry const* n = sTaxiNodesStore.LookupEntry(best);
+    Map* const map = bot->GetMap();
+    uint32 const samples = Guides::PartialSamples(bestYards);
+    for (uint32 i = 0; i < samples; ++i)
+    {
+        float const t = samples > 1 ? float(i) / float(samples - 1) : 1.0f;
+        float const x = n->x + (landing.GetPositionX() - n->x) * t;
+        float const y = n->y + (landing.GetPositionY() - n->y) * t;
+        float const z = map->GetHeight(x, y, MAX_HEIGHT);
+        if (z <= INVALID_HEIGHT)
+            continue;
+        if (sTravelMgr.IsZoneAboveLevel(map->GetZoneId(bot->GetPhaseMask(), x, y, z), bot->GetLevel()))
+            return 0;
+    }
+    s.partialNode = best;
+    return best;
 }
 
 bool NewRpgFollowGuideAction::Hearth(GuideMgr::Work const& w, Guides::Step const& step, GuideStepInfo const& in,

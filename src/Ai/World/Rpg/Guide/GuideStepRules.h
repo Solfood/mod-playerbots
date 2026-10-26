@@ -275,8 +275,29 @@ inline IdleChoice GuidedIdle(bool retreating) { return retreating ? IdleChoice::
 // master and flies from there (WalkToMaster; once within FLIGHT_MASTER_YARDS of it, that is the one "here"). 37 bots paused for
 // good at Razor Hill and in Mulgore ("Fly to Thunder Bluff", Orgrimmar's flight master 1400 yards off), again after
 // every restart. With no such flight master (none in reach, or a node it does not know) it is Away, as before.
+// GM-BOTAI-0209 (fix round 1): the step's own node not known (19 of the 25 Durotar bots on "Fly to Thunder Bluff"
+// knew Orgrimmar and the Crossroads, not Thunder Bluff): it flies to the node it knows that lies nearest the landing,
+// when that node is at least PARTIAL_GAIN_YARDS nearer the landing than the bot stands (PartialWorth), and walks the
+// rest from there. Only when the straight line from that node to the landing crosses no zone above the bot's level
+// (checked every PARTIAL_SAMPLE_YARDS): fix round GM-BOTAI-0092/0093 stays, a walk through a high zone is Away. The
+// flight goes from the flight master here (`partialHere`) or from one in walking reach it walks to first
+// (`partialMasterInReach`, WalkToMaster). Standing at that node already (landed, or after a restart there):
+// `walkRest`, the rest on foot, so a restart never brings back the pause.
 constexpr float FLY_WALK_YARDS = 1000.0f;
 constexpr float FLY_MASTER_WALK_YARDS = 2500.0f;
+constexpr float PARTIAL_GAIN_YARDS = 1000.0f;
+constexpr float PARTIAL_SAMPLE_YARDS = 50.0f;
+
+inline bool PartialWorth(float nodeToLanding, float botToLanding)
+{
+    return nodeToLanding >= 0.0f && botToLanding >= 0.0f && nodeToLanding + PARTIAL_GAIN_YARDS <= botToLanding;
+}
+
+// Points checked on the walk from the known node to the landing (both ends included).
+inline uint32_t PartialSamples(float yards)
+{
+    return yards > 0.0f ? static_cast<uint32_t>(yards / PARTIAL_SAMPLE_YARDS) + 2 : 1;
+}
 
 enum class FlyPlan : uint8_t
 {
@@ -284,10 +305,12 @@ enum class FlyPlan : uint8_t
     Walk,
     Away,
     WalkToMaster,
+    FlyPartial,
 };
 
 inline FlyPlan PlanFly(bool triesLeft, bool flightMasterHere, bool pathKnown, bool atDestination, float landingYards,
-                       bool usableMasterInReach = false)
+                       bool usableMasterInReach = false, bool partialHere = false, bool partialMasterInReach = false,
+                       bool walkRest = false)
 {
     if (triesLeft && flightMasterHere && pathKnown)
         return FlyPlan::Fly;
@@ -295,6 +318,12 @@ inline FlyPlan PlanFly(bool triesLeft, bool flightMasterHere, bool pathKnown, bo
         return FlyPlan::Walk;
     if (triesLeft && usableMasterInReach)
         return FlyPlan::WalkToMaster;
+    if (triesLeft && partialHere)
+        return FlyPlan::FlyPartial;
+    if (triesLeft && partialMasterInReach)
+        return FlyPlan::WalkToMaster;
+    if (walkRest)
+        return FlyPlan::Walk;
     return FlyPlan::Away;
 }
 

@@ -215,6 +215,8 @@ struct NewRpgInfo
             uint32 dockedMs{0};          // RIDE: how long the boat has stood still
             uint32 rideStartMs{0};       // RIDE: when it first reached the dock or was aboard (0 = not yet)
             bool sailed{false};          // RIDE: its boat has moved since it stepped aboard
+            bool partialChecked{false};  // FLY (GM-BOTAI-0209): partialNode worked out for this step
+            uint32 partialNode{0};       // FLY: the known node nearest the landing, safe walk from it (0 = none)
         } step;
     };
     GuideState guide;

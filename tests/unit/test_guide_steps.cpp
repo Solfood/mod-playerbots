@@ -270,5 +270,26 @@ int main()
     CHECK_TRUE(PlanFly(true, true, true, false, 5000.0f, true) == FlyPlan::Fly);            // arrived: it flies
     CHECK_TRUE(PlanFly(true, false, false, false, 800.0f, true) == FlyPlan::Walk);          // a short walk still wins
     CHECK_TRUE(PlanFly(true, false, false, true, 5000.0f, true) == FlyPlan::Walk);          // at the destination
+    // GM-BOTAI-0209: its own node unknown: fly to the known node nearest the landing, then walk. Args after
+    // usableMasterInReach: partialHere, partialMasterInReach, walkRest.
+    CHECK_TRUE(PlanFly(true, true, false, false, 5000.0f, false, true) == FlyPlan::FlyPartial);  // Orgrimmar -> Crossroads
+    CHECK_TRUE(PlanFly(true, false, false, false, 5900.0f, false, false, true) == FlyPlan::WalkToMaster);  // Razor Hill
+    CHECK_TRUE(PlanFly(true, true, false, false, 2700.0f, false, false, false, true) == FlyPlan::Walk);  // landed
+    CHECK_TRUE(PlanFly(false, true, false, false, 2700.0f, false, false, false, true) == FlyPlan::Walk);  // tries used
+    CHECK_TRUE(PlanFly(false, true, false, false, 5000.0f, false, true, true) == FlyPlan::Away);   // refused twice
+    CHECK_TRUE(PlanFly(true, true, false, false, 5000.0f) == FlyPlan::Away);   // unsafe walk or no gain: as before
+    CHECK_TRUE(PlanFly(true, true, true, false, 5000.0f, false, true) == FlyPlan::Fly);           // the full flight wins
+    CHECK_TRUE(PlanFly(true, false, false, false, 5000.0f, true, true, true) == FlyPlan::WalkToMaster);  // full first
+    CHECK_TRUE(PlanFly(true, false, false, false, 800.0f, false, true) == FlyPlan::Walk);         // a short walk wins
+    // worth it only when the node is PARTIAL_GAIN_YARDS nearer the landing than the bot
+    CHECK_TRUE(PartialWorth(2700.0f, 5900.0f));
+    CHECK_TRUE(PartialWorth(1000.0f, 2000.0f));
+    CHECK_TRUE(!PartialWorth(1001.0f, 2000.0f));
+    CHECK_TRUE(!PartialWorth(30.0f, 40.0f));        // standing at that node: nothing to gain (walkRest decides)
+    CHECK_TRUE(!PartialWorth(-1.0f, 5000.0f));      // node on another map
+    CHECK_TRUE(!PartialWorth(100.0f, -1.0f));       // landing on another map
+    CHECK_EQ(1u, PartialSamples(0.0f));
+    CHECK_EQ(2u, PartialSamples(10.0f));
+    CHECK_EQ(56u, PartialSamples(2700.0f));
     return UnitFailures();
 }

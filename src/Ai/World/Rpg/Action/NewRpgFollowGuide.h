@@ -51,6 +51,9 @@ private:
     static bool GuardedKind(Guides::StepKind kind);  // steps reached on foot: the zone guard checks their spot
     // a flight it knows, else a short walk, else its guide pauses (the step is Away)
     bool Fly(GuideMgr::Work const& w, Guides::Step const& step, GuideStepInfo const& in, uint32 elapsed);
+    // GM-BOTAI-0209: the taxi node it knows on this map nearest `landing`, when the straight walk from it to `landing`
+    // crosses no zone above its level; 0 when there is none. Worked out once per step (GuideState::Step).
+    uint32 PartialNode(WorldPosition const& landing);
     bool Hearth(GuideMgr::Work const& w, Guides::Step const& step, GuideStepInfo const& in, uint32 elapsed);
     bool TalkTo(GuideMgr::Work const& w, Guides::Step const& step, GuideStepInfo const& in, uint32 elapsed);
     bool Ride(GuideMgr::Work const& w, Guides::Step const& step, GuideStepInfo const& in, uint32 elapsed);
