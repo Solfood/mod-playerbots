@@ -52,6 +52,11 @@ void MarketBook::Load()
     _seen.clear();
     _houses.clear();
     PlayerbotsDatabase.Execute("DELETE FROM playerbots_market_days WHERE day < {}", keepFrom);
+    // Gold snapshots age out with the day records (marketKeepDays).
+    uint64 const now = static_cast<uint64>(GameTime::GetGameTime().count());
+    uint64 const keepSecs = uint64(sPlayerbotAIConfig.crafting.marketKeepDays) * 86400;
+    if (now > keepSecs)
+        PlayerbotsDatabase.Execute("DELETE FROM playerbots_market_gold WHERE taken_at < {}", now - keepSecs);
     if (QueryResult r = PlayerbotsDatabase.Query(
             "SELECT day, house, item, sold_units, sold_copper, returned_units, wanted, listed_units, min_per_unit "
             "FROM playerbots_market_days WHERE day >= {}",

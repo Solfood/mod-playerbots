@@ -55,7 +55,8 @@ int main()
     // ask_fast_raises
     CHECK_EQ(575u, MarketAsk(false, 0, 10, 10, false, 0, 0, MarketView{50, 6, 1}, s));
     // ask_none_listed_raises
-    CHECK_EQ(575u, MarketAsk(false, 0, 10, 10, false, 0, 0, MarketView{50, 1, 1}, s));
+    CHECK_EQ(500u, MarketAsk(false, 0, 10, 10, false, 0, 0, MarketView{50, 1, 1}, s));  // returns not low: no raise
+    CHECK_EQ(575u, MarketAsk(false, 0, 10, 10, false, 0, 0, MarketView{50, 2, 0}, s));  // not fast, none listed
     // ask_slow_lowers
     CHECK_EQ(425u, MarketAsk(false, 0, 10, 10, false, 0, 60, MarketView{50, 2, 3}, s));
     // ask_undercut_floored

@@ -23,7 +23,7 @@ struct DayStats
     uint32_t soldUnits = 0;      // units sold that day
     uint64_t soldCopper = 0;     // copper those units fetched
     uint32_t returnedUnits = 0;  // units that expired unsold
-    uint32_t wanted = 0;         // units a bot wanted to buy and found none (saved; no bot rule reads it)
+    uint32_t wanted = 0;         // visits that wanted it and found none to buy (saved; no bot rule reads it)
     uint32_t listedUnits = 0;    // units listed that day
     uint32_t minPerUnit = 0;     // the lowest per-unit ask seen that day (0 = none)
 };

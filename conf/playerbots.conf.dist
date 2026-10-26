@@ -1055,7 +1055,7 @@ AiPlayerbot.Crafting.FishSpotYards = 200
 # The smart market (Plan 7a; needs Crafting = 1 and FixedPopulation = 1): bots remember what sold and price from it.
 # MarketWindowDays: sales of this many recent days set the price (1 to MarketKeepDays).
 # MarketKeepDays: day records older than this are dropped.
-# MarketRaisePct: a bot asks this much more when the item sells fast or nobody else lists it.
+# MarketRaisePct: a bot asks this much more when the item sells fast, or nobody else lists it and few come back.
 # MarketSlowPct: a bot asks this much less when the item mostly comes back unsold.
 # MarketFloorPct: undercutting never goes below this % of the remembered sale price.
 # MarketMaxPct: a bot never asks more than this % of the vendor value.

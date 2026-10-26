@@ -146,8 +146,8 @@ inline uint64_t AskPrice(bool relist, uint64_t lastPerUnit, uint32_t count, uint
                      undercutPct);
 }
 
-// The smart market (Plan 7a, spec B): a bot prices from remembered sales. Sold fast (enough units, few returned) or
-// nobody else lists it: ask more. Mostly came back unsold: ask less. Then undercut the cheapest listing, but not below
+// The smart market (Plan 7a, spec B): a bot prices from remembered sales. Sold fast (enough units, few returned), or
+// nobody else lists it and few came back unsold: ask more. Mostly came back unsold: ask less. Then undercut the cheapest listing, but not below
 // marketFloorPct of the remembered price, and never above marketMaxPct of the vendor value or below the vendor value.
 inline bool SellsFast(MarketView const& v, uint32_t fastSold)
 {
@@ -177,7 +177,10 @@ inline uint64_t MarketAsk(bool relist, uint64_t lastPerUnit, uint32_t count, uin
     if (relist)
         return RelistPrice(lastPerUnit * count, s.relistPct, vendorSell, count);
     uint64_t price = MarketValue(v, StartPrice(vendorSell, count, gear, itemLevel, s.materialPricePct), count);
-    if (v.soldUnits > 0 && (SellsFast(v, s.marketFastSold) || cheapestPerUnit == 0))
+    // "Nobody else lists it" raises only while returns stay low (final review: a lone lister with sold == returned
+    // kept raising each cycle up to the marketMaxPct cap).
+    if (v.soldUnits > 0 &&
+        (SellsFast(v, s.marketFastSold) || (cheapestPerUnit == 0 && v.returnedUnits * 2 <= v.soldUnits)))
         price += price * s.marketRaisePct / 100;
     else if (SellsSlow(v))
         price -= price * s.marketSlowPct / 100;
