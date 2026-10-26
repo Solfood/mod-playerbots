@@ -315,6 +315,8 @@ GuideStepInfo GuideMgr::Resolve(Guides::Step& s)
             own();
             if (in.points.empty())
                 in.blocked = "no spot";
+            else if (s.kind == K::Portal)
+                SnapToPortal(in.points.front());
             break;
         case K::Hearth:
             own();
@@ -740,6 +742,30 @@ WorldPosition GuideMgr::Nearest(Player* bot, std::vector<WorldPosition> const& p
     if (bestDist < 0.0f && !points.empty())
         return points.front();  // none on this map: the step is Away
     return best;
+}
+
+void GuideMgr::SnapToPortal(WorldPosition& p)
+{
+    // GM-BOTAI-0204: the orb or portal object a PORTAL step clicks, with its real height, when one is spawned within
+    // PORTAL_SNAP_YARDS of the guide's spot. The guide's spot has no height, and the ground found from above can be a
+    // roof (the Silvermoon orb stands in the back room of the Sunfury Spire, up a ramp). None: the spot as it was.
+    float best = PORTAL_SNAP_YARDS;
+    GameObjectData const* found = nullptr;
+    for (auto const& [spawnId, data] : sObjectMgr->GetAllGOData())
+    {
+        if (data.mapid != p.GetMapId())
+            continue;
+        float const d = std::hypot(data.posX - p.GetPositionX(), data.posY - p.GetPositionY());
+        if (d > best)
+            continue;
+        GameObjectTemplate const* t = sObjectMgr->GetGameObjectTemplate(data.id);
+        if (!t || (t->type != GAMEOBJECT_TYPE_SPELLCASTER && t->type != GAMEOBJECT_TYPE_GOOBER))
+            continue;
+        best = d;
+        found = &data;
+    }
+    if (found)
+        p = WorldPosition(found->mapid, found->posX, found->posY, found->posZ);
 }
 
 WorldPosition GuideMgr::Ground(Player* bot, WorldPosition p)

@@ -46,6 +46,7 @@ public:
     static constexpr float HOME_YARDS = 40.0f;         // SETHOME done: the hearth is bound this close to the innkeeper
     static constexpr uint32 MAY_ACCEPT_STEPS = 40;     // quests a guided bot may take: ACCEPT steps this far ahead
     static constexpr uint32 MAX_CROSSINGS = 2;         // boat or portal look-ups per session before its guide pauses
+    static constexpr float PORTAL_SNAP_YARDS = 15.0f;  // a PORTAL step's spot moves to its orb or portal this close
 
     static GuideMgr& instance();
     void Build();
@@ -119,6 +120,7 @@ private:
         uint32 seq = 0, line = 0;
     };
     GuideStepInfo Resolve(Guides::Step& step);
+    static void SnapToPortal(WorldPosition& p);  // GM-BOTAI-0204: to the orb or portal object at a PORTAL step's spot
     Guides::StepFacts Facts(Player* bot, int guide, uint32 seq, uint32 raceBit, uint32 classBit) const;
     bool NextGuide(Player* bot);
     int NextIndex(int guide) const;
