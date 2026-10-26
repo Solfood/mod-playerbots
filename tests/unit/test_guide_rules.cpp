@@ -25,6 +25,18 @@ static char const* FILE_TEXT =
     "G\ta-levels-20-25\talliance\t20\t-\t0\t0\tZygor's Alliance Leveling Guides\\Levels (20-25)\n"
     "X\tjunk\n";
 
+// GM-BOTAI-0204: the blood elf way out, two hops: the Silvermoon orb (530 -> 0), then the zeppelin (0 -> 1).
+static char const* HORDE_TEXT =
+    "G\th-blood-elf-1-13\thorde\t1\th-levels-20-25\t512\t0\tZygor's Horde Leveling Guides\\Blood Elf (1-13)\n"
+    "S\th-blood-elf-1-13\t0\tGOTO\t0\t0\t-\t0\t530\t9500.0\t-6800.0\t0\t0\t-\t3904\t'Go to Silvermoon City\n"
+    "S\th-blood-elf-1-13\t1\tPORTAL\t0\t0\t-\t0\t530\t10034.3\t-7000.4\t1497\t0\t-\t3907\t.' Click the Orb\n"
+    "S\th-blood-elf-1-13\t2\tGOTO\t0\t0\t-\t0\t0\t1566.9\t266.9\t0\t0\t-\t3908\t'It will teleport you\n"
+    "G\th-undead-1-13\thorde\t1\th-levels-20-25\t16\t0\tZygor's Horde Leveling Guides\\Undead (1-13)\n"
+    "S\th-undead-1-13\t0\tRIDE\t0\t0\t-\t0\t0\t2066.1\t285.9\t14\t0\t-\t900\t.' Ride the zeppelin\n"
+    "S\th-undead-1-13\t1\tGOTO\t0\t0\t-\t0\t1\t1343.0\t-4648.5\t0\t0\t-\t901\t.' Ride the zeppelin\n"
+    "G\th-levels-20-25\thorde\t20\t-\t0\t0\tZygor's Horde Leveling Guides\\Levels (20-25)\n"
+    "S\th-levels-20-25\t0\tGOTO\t0\t0\t-\t0\t1\t-400.0\t-2600.0\t0\t0\t-\t5000\t'Go to the Barrens\n";
+
 static GuideFile Load()
 {
     std::istringstream in(FILE_TEXT);
@@ -114,5 +126,21 @@ int main()
     CHECK_EQ(0, FindCrossing(g, TEAM_ALLIANCE, RaceBit(4), 0, 1).guide);   // any guide of the faction
     CHECK_EQ(-1, FindCrossing(g, TEAM_ALLIANCE, RaceBit(1), 1, 0).guide);  // no way back in this file
     CHECK_EQ(-1, FindCrossing(g, TEAM_HORDE, RaceBit(2), 0, 1).guide);
+    // GM-BOTAI-0204: no direct crossing from map 530 to map 1: the first of two hops (the orb), in its race's guide
+    std::istringstream hin(HORDE_TEXT);
+    GuideFile const hf = ParseGuideFile(hin);
+    CHECK_EQ(0u, hf.errors.size());
+    std::vector<Guide> const& h = hf.guides;
+    Crossing const orb = FindCrossing(h, TEAM_HORDE, RaceBit(10), 530, 1);
+    CHECK_EQ(0, orb.guide);
+    CHECK_EQ(1u, orb.seq);
+    CHECK_EQ(0, FindCrossing(h, TEAM_HORDE, RaceBit(2), 530, 1).guide);   // an orc there: the same orb
+    Crossing const zep = FindCrossing(h, TEAM_HORDE, RaceBit(10), 0, 1);  // a direct one still wins
+    CHECK_EQ(1, zep.guide);
+    CHECK_EQ(0u, zep.seq);
+    CHECK_EQ(0, FindCrossing(h, TEAM_HORDE, RaceBit(10), 530, 0).guide);  // direct: the orb
+    CHECK_EQ(-1, FindCrossing(h, TEAM_HORDE, RaceBit(10), 1, 530).guide); // no way back in this file
+    CHECK_EQ(-1, FindCrossing(h, TEAM_HORDE, RaceBit(10), 530, 571).guide);  // no second hop to it
+    CHECK_EQ(-1, FindCrossing(h, TEAM_ALLIANCE, RaceBit(1), 530, 1).guide);  // other faction
     return UnitFailures();
 }

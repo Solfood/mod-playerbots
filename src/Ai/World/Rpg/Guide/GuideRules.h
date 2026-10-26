@@ -393,14 +393,20 @@ inline bool RescueHearths(bool inMoonglade, uint32_t droppedQuests, uint8_t play
 // Where a bot that stands on another map than its next step can cross (Plan 5c): a boat, zeppelin or portal step
 // whose spot is on `fromMap` and whose next spot is on `toMap`. Its race's start guide is searched first, then every
 // guide of its faction in file order. guide -1: none (the guide is paused).
+// GM-BOTAI-0204: with no such step, two hops: a crossing from `fromMap` to a map from which a crossing to `toMap`
+// exists (the Silvermoon orb to Undercity, then the zeppelin to Orgrimmar; 27 blood elves could not leave Eversong).
+// Its place moves to the first hop; on the middle map its guide goes on from there, and the second hop is that guide's
+// own ride, or another crossing looked up when it next meets a step on another map.
 struct Crossing
 {
     int guide = -1;
     uint32_t seq = 0;
 };
 
-inline Crossing FindCrossing(std::vector<Guide> const& guides, uint8_t team, uint32_t raceBit, uint32_t fromMap,
-                             uint32_t toMap)
+// The first crossing from `fromMap` whose landing map `lands` accepts, in the search order above.
+template <typename Lands>
+inline Crossing FindCrossingIf(std::vector<Guide> const& guides, uint8_t team, uint32_t raceBit, uint32_t fromMap,
+                               Lands const& lands)
 {
     auto scan = [&](size_t gi, Crossing& out)
     {
@@ -413,7 +419,7 @@ inline Crossing FindCrossing(std::vector<Guide> const& guides, uint8_t team, uin
             for (size_t j = i + 1; j < st.size(); ++j)
                 if (st[j].hasPoint)
                 {
-                    if (st[j].map == toMap)
+                    if (lands(st[j].map))
                     {
                         out.guide = static_cast<int>(gi);
                         out.seq = static_cast<uint32_t>(i);
@@ -432,6 +438,23 @@ inline Crossing FindCrossing(std::vector<Guide> const& guides, uint8_t team, uin
         if (guides[i].team == team && scan(i, c))
             return c;
     return c;
+}
+
+inline Crossing FindCrossing(std::vector<Guide> const& guides, uint8_t team, uint32_t raceBit, uint32_t fromMap,
+                             uint32_t toMap)
+{
+    Crossing const direct =
+        FindCrossingIf(guides, team, raceBit, fromMap, [toMap](uint32_t map) { return map == toMap; });
+    if (direct.guide >= 0 || fromMap == toMap)
+        return direct;
+    return FindCrossingIf(guides, team, raceBit, fromMap,
+                          [&](uint32_t mid)
+                          {
+                              return mid != fromMap && mid != toMap &&
+                                     FindCrossingIf(guides, team, raceBit, mid,
+                                                    [toMap](uint32_t map) { return map == toMap; })
+                                             .guide >= 0;
+                          });
 }
 
 // A step's key for seats and the "blocked" counts: the guide's index + 1 and the step number (never 0: the seat book
