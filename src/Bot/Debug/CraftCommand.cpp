@@ -17,9 +17,12 @@
 #include "CraftMgr.h"
 #include "Item.h"
 #include "MapMgr.h"
+#include "MarketBook.h"
+#include "MarketRules.h"
 #include "MoveSpline.h"
 #include "NewRpgInfo.h"
 #include "ObjectAccessor.h"
+#include "ObjectMgr.h"
 #include "Player.h"
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
@@ -131,7 +134,7 @@ bool CraftCommand::Handle(ChatHandler* handler, char const* args)
     std::vector<std::string> const words = Words(args);
     if (words.empty())
     {
-        handler->PSendSysMessage("CRAFTERR usage: craft stats | hubs | on|off|bot|plan|trip|gather|visit <name> | want "
+        handler->PSendSysMessage("CRAFTERR usage: craft stats | hubs | market [item <id>] | on|off|bot|plan|trip|gather|visit <name> | want "
                                  "<name> <item> <count> <value>");
         return false;
     }
@@ -149,6 +152,52 @@ bool CraftCommand::Handle(ChatHandler* handler, char const* args)
                                  crafts.AuctioneerCount(), crafts.HubSpawns().size(), crafts.TestCount(),
                                  crafts.BuildMs());
         return true;
+    }
+    if (sub == "market")
+    {
+        // Plan 7a Task 5: the market book on the console. `market` = the totals; `market item <id>` = one line per
+        // auction house (2 Alliance, 6 Horde, 7 neutral) with data for the item.
+        MarketBook& book = MarketBook::instance();
+        if (!book.Loaded())
+        {
+            handler->PSendSysMessage("MARKET off");
+            return true;
+        }
+        if (words.size() == 1)
+        {
+            MarketBook::Totals const t = book.TodayTotals();
+            handler->PSendSysMessage("MARKET rows={} houses={} sales_today={} returns_today={} wants_today={}",
+                                     book.Rows(), t.houses, t.sold, t.returned, t.wanted);
+            return true;
+        }
+        if (words.size() == 3 && words[1] == "item")
+        {
+            uint32 const item = Num(words[2]);
+            ItemTemplate const* proto = sObjectMgr->GetItemTemplate(item);
+            if (!proto)
+            {
+                handler->PSendSysMessage("MARKETITEM item={} error=unknown", item);
+                return false;
+            }
+            Craft::Settings const& settings = sPlayerbotAIConfig.crafting;
+            for (uint32 house : {2u, 6u, 7u})
+            {
+                Craft::MarketView const v = book.View(house, item);
+                uint32 const seen = book.Seen(house, item);
+                if (!v.soldUnits && !v.returnedUnits && !seen)
+                    continue;
+                uint64 const ask10 =
+                    Craft::MarketAsk(false, 0, 10, proto->SellPrice, proto->InventoryType != INVTYPE_NON_EQUIP,
+                                     proto->ItemLevel, seen, v, settings);
+                handler->PSendSysMessage(
+                    "MARKETITEM item={} house={} recent={} sold={} returned={} fast={} slow={} seen={} ask10={}", item,
+                    house, v.recentPerUnit, v.soldUnits, v.returnedUnits,
+                    Craft::SellsFast(v, settings.marketFastSold) ? 1 : 0, Craft::SellsSlow(v) ? 1 : 0, seen, ask10);
+            }
+            return true;
+        }
+        handler->PSendSysMessage("CRAFTERR usage: craft market | market item <id>");
+        return false;
     }
     if (sub == "hubs")
     {

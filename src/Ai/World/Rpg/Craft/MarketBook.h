@@ -55,6 +55,17 @@ public:
     uint32 LastSeen(uint32 item) const;
     // (day, house, item) entries in memory (the console).
     uint32 Rows() const;
+    // The cheapest buyout per unit a visit last saw at one house (0 = none seen; the console).
+    uint32 Seen(uint32 house, uint32 item) const;
+    // Today's notes summed over the whole book, and how many houses have any day in memory (the console).
+    struct Totals
+    {
+        uint32 houses = 0;
+        uint64 sold = 0;
+        uint64 returned = 0;
+        uint64 wanted = 0;
+    };
+    Totals TodayTotals() const;
 
 private:
     static uint64 Key(uint32 house, uint32 item) { return (uint64(house) << 32) | item; }

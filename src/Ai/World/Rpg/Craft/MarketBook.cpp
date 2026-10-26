@@ -10,6 +10,7 @@
 #include <map>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "AuctionHouseMgr.h"
 #include "CraftMgr.h"
@@ -314,6 +315,35 @@ uint32 MarketBook::Rows() const
 {
     std::lock_guard<std::mutex> guard(_lock);
     return RowsLocked();
+}
+
+uint32 MarketBook::Seen(uint32 house, uint32 item) const
+{
+    std::lock_guard<std::mutex> guard(_lock);
+    auto const it = _seen.find(Key(house, item));
+    return it == _seen.end() ? 0 : it->second;
+}
+
+MarketBook::Totals MarketBook::TodayTotals() const
+{
+    uint32 const today = Today();
+    Totals t;
+    std::unordered_set<uint32> houses;
+    std::lock_guard<std::mutex> guard(_lock);
+    for (auto const& entry : _days)
+    {
+        if (!entry.second.empty())
+            houses.insert(static_cast<uint32>(entry.first >> 32));
+        for (Craft::DayStats const& d : entry.second)
+            if (d.day == today)
+            {
+                t.sold += d.soldUnits;
+                t.returned += d.returnedUnits;
+                t.wanted += d.wanted;
+            }
+    }
+    t.houses = static_cast<uint32>(houses.size());
+    return t;
 }
 
 uint32 MarketBook::RowsLocked() const
