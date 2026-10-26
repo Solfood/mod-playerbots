@@ -233,7 +233,6 @@ struct NewRpgInfo
         uint32 listable{0};         // items it holds back for its next auction visit (CraftMgr::HeldForAuction)
         std::unordered_map<uint32, uint8> returned;       // item entry -> times an auction of it came back unsold
         std::unordered_map<uint32, uint32> askedPerUnit;  // item entry -> buyout per unit it last asked
-        std::unordered_map<uint32, uint32> listedHouse;   // item entry -> the auction house it last listed it at
         ::Craft::Plan pending;      // the plan the roll's availability check made; ChangeToCraft takes it
         uint32 pendingAtMs{0};
         bool pendingGuided{false};  // `pending` was planned as a guided bot (in town only)

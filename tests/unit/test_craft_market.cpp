@@ -228,6 +228,7 @@ int main()
     CHECK_TRUE(!ReadAuctionMailSubject("2589:0:3:77:", item, answer, &count));  // no count
     CHECK_TRUE(!ReadAuctionMailSubject("2589:0:3", item, answer, &count));
     CHECK_TRUE(!ReadAuctionMailSubject("2589:0:3:77:2x", item, answer, &count));
+    CHECK_TRUE(!ReadAuctionMailSubject("2589:0:3:77:20:5", item, answer, &count));  // a 6th field
     // Fix round 1, I1: "vendor it" lasts VENDOR_MARK_MS (a day), then the item may go back to the auction house
     CHECK_TRUE(!VendorMarkOn(0, 5000));                               // never marked
     CHECK_TRUE(VendorMarkOn(5000, 5000));

@@ -832,12 +832,11 @@ void CraftMgr::NoteAuctionMail(Player* bot, Mail const* mail) const
     }
     else
     {
-        // Plan 7a, spec B: a return at the house it last listed the item at (unknown, e.g. listed before a restart:
-        // not noted). Market off: nothing noted.
-        auto const listed = state.listedHouse.find(item);
-        if (MarketOn() && listed != state.listedHouse.end() && count)
+        // Plan 7a, spec B: a return at the house that sent it (the core's MailSender(AuctionEntry*) sets an auction
+        // mail's sender to the house id). Market off: nothing noted.
+        if (MarketOn() && count)
         {
-            MarketBook::instance().NoteReturn(listed->second, item, count);
+            MarketBook::instance().NoteReturn(mail->sender, item, count);
             FixedPopulation::Count(EconomyCounter::MarketReturnsNoted);
         }
         if (::Craft::OnReturn(++state.returned[item]) == ::Craft::AfterReturn::Vendor)

@@ -135,7 +135,6 @@ void AuctionVisitOperation::List(Player* bot, PlayerbotAI* botAI, Creature* npc,
         }
         ++live;
         state.askedPerUnit[entry] = static_cast<uint32>(std::min<uint64>(price / count, UINT32_MAX));
-        state.listedHouse[entry] = house;  // where a return of it is noted (CraftMgr::NoteAuctionMail)
         FixedPopulation::Count(EconomyCounter::AuctionsListed);
         if (before > bot->GetMoney())
             FixedPopulation::Count(EconomyCounter::AuctionGoldOut, before - bot->GetMoney());
