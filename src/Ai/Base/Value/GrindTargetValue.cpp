@@ -19,6 +19,21 @@
 #include "TownErrands.h"
 #include "TripRules.h"
 
+namespace
+{
+// GM-BOTAI-0202: a mob a retreating bot may earn from although it is grey: a creature with a loot table or coins that is
+// not a pet, totem, critter or anything a player owns.
+bool RetreatLootable(Unit* unit)
+{
+    Creature* creature = unit->ToCreature();
+    if (!creature || creature->IsPet() || creature->IsTotem() || creature->IsCritter() ||
+        creature->GetCharmerOrOwnerGUID().IsPlayer())
+        return false;
+    CreatureTemplate const* proto = creature->GetCreatureTemplate();
+    return proto && (proto->lootid || proto->maxgold);
+}
+}  // namespace
+
 Unit* GrindTargetValue::Calculate()
 {
     uint32 memberCount = 1;
@@ -103,7 +118,9 @@ Unit* GrindTargetValue::FindTargetForGrinding(uint32 assistCount)
         if (!bot->IsHostileTo(unit) && unit->GetNpcFlags() != UNIT_NPC_FLAG_NONE)
             continue;
 
-        if (!bot->isHonorOrXPTarget(unit))
+        // GM-BOTAI-0202: a retreating bot also earns from grey mobs with loot (coins and vendor loot, no XP).
+        if (!bot->isHonorOrXPTarget(unit) &&
+            !Routes::RetreatGreyOk(retreating, RetreatLootable(unit), unit->GetLevel(), bot->GetLevel()))
             continue;
 
         if (abs(bot->GetPositionZ() - unit->GetPositionZ()) > INTERACTION_DISTANCE)

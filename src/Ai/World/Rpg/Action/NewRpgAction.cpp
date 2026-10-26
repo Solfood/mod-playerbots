@@ -377,13 +377,14 @@ bool NewRpgStatusUpdateAction::CheckWornGearAndTownTrip(NewRpgStatus status)
 
     bool const playSafe = TownErrands::PlaySafe(botAI, bot);
 
-    // Worn out and can't repair yet: stop gathering and grind trips and quests above the bot's level...
+    // Worn out and can't repair yet: stop gathering and grind trips and quests above the bot's level... A retreating
+    // bot keeps its grind trip (GM-BOTAI-0202): the spot is at or below its level and grinding is how it earns.
     auto const* quest = std::get_if<NewRpgInfo::DoQuest>(&info.data);
     // World of Craft (decision 11): a crafting bot in retreat keeps gathering (TownErrands::MayGatherIn); crafting off,
     // MayGatherIn is false whenever playSafe is, so this is the old rule exactly.
     if (playSafe &&
         ((status == RPG_DO_GATHER && !TownErrands::MayGatherIn(botAI, bot, bot->GetZoneId())) ||
-         status == RPG_GO_GRIND || (quest && IsQuestTooHardForWornGear(quest->questId))))
+         (status == RPG_GO_GRIND && !info.route.retreating) || (quest && IsQuestTooHardForWornGear(quest->questId))))
     {
         info.ChangeToIdle();
         return true;
@@ -566,7 +567,9 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
                 {
                     GuideMgr::instance().Unseat(bot->GetGUID().GetCounter());  // its step's seat is for working bots
                     // World of Craft (spec §5): gathering, crafting or the auction house; crafting off: as before.
-                    return EarnRoll({RPG_WANDER_RANDOM, RPG_WANDER_NPC, RPG_REST});
+                    // GM-BOTAI-0202: a grind trip too, to spots at or below its level (grey mobs pay coins and loot);
+                    // without it a broke bot near a low town found nothing to fight and never left.
+                    return EarnRoll({RPG_GO_GRIND, RPG_WANDER_RANDOM, RPG_WANDER_NPC, RPG_REST});
                 }
                 // World of Craft. Its guide place is kept whatever it does here (the step lives in info.guide).
                 // Crafting off: straight to its guide, as before.
@@ -575,10 +578,11 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
                 return ChangeToGuideChoice();
             }
             // Retreating (quest routes, spec §6): earn near town. Quests at or below its level on its own hub (the
-            // route keeps it only there), mobs at or below its level (the fight rule), townsfolk to sell to; no
-            // trips away. World of Craft: gathering, crafting or the auction house first, when it can.
+            // route keeps it only there), mobs at or below its level (the fight rule), townsfolk to sell to, and
+            // grind trips to spots at or below its level, grey mobs included (GM-BOTAI-0202). World of Craft:
+            // gathering, crafting or the auction house first, when it can.
             if (RouteMgr::instance().Routed(bot) && info.route.retreating)
-                return EarnRoll({RPG_FOLLOW_ROUTE, RPG_WANDER_RANDOM, RPG_WANDER_NPC, RPG_REST});
+                return EarnRoll({RPG_FOLLOW_ROUTE, RPG_GO_GRIND, RPG_WANDER_RANDOM, RPG_WANDER_NPC, RPG_REST});
             std::vector<NewRpgStatus> candidates = {RPG_GO_CAMP,       RPG_GO_GRIND, RPG_WANDER_RANDOM,
                                                     RPG_WANDER_NPC,    RPG_DO_QUEST, RPG_TRAVEL_FLIGHT,
                                                     RPG_REST,          RPG_OUTDOOR_PVP, RPG_DO_GATHER};

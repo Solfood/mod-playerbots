@@ -1167,7 +1167,20 @@ bool NewRpgBaseAction::GetQuestPOIPosAndObjectiveIdx(uint32 questId, std::vector
 
 WorldPosition NewRpgBaseAction::SelectRandomGrindPos(Player* bot)
 {
-    std::vector<WorldLocation> const& locs = sTravelMgr.GetLocsPerLevelCache(bot->GetLevel());
+    // GM-BOTAI-0202: a retreating bot (broke, worn gear) looks at the spots at or below its level, grey ones included
+    // (Routes::RetreatGrindLevels); any other bot at the spots of its own level, as before.
+    PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
+    std::vector<WorldLocation> retreatLocs;
+    bool const retreating = botAI && botAI->rpgInfo.route.retreating;
+    if (retreating)
+        for (uint32 level : Routes::RetreatGrindLevels(bot->GetLevel(), sPlayerbotAIConfig.randomBotTeleLowerLevel,
+                                                       sPlayerbotAIConfig.randomBotTeleHigherLevel))
+        {
+            std::vector<WorldLocation> const& cache = sTravelMgr.GetLocsPerLevelCache(static_cast<uint8>(level));
+            retreatLocs.insert(retreatLocs.end(), cache.begin(), cache.end());
+        }
+    std::vector<WorldLocation> const& locs =
+        retreating ? retreatLocs : sTravelMgr.GetLocsPerLevelCache(bot->GetLevel());
     float hiRange = 500.0f;
     float loRange = 2500.0f;
     if (bot->GetLevel() < 5)
@@ -1176,7 +1189,6 @@ WorldPosition NewRpgBaseAction::SelectRandomGrindPos(Player* bot)
         loRange /= 3;
     }
     std::vector<WorldLocation> lo_prepared_locs, hi_prepared_locs;
-    PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
     bool const avoiding = BotDeaths::Avoiding(botAI);  // honest world: not a death loop's spot
 
     bool inCity = false;
@@ -1751,8 +1763,9 @@ bool NewRpgBaseAction::CheckRpgStatusAvailable(NewRpgStatus status)
         }
         case RPG_GO_GRIND:
         {
-            // Honest world, worn gear: no trips to grind spots (they hold mobs up to a few levels above).
-            if (TownErrands::PlaySafe(botAI, bot))
+            // Honest world, worn gear: no trips to grind spots (they hold mobs up to a few levels above). A retreating
+            // bot may go (GM-BOTAI-0202): it picks from spots at or below its level and fights nothing above it.
+            if (TownErrands::PlaySafe(botAI, bot) && !botAI->rpgInfo.route.retreating)
                 return false;
             WorldPosition pos = SelectRandomGrindPos(bot);
             return pos != WorldPosition();

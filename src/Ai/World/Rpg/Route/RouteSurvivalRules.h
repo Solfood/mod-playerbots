@@ -9,9 +9,11 @@
 #ifndef PLAYERBOTS_ROUTESURVIVALRULES_H
 #define PLAYERBOTS_ROUTESURVIVALRULES_H
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <deque>
+#include <vector>
 
 namespace Routes
 {
@@ -82,6 +84,37 @@ constexpr float RETREAT_REACH_YARDS = 400.0f;
 // While retreating its route may only keep it on the hub it works (preflight C4: no walk to a new, far hub, no class
 // stop, no catch-up trip). `stay`: the route says stay; `classStop`: it offers a class quest stop.
 inline bool RouteChoiceAllowed(bool retreating, bool stay, bool classStop) { return !retreating || (stay && !classStop); }
+
+// GM-BOTAI-0202: a retreating bot earns from grey mobs too. They give no XP, but they drop coins and vendor loot, and
+// near a starting town they are often all there is (72 bots sat broke in town for days: nothing gave them money). Only
+// a mob with loot (`lootable`: a loot table or coins, not a pet, totem or critter), never one above its level.
+inline bool RetreatGreyOk(bool retreating, bool lootable, int mobLevel, int botLevel)
+{
+    return retreating && lootable && mobLevel <= botLevel;
+}
+
+// How far below its level a retreating bot looks for a grind spot (grey mobs included).
+constexpr uint32_t RETREAT_GRIND_SPAN = 10;
+
+// GM-BOTAI-0202: the grind spot caches (TravelMgr locsPerLevelCache) a retreating bot picks from. Cache `l` holds the
+// spots whose mobs are levels l - higher .. l + lower (RandomBotTeleHigherLevel / LowerLevel), so the first cache is
+// the one whose top is the bot's own level, and each next one sits just below the last, until they reach
+// RETREAT_GRIND_SPAN levels below the bot (or level 1). Mobs above its level are still refused by the fight rule.
+inline std::vector<uint32_t> RetreatGrindLevels(uint32_t botLevel, uint32_t lower, uint32_t higher)
+{
+    std::vector<uint32_t> levels;
+    int const bottom = static_cast<int>(botLevel) - static_cast<int>(RETREAT_GRIND_SPAN);
+    int const step = static_cast<int>(lower + higher + 1);
+    int l = std::max(1, static_cast<int>(botLevel) - static_cast<int>(lower));
+    while (true)
+    {
+        levels.push_back(static_cast<uint32_t>(l));
+        if (l - static_cast<int>(higher) <= bottom || l - step < 1)
+            break;
+        l -= step;
+    }
+    return levels;
+}
 }  // namespace Routes
 
 #endif

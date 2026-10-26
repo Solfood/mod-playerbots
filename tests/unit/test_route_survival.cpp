@@ -65,5 +65,27 @@ int main()
     CHECK_TRUE(RouteChoiceAllowed(true, true, false));
     CHECK_TRUE(!RouteChoiceAllowed(true, false, false));
     CHECK_TRUE(!RouteChoiceAllowed(true, true, true));
+
+    // GM-BOTAI-0202: a retreating bot may pick a grey mob with loot, never one above its level; others never do.
+    CHECK_TRUE(RetreatGreyOk(true, true, 8, 20));
+    CHECK_TRUE(RetreatGreyOk(true, true, 20, 20));
+    CHECK_TRUE(!RetreatGreyOk(true, true, 21, 20));
+    CHECK_TRUE(!RetreatGreyOk(true, false, 8, 20));  // a critter or a pet: no loot
+    CHECK_TRUE(!RetreatGreyOk(false, true, 8, 20));  // not retreating: grey mobs stay out, as before
+    // Its grind spot caches (lower 1, higher 3: cache l holds mobs l-3 .. l+1): 19 (16-20), 14 (11-15), 9 (6-10).
+    std::vector<uint32_t> const at20 = RetreatGrindLevels(20, 1, 3);
+    CHECK_EQ(3u, static_cast<uint32_t>(at20.size()));
+    CHECK_EQ(19u, at20[0]);
+    CHECK_EQ(14u, at20[1]);
+    CHECK_EQ(9u, at20[2]);
+    std::vector<uint32_t> const at5 = RetreatGrindLevels(5, 1, 3);  // 4 (1-5), then nothing below level 1
+    CHECK_EQ(1u, static_cast<uint32_t>(at5.size()));
+    CHECK_EQ(4u, at5[0]);
+    std::vector<uint32_t> const at1 = RetreatGrindLevels(1, 1, 3);
+    CHECK_EQ(1u, static_cast<uint32_t>(at1.size()));
+    CHECK_EQ(1u, at1[0]);
+    std::vector<uint32_t> const wide = RetreatGrindLevels(30, 0, 0);  // one level per cache: 30 down to 20
+    CHECK_EQ(11u, static_cast<uint32_t>(wide.size()));
+    CHECK_EQ(20u, wide.back());
     return UnitFailures();
 }
