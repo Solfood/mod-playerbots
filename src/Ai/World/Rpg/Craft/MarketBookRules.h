@@ -65,6 +65,32 @@ inline MarketView Combine(MarketView a, MarketView b)
     return v;
 }
 
+// Merges one note into an item's days (kept sorted by day): sales, returns and wants add up, so a day loaded from
+// the table after a restart and the same day's new notes are one entry (Review Focus 1). The listing snapshot
+// (listedUnits, minPerUnit) is replaced when the delta carries one, else kept. Days before keepFrom are dropped.
+inline void AddTo(std::vector<DayStats>& days, DayStats const& delta, uint32_t keepFrom)
+{
+    auto it = std::lower_bound(days.begin(), days.end(), delta.day,
+                               [](DayStats const& d, uint32_t day) { return d.day < day; });
+    if (it == days.end() || it->day != delta.day)
+    {
+        DayStats fresh;
+        fresh.day = delta.day;
+        it = days.insert(it, fresh);
+    }
+    it->soldUnits += delta.soldUnits;
+    it->soldCopper += delta.soldCopper;
+    it->returnedUnits += delta.returnedUnits;
+    it->wanted += delta.wanted;
+    if (delta.listedUnits || delta.minPerUnit)
+    {
+        it->listedUnits = delta.listedUnits;
+        it->minPerUnit = delta.minPerUnit;
+    }
+    days.erase(std::remove_if(days.begin(), days.end(), [keepFrom](DayStats const& d) { return d.day < keepFrom; }),
+               days.end());
+}
+
 inline uint32_t LevelBand(uint32_t level) { return level / 10; }
 
 // The middle value; with an even count the lower of the two middles; 0 when empty.

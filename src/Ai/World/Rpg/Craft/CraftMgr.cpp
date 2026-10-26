@@ -29,6 +29,7 @@
 #include "Log.h"
 #include "Mail.h"
 #include "MapMgr.h"
+#include "MarketBook.h"
 #include "MarketRules.h"
 #include "NewRpgInfo.h"
 #include "ObjectMgr.h"
@@ -114,6 +115,9 @@ void CraftMgr::Build()
     _built.store(true, std::memory_order_release);
     LOG_INFO("server.loading", ">> Crafting: {} recipes, {} stations, {} material vendors, {} auctioneers in {} ms",
              _recipes.size(), _stationCount, _vendorCount, _auctioneerCount, _buildMs);
+    // The smart market (Plan 7a): its memory, only with crafting on (off: nothing noted, saved or read).
+    if (sPlayerbotAIConfig.crafting.enabled)
+        MarketBook::instance().Load();
 }
 
 void CraftMgr::SpawnHubAuctioneers()

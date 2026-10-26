@@ -90,5 +90,65 @@ int main()
     CHECK_EQ(3u, Median({5, 1, 3}));
     CHECK_EQ(2u, Median({4, 1, 3, 2}));
 
+    // restart_merges_day (Review Focus 1): a day loaded from the table and a new sale that day are one entry
+    {
+        std::vector<DayStats> days = {Day(100, 4, 400)};
+        AddTo(days, Day(100, 2, 300), 0);
+        CHECK_EQ(size_t(1), days.size());
+        CHECK_EQ(100u, days[0].day);
+        CHECK_EQ(6u, days[0].soldUnits);
+        CHECK_EQ(700u, days[0].soldCopper);
+        AddTo(days, Day(101, 1, 50), 0);
+        CHECK_EQ(size_t(2), days.size());
+        CHECK_EQ(100u, days[0].day);
+        CHECK_EQ(101u, days[1].day);
+        CHECK_EQ(1u, days[1].soldUnits);
+        AddTo(days, Day(99, 1, 10), 0);  // an earlier day goes in front: kept sorted by day
+        CHECK_EQ(size_t(3), days.size());
+        CHECK_EQ(99u, days[0].day);
+        DayStats ret;
+        ret.day = 100;
+        ret.returnedUnits = 2;
+        ret.wanted = 1;
+        AddTo(days, ret, 0);
+        CHECK_EQ(2u, days[1].returnedUnits);
+        CHECK_EQ(1u, days[1].wanted);
+        CHECK_EQ(6u, days[1].soldUnits);
+    }
+
+    // snapshot_replaces: listed units and the cheapest ask are the day's last snapshot, not a sum
+    {
+        DayStats snap;
+        snap.day = 100;
+        snap.listedUnits = 10;
+        snap.minPerUnit = 7;
+        std::vector<DayStats> days;
+        AddTo(days, snap, 0);
+        days[0].soldUnits = 5;
+        DayStats again;
+        again.day = 100;
+        again.listedUnits = 3;
+        again.minPerUnit = 9;
+        AddTo(days, again, 0);
+        CHECK_EQ(3u, days[0].listedUnits);
+        CHECK_EQ(9u, days[0].minPerUnit);
+        CHECK_EQ(5u, days[0].soldUnits);
+        AddTo(days, Day(100, 1, 20), 0);
+        CHECK_EQ(3u, days[0].listedUnits);
+        CHECK_EQ(9u, days[0].minPerUnit);
+        CHECK_EQ(6u, days[0].soldUnits);
+    }
+
+    // keep_drops_old
+    {
+        std::vector<DayStats> days = {Day(60, 1, 10), Day(100, 1, 10)};
+        AddTo(days, Day(100, 1, 10), 70);
+        CHECK_EQ(size_t(1), days.size());
+        CHECK_EQ(100u, days[0].day);
+        CHECK_EQ(2u, days[0].soldUnits);
+        AddTo(days, Day(65, 1, 10), 70);  // a delta older than the keep window is dropped too
+        CHECK_EQ(size_t(1), days.size());
+    }
+
     return UnitFailures() ? 1 : 0;
 }
