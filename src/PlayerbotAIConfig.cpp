@@ -770,6 +770,16 @@ bool PlayerbotAIConfig::Initialize()
     crafting.fishMinutes = sConfigMgr->GetOption<uint32>("AiPlayerbot.Crafting.FishMinutes", 10);
     crafting.fishCooldownMinutes = sConfigMgr->GetOption<uint32>("AiPlayerbot.Crafting.FishCooldownMinutes", 120);
     crafting.fishSpotYards = sConfigMgr->GetOption<uint32>("AiPlayerbot.Crafting.FishSpotYards", 200);
+    crafting.marketWindowDays = sConfigMgr->GetOption<uint32>("AiPlayerbot.Crafting.MarketWindowDays", 3);
+    crafting.marketKeepDays = sConfigMgr->GetOption<uint32>("AiPlayerbot.Crafting.MarketKeepDays", 30);
+    crafting.marketRaisePct = sConfigMgr->GetOption<uint32>("AiPlayerbot.Crafting.MarketRaisePct", 15);
+    crafting.marketSlowPct = sConfigMgr->GetOption<uint32>("AiPlayerbot.Crafting.MarketSlowPct", 15);
+    crafting.marketFloorPct = sConfigMgr->GetOption<uint32>("AiPlayerbot.Crafting.MarketFloorPct", 60);
+    crafting.marketMaxPct = sConfigMgr->GetOption<uint32>("AiPlayerbot.Crafting.MarketMaxPct", 2000);
+    crafting.marketFastSold = sConfigMgr->GetOption<uint32>("AiPlayerbot.Crafting.MarketFastSold", 3);
+    crafting.marketSnapshotMinutes = sConfigMgr->GetOption<uint32>("AiPlayerbot.Crafting.MarketSnapshotMinutes", 60);
+    crafting.marketWindowDays = std::max<uint32>(1, std::min(crafting.marketWindowDays, crafting.marketKeepDays));
+    crafting.marketSnapshotMinutes = std::max<uint32>(10, crafting.marketSnapshotMinutes);
     guildBank.enabled = sConfigMgr->GetOption<bool>("AiPlayerbot.GuildBank", false);
     {
         char const* const kinds[GuildBank::KIND_COUNT] = {"Food", "Drink", "HealingPotion", "ManaPotion", "Bandage"};

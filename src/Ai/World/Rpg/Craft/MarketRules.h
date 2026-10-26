@@ -13,6 +13,9 @@
 #include <map>
 #include <string>
 
+#include "CraftSettings.h"
+#include "MarketBookRules.h"
+
 // World of Craft part 1 §4 (spec 2026-10-14): the basic two-sided auction house. A bot lists extras and spare
 // materials, buys an upgrade or a missing material, and never buys to resell or spends its repair reserve. The core's
 // own auction functions do the work and send proceeds and returns by mail. OUR OWN RULE (user, 2026-10-14): no fees.
@@ -141,6 +144,47 @@ inline uint64_t AskPrice(bool relist, uint64_t lastPerUnit, uint32_t count, uint
         return RelistPrice(lastPerUnit * count, relistPct, vendorSell, count);
     return ListPrice(StartPrice(vendorSell, count, gear, itemLevel, materialPct), cheapestPerUnit, count, vendorSell,
                      undercutPct);
+}
+
+// The smart market (Plan 7a, spec B): a bot prices from remembered sales. Sold fast (enough units, few returned) or
+// nobody else lists it: ask more. Mostly came back unsold: ask less. Then undercut the cheapest listing, but not below
+// marketFloorPct of the remembered price, and never above marketMaxPct of the vendor value or below the vendor value.
+inline bool SellsFast(MarketView const& v, uint32_t fastSold)
+{
+    return v.soldUnits >= fastSold && v.returnedUnits * 2 <= v.soldUnits;
+}
+
+inline bool SellsSlow(MarketView const& v) { return v.returnedUnits > v.soldUnits; }
+
+// What a stack is worth by past sales; with none, its start price.
+inline uint64_t MarketValue(MarketView const& v, uint64_t startPrice, uint32_t count)
+{
+    return v.soldUnits ? v.recentPerUnit * count : startPrice;
+}
+
+inline uint64_t MarketAsk(bool relist, uint64_t lastPerUnit, uint32_t count, uint32_t vendorSell, bool gear,
+                          uint32_t itemLevel, uint64_t cheapestPerUnit, MarketView const& v, Settings const& s)
+{
+    if (relist)
+        return RelistPrice(lastPerUnit * count, s.relistPct, vendorSell, count);
+    uint64_t price = MarketValue(v, StartPrice(vendorSell, count, gear, itemLevel, s.materialPricePct), count);
+    if (v.soldUnits > 0 && (SellsFast(v, s.marketFastSold) || cheapestPerUnit == 0))
+        price += price * s.marketRaisePct / 100;
+    else if (SellsSlow(v))
+        price -= price * s.marketSlowPct / 100;
+    if (cheapestPerUnit)
+    {
+        uint64_t const theirs = cheapestPerUnit * count;
+        uint64_t const under = theirs - theirs * s.undercutPct / 100 - (s.undercutPct ? 1 : 0);
+        if (under < price)
+        {
+            uint64_t const marketFloor = v.soldUnits ? v.recentPerUnit * count * s.marketFloorPct / 100 : 0;
+            price = std::max(under, marketFloor);
+        }
+    }
+    if (vendorSell > 0)
+        price = std::min(price, uint64_t(vendorSell) * count * s.marketMaxPct / 100);
+    return std::max(price, uint64_t(vendorSell) * count);
 }
 
 // The core's auction mail subject (AuctionEntry::BuildAuctionMailSubject): "<item>:0:<answer>:<auction id>:<count>".

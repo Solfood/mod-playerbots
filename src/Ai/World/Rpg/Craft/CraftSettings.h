@@ -33,6 +33,15 @@ struct Settings
     uint32_t fishMinutes = 10;           // .FishMinutes: it fishes this long once at the water
     uint32_t fishCooldownMinutes = 120;  // .FishCooldownMinutes: no new trip this long after one started
     uint32_t fishSpotYards = 200;        // .FishSpotYards: water it looks for within this many yards
+    // The smart market (GM-BOTAI-0215, Plan 7a): prices follow remembered sales.
+    uint32_t marketWindowDays = 3;         // .MarketWindowDays: sales of this many recent days set the price
+    uint32_t marketKeepDays = 30;          // .MarketKeepDays: day records older than this are dropped
+    uint32_t marketRaisePct = 15;          // .MarketRaisePct: ask this much more when it sells fast or is unlisted
+    uint32_t marketSlowPct = 15;           // .MarketSlowPct: ask this much less when it mostly comes back
+    uint32_t marketFloorPct = 60;          // .MarketFloorPct: undercutting never goes below this % of the sale price
+    uint32_t marketMaxPct = 2000;          // .MarketMaxPct: never ask above this % of the vendor value
+    uint32_t marketFastSold = 3;           // .MarketFastSold: units sold in the window that count as selling fast
+    uint32_t marketSnapshotMinutes = 60;   // .MarketSnapshotMinutes: how often the market is saved
 };
 }  // namespace Craft
 
