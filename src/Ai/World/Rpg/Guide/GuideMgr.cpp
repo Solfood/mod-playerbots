@@ -595,8 +595,10 @@ bool GuideMgr::Cross(Player* bot, Work const& w)
         Pause(bot, "no way to its next step");
         return false;
     }
-    Guides::Crossing const c = Guides::FindCrossing(_guides, TeamOf(bot), Guides::RaceBit(bot->getRace()),
-                                                    bot->GetMapId(), target.GetMapId());
+    Guides::Crossing const c = Guides::FindCrossing(
+        _guides, TeamOf(bot), Guides::RaceBit(bot->getRace()),
+        Guides::MapSpot{bot->GetMapId(), bot->GetPositionX(), bot->GetPositionY()},
+        Guides::MapSpot{target.GetMapId(), target.GetPositionX(), target.GetPositionY()});
     if (c.guide < 0)
     {
         Pause(bot, "no way to its next step");

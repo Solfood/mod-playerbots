@@ -37,6 +37,21 @@ static char const* HORDE_TEXT =
     "G\th-levels-20-25\thorde\t20\t-\t0\t0\tZygor's Horde Leveling Guides\\Levels (20-25)\n"
     "S\th-levels-20-25\t0\tGOTO\t0\t0\t-\t0\t1\t-400.0\t-2600.0\t0\t0\t-\t5000\t'Go to the Barrens\n";
 
+// Fix round 2 (review I3): an Outland portal (Shattrath to Orgrimmar), appended after HORDE_TEXT (guide index 3).
+static char const* OUTLAND_TEXT =
+    "G\th-outland-68-70\thorde\t68\t-\t0\t0\tZygor's Horde Leveling Guides\\Outland (68-70)\n"
+    "S\th-outland-68-70\t0\tPORTAL\t0\t0\t-\t0\t530\t-1890.0\t5400.0\t1637\t0\t-\t20000\t'Click the Portal\n"
+    "S\th-outland-68-70\t1\tGOTO\t0\t0\t-\t0\t1\t1600.0\t-4400.0\t0\t0\t-\t20001\t'Go to Orgrimmar\n";
+
+// Fix round 2 (review I3): the Azuremyst boat (530 -> 1) in the draenei guide, the Darkshore boat (1 -> 0).
+static char const* ALLIANCE_TEXT =
+    "G\ta-draenei-1-13\talliance\t1\t-\t1024\t0\tZygor's Alliance Leveling Guides\\Draenei (1-13)\n"
+    "S\ta-draenei-1-13\t0\tRIDE\t0\t0\t-\t0\t530\t-4264.0\t-11318.0\t148\t0\t-\t500\t'Ride the boat\n"
+    "S\ta-draenei-1-13\t1\tGOTO\t0\t0\t-\t0\t1\t6580.0\t770.0\t0\t0\t-\t501\t'Ride the boat\n"
+    "G\ta-night-elf-1-13\talliance\t1\t-\t8\t0\tZygor's Alliance Leveling Guides\\Night Elf (1-13)\n"
+    "S\ta-night-elf-1-13\t0\tRIDE\t0\t0\t-\t0\t1\t6500.0\t800.0\t1519\t0\t-\t600\t'Ride the boat\n"
+    "S\ta-night-elf-1-13\t1\tGOTO\t0\t0\t-\t0\t0\t-8642.0\t1311.0\t0\t0\t-\t601\t'Ride the boat\n";
+
 static GuideFile Load()
 {
     std::istringstream in(FILE_TEXT);
@@ -119,28 +134,75 @@ int main()
     CHECK_EQ(0x00020003u, StepKey(1, 3));
     CHECK_EQ(0x00010000u, StepKey(0, 0));  // never 0
 
+    // Spots (world coordinates) the crossing tests stand on or aim at.
+    MapSpot const stormwind{0, -8900.0f, 500.0f}, darkshore{1, 6400.0f, 540.0f}, barrens{1, -400.0f, -2600.0f};
+    MapSpot const silvermoon{530, 9500.0f, -7000.0f}, ghostlands{530, 7000.0f, -6800.0f};
+    MapSpot const undercity{0, 1600.0f, 260.0f}, northrend{571, 2800.0f, 6000.0f};
+    MapSpot const shattrath{530, -1850.0f, 5400.0f}, hellfire{530, -680.0f, 2700.0f}, area52{530, 3000.0f, 3600.0f};
+    MapSpot const exodar{530, -3965.0f, -11650.0f}, bloodmyst{530, -1993.0f, -11475.0f};
+
+    // fix round 2 (GM-BOTAI-0211, review I3): the three landmasses of map 530, by real coordinates
+    CHECK_TRUE(LandmassOf(530, silvermoon.x, silvermoon.y) == Landmass::QuelThalas);
+    CHECK_TRUE(LandmassOf(530, ghostlands.x, ghostlands.y) == Landmass::QuelThalas);
+    CHECK_TRUE(LandmassOf(530, 12800.0f, -6900.0f) == Landmass::QuelThalas);           // Isle of Quel'Danas
+    CHECK_TRUE(LandmassOf(530, exodar.x, exodar.y) == Landmass::Azuremyst);
+    CHECK_TRUE(LandmassOf(530, bloodmyst.x, bloodmyst.y) == Landmass::Azuremyst);
+    CHECK_TRUE(LandmassOf(530, shattrath.x, shattrath.y) == Landmass::Outland);
+    CHECK_TRUE(LandmassOf(530, hellfire.x, hellfire.y) == Landmass::Outland);           // Honor Hold
+    CHECK_TRUE(LandmassOf(530, area52.x, area52.y) == Landmass::Outland);               // Netherstorm
+    CHECK_TRUE(LandmassOf(530, 5456.0f, 3000.0f) == Landmass::Outland);                 // Netherstorm's north edge
+    CHECK_TRUE(LandmassOf(530, -3600.0f, 315.0f) == Landmass::Outland);                 // the Black Temple
+    CHECK_TRUE(LandmassOf(0, 9500.0f, -7000.0f) == Landmass::Whole);                     // any other map: one
+
     // crossings: the boat from map 0 to map 1 in the human guide
-    Crossing c = FindCrossing(g, TEAM_ALLIANCE, RaceBit(1), 0, 1);
+    Crossing c = FindCrossing(g, TEAM_ALLIANCE, RaceBit(1), stormwind, darkshore);
     CHECK_EQ(0, c.guide);
     CHECK_EQ(4u, c.seq);
-    CHECK_EQ(0, FindCrossing(g, TEAM_ALLIANCE, RaceBit(4), 0, 1).guide);   // any guide of the faction
-    CHECK_EQ(-1, FindCrossing(g, TEAM_ALLIANCE, RaceBit(1), 1, 0).guide);  // no way back in this file
-    CHECK_EQ(-1, FindCrossing(g, TEAM_HORDE, RaceBit(2), 0, 1).guide);
+    CHECK_EQ(0, FindCrossing(g, TEAM_ALLIANCE, RaceBit(4), stormwind, darkshore).guide);   // any guide of the faction
+    CHECK_EQ(-1, FindCrossing(g, TEAM_ALLIANCE, RaceBit(1), darkshore, stormwind).guide);  // no way back in this file
+    CHECK_EQ(-1, FindCrossing(g, TEAM_HORDE, RaceBit(2), stormwind, darkshore).guide);
     // GM-BOTAI-0204: no direct crossing from map 530 to map 1: the first of two hops (the orb), in its race's guide
     std::istringstream hin(HORDE_TEXT);
     GuideFile const hf = ParseGuideFile(hin);
     CHECK_EQ(0u, hf.errors.size());
     std::vector<Guide> const& h = hf.guides;
-    Crossing const orb = FindCrossing(h, TEAM_HORDE, RaceBit(10), 530, 1);
+    Crossing const orb = FindCrossing(h, TEAM_HORDE, RaceBit(10), silvermoon, barrens);
     CHECK_EQ(0, orb.guide);
     CHECK_EQ(1u, orb.seq);
-    CHECK_EQ(0, FindCrossing(h, TEAM_HORDE, RaceBit(2), 530, 1).guide);   // an orc there: the same orb
-    Crossing const zep = FindCrossing(h, TEAM_HORDE, RaceBit(10), 0, 1);  // a direct one still wins
+    CHECK_EQ(0, FindCrossing(h, TEAM_HORDE, RaceBit(2), ghostlands, barrens).guide);   // an orc there: the same orb
+    Crossing const zep = FindCrossing(h, TEAM_HORDE, RaceBit(10), undercity, barrens);  // a direct one still wins
     CHECK_EQ(1, zep.guide);
     CHECK_EQ(0u, zep.seq);
-    CHECK_EQ(0, FindCrossing(h, TEAM_HORDE, RaceBit(10), 530, 0).guide);  // direct: the orb
-    CHECK_EQ(-1, FindCrossing(h, TEAM_HORDE, RaceBit(10), 1, 530).guide); // no way back in this file
-    CHECK_EQ(-1, FindCrossing(h, TEAM_HORDE, RaceBit(10), 530, 571).guide);  // no second hop to it
-    CHECK_EQ(-1, FindCrossing(h, TEAM_ALLIANCE, RaceBit(1), 530, 1).guide);  // other faction
+    CHECK_EQ(0, FindCrossing(h, TEAM_HORDE, RaceBit(10), silvermoon, undercity).guide);  // direct: the orb
+    CHECK_EQ(-1, FindCrossing(h, TEAM_HORDE, RaceBit(10), barrens, silvermoon).guide);   // no way back in this file
+    CHECK_EQ(-1, FindCrossing(h, TEAM_HORDE, RaceBit(10), silvermoon, northrend).guide);  // no second hop to it
+    CHECK_EQ(-1, FindCrossing(h, TEAM_ALLIANCE, RaceBit(1), silvermoon, barrens).guide);  // other faction
+    // fix round 2 (review I3): a Horde bot in Outland whose next guide starts on map 1 (h-outland-68-70 ->
+    // h-northrend-70-72) or map 0 is never sent to the Silvermoon orb: no way it can walk there.
+    CHECK_EQ(-1, FindCrossing(h, TEAM_HORDE, RaceBit(10), shattrath, barrens).guide);
+    CHECK_EQ(-1, FindCrossing(h, TEAM_HORDE, RaceBit(2), hellfire, undercity).guide);
+    // ... it takes an Outland portal when its guides have one (Shattrath to Orgrimmar)
+    std::istringstream oin(std::string(HORDE_TEXT) + OUTLAND_TEXT);
+    GuideFile const of = ParseGuideFile(oin);
+    CHECK_EQ(0u, of.errors.size());
+    Crossing const shat = FindCrossing(of.guides, TEAM_HORDE, RaceBit(10), shattrath, barrens);
+    CHECK_EQ(3, shat.guide);
+    CHECK_EQ(0u, shat.seq);
+    CHECK_EQ(3, FindCrossing(of.guides, TEAM_HORDE, RaceBit(2), hellfire, barrens).guide);     // an orc too
+    CHECK_EQ(-1, FindCrossing(of.guides, TEAM_HORDE, RaceBit(2), shattrath, undercity).guide);  // no ride 1 -> 0 here
+    CHECK_EQ(0, FindCrossing(of.guides, TEAM_HORDE, RaceBit(10), silvermoon, barrens).guide);  // Quel'Thalas: the orb
+    // ... and a target on map 530 lands only on its own landmass: Undercity to Outland is not the way to Silvermoon
+    CHECK_EQ(-1, FindCrossing(of.guides, TEAM_HORDE, RaceBit(10), barrens, silvermoon).guide);
+    // The Alliance: the Azuremyst boat (530 -> 1) and the Darkshore boat (1 -> 0). A bot in Outland whose next step
+    // is on map 0 (a-levels-68-70 -> a-northrend-70-72) is not sent to Azuremyst; a draenei on Azuremyst is.
+    std::istringstream ain(ALLIANCE_TEXT);
+    GuideFile const af = ParseGuideFile(ain);
+    CHECK_EQ(0u, af.errors.size());
+    CHECK_EQ(-1, FindCrossing(af.guides, TEAM_ALLIANCE, RaceBit(1), shattrath, stormwind).guide);
+    CHECK_EQ(-1, FindCrossing(af.guides, TEAM_ALLIANCE, RaceBit(1), hellfire, darkshore).guide);
+    Crossing const boat = FindCrossing(af.guides, TEAM_ALLIANCE, RaceBit(11), exodar, stormwind);
+    CHECK_EQ(0, boat.guide);
+    CHECK_EQ(0u, boat.seq);
+    CHECK_EQ(0, FindCrossing(af.guides, TEAM_ALLIANCE, RaceBit(11), bloodmyst, darkshore).guide);  // direct
     return UnitFailures();
 }

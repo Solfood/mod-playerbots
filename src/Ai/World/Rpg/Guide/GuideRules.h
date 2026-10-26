@@ -390,36 +390,72 @@ inline bool RescueHearths(bool inMoonglade, uint32_t droppedQuests, uint8_t play
     return inMoonglade && (droppedQuests > 0 || playerClass == DRUID_CLASS_ID);
 }
 
+// Map 530 holds three landmasses with no walk between them (fix round 2, GM-BOTAI-0211, review I3): Outland,
+// Quel'Thalas (Eversong, Ghostlands, Silvermoon, Quel'Danas: x 6066 to 13569, y -4487 to -9413 by WorldMapArea.dbc) and the
+// Azuremyst Isles (Azuremyst, Bloodmyst, the Exodar: y -10075 to -14571). Outland's own map spans x -5821 to 5821 and
+// y -4468 to 12996. Every other map counts as one (0).
+constexpr uint32_t EXPANSION_MAP = 530;
+constexpr float AZUREMYST_BELOW_Y = -9750.0f;
+constexpr float QUELTHALAS_ABOVE_X = 5900.0f;
+enum class Landmass : uint8_t
+{
+    Whole = 0,
+    Outland,
+    QuelThalas,
+    Azuremyst,
+};
+
+inline Landmass LandmassOf(uint32_t map, float x, float y)
+{
+    if (map != EXPANSION_MAP)
+        return Landmass::Whole;
+    if (y < AZUREMYST_BELOW_Y)
+        return Landmass::Azuremyst;
+    if (x > QUELTHALAS_ABOVE_X)
+        return Landmass::QuelThalas;
+    return Landmass::Outland;
+}
+
+// A spot on a map: where the bot stands, or where its next step is.
+struct MapSpot
+{
+    uint32_t map = 0;
+    float x = 0.0f, y = 0.0f;
+};
+
 // Where a bot that stands on another map than its next step can cross (Plan 5c): a boat, zeppelin or portal step
-// whose spot is on `fromMap` and whose next spot is on `toMap`. Its race's start guide is searched first, then every
-// guide of its faction in file order. guide -1: none (the guide is paused).
-// GM-BOTAI-0204: with no such step, two hops: a crossing from `fromMap` to a map from which a crossing to `toMap`
+// whose spot is on `from`'s map and landmass and whose next spot is on `to`'s map and landmass. Its race's start guide
+// is searched first, then every guide of its faction in file order. guide -1: none (the guide is paused).
+// GM-BOTAI-0204: with no such step, two hops: a crossing from `from` to another map from which a crossing to `to`
 // exists (the Silvermoon orb to Undercity, then the zeppelin to Orgrimmar; 27 blood elves could not leave Eversong).
 // Its place moves to the first hop; on the middle map its guide goes on from there, and the second hop is that guide's
-// own ride, or another crossing looked up when it next meets a step on another map.
+// own ride, or another crossing looked up when it next meets a step on another map. Fix round 2: a hop starts only on
+// the landmass the bot (or the first hop) stands on, so a bot in Outland is never sent to the Silvermoon orb or the
+// Azuremyst boat.
 struct Crossing
 {
     int guide = -1;
     uint32_t seq = 0;
 };
 
-// The first crossing from `fromMap` whose landing map `lands` accepts, in the search order above.
+// The first crossing starting on `from`'s map and landmass whose landing step `lands` accepts, in the order above.
 template <typename Lands>
-inline Crossing FindCrossingIf(std::vector<Guide> const& guides, uint8_t team, uint32_t raceBit, uint32_t fromMap,
+inline Crossing FindCrossingIf(std::vector<Guide> const& guides, uint8_t team, uint32_t raceBit, MapSpot const& from,
                                Lands const& lands)
 {
+    Landmass const fromLand = LandmassOf(from.map, from.x, from.y);
     auto scan = [&](size_t gi, Crossing& out)
     {
         std::vector<Step> const& st = guides[gi].steps;
         for (size_t i = 0; i < st.size(); ++i)
         {
             if ((st[i].kind != StepKind::Ride && st[i].kind != StepKind::Portal) || !st[i].hasPoint ||
-                st[i].map != fromMap)
+                st[i].map != from.map || LandmassOf(st[i].map, st[i].x, st[i].y) != fromLand)
                 continue;
             for (size_t j = i + 1; j < st.size(); ++j)
                 if (st[j].hasPoint)
                 {
-                    if (lands(st[j].map))
+                    if (lands(st[j]))
                     {
                         out.guide = static_cast<int>(gi);
                         out.seq = static_cast<uint32_t>(i);
@@ -440,19 +476,21 @@ inline Crossing FindCrossingIf(std::vector<Guide> const& guides, uint8_t team, u
     return c;
 }
 
-inline Crossing FindCrossing(std::vector<Guide> const& guides, uint8_t team, uint32_t raceBit, uint32_t fromMap,
-                             uint32_t toMap)
+inline Crossing FindCrossing(std::vector<Guide> const& guides, uint8_t team, uint32_t raceBit, MapSpot const& from,
+                             MapSpot const& to)
 {
-    Crossing const direct =
-        FindCrossingIf(guides, team, raceBit, fromMap, [toMap](uint32_t map) { return map == toMap; });
-    if (direct.guide >= 0 || fromMap == toMap)
+    Landmass const toLand = LandmassOf(to.map, to.x, to.y);
+    auto landsOnTarget = [&to, toLand](Step const& l)
+    { return l.map == to.map && LandmassOf(l.map, l.x, l.y) == toLand; };
+    Crossing const direct = FindCrossingIf(guides, team, raceBit, from, landsOnTarget);
+    if (direct.guide >= 0 || from.map == to.map)
         return direct;
-    return FindCrossingIf(guides, team, raceBit, fromMap,
-                          [&](uint32_t mid)
+    return FindCrossingIf(guides, team, raceBit, from,
+                          [&](Step const& mid)
                           {
-                              return mid != fromMap && mid != toMap &&
-                                     FindCrossingIf(guides, team, raceBit, mid,
-                                                    [toMap](uint32_t map) { return map == toMap; })
+                              return mid.map != from.map && mid.map != to.map &&
+                                     FindCrossingIf(guides, team, raceBit, MapSpot{mid.map, mid.x, mid.y},
+                                                    landsOnTarget)
                                              .guide >= 0;
                           });
 }
