@@ -162,6 +162,15 @@ inline uint64_t MarketValue(MarketView const& v, uint64_t startPrice, uint32_t c
     return v.soldUnits ? v.recentPerUnit * count : startPrice;
 }
 
+// Which stacks a bot holds back for its listing slots (Plan 7a, Task 4): the most valuable first by the market
+// (MarketValue of its start price), so a stack of herbs that sells for 20 times its vendor value outranks a grey-ish
+// drop. With the market off the caller ranks by the vendor value, as before.
+inline uint64_t HoldRankValue(MarketView const& v, uint32_t vendorSell, uint32_t count, bool gear, uint32_t itemLevel,
+                              uint32_t materialPct)
+{
+    return MarketValue(v, StartPrice(vendorSell, count, gear, itemLevel, materialPct), count);
+}
+
 inline uint64_t MarketAsk(bool relist, uint64_t lastPerUnit, uint32_t count, uint32_t vendorSell, bool gear,
                           uint32_t itemLevel, uint64_t cheapestPerUnit, MarketView const& v, Settings const& s)
 {

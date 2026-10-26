@@ -739,6 +739,10 @@ std::vector<Item*> CraftMgr::HeldForAuction(PlayerbotAI* botAI, Player* bot) con
     uint32 const now = getMSTime();
     // Final review I1: what an enchanter keeps to disenchant is not listed (crafting off: none).
     std::vector<Item*> const disenchant = KeptToDisenchant(botAI, bot);
+    // Plan 7a (Task 4): with the market on, the stacks worth most by past sales get the listing slots (HoldRankValue),
+    // so gathered goods are listed; off: by the vendor value, as before.
+    bool const market = MarketOn();
+    MarketBook const& book = MarketBook::instance();
     std::vector<std::pair<uint64, Item*>> listable;
     for (Item* item : botAI->GetInventoryItems())
     {
@@ -757,7 +761,11 @@ std::vector<Item*> CraftMgr::HeldForAuction(PlayerbotAI* botAI, Player* bot) con
         // ITEM_USAGE_AH: tradable and nothing it needs (gear, supplies, the materials its recipes use are kept).
         if (context->GetValue<ItemUsage>("item usage", proto->ItemId)->Get() != ITEM_USAGE_AH)
             continue;
-        listable.push_back({uint64(proto->SellPrice) * item->GetCount(), item});
+        uint64 const rank = market ? ::Craft::HoldRankValue(book.ViewAll(proto->ItemId), proto->SellPrice,
+                                                            item->GetCount(), proto->InventoryType != INVTYPE_NON_EQUIP,
+                                                            proto->ItemLevel, s.materialPricePct)
+                                   : uint64(proto->SellPrice) * item->GetCount();
+        listable.push_back({rank, item});
     }
     std::stable_sort(listable.begin(), listable.end(), [](auto const& a, auto const& b) { return a.first > b.first; });
     std::vector<Item*> held;

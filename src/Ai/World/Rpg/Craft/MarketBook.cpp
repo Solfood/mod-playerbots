@@ -7,12 +7,27 @@
 #include "MarketBook.h"
 
 #include <algorithm>
+#include <map>
+#include <string>
+#include <unordered_map>
 
+#include "AuctionHouseMgr.h"
+#include "CraftMgr.h"
 #include "DatabaseEnv.h"
 #include "GameTime.h"
 #include "Log.h"
+#include "Player.h"
+#include "PlayerbotAI.h"
 #include "PlayerbotAIConfig.h"
+#include "Playerbots.h"
 #include "PlayerbotsDatabase.h"
+#include "RandomPlayerbotMgr.h"
+#include "World.h"
+
+namespace
+{
+constexpr size_t SNAPSHOT_BATCH = 500;  // rows per multi-row upsert
+}  // namespace
 
 MarketBook& MarketBook::instance()
 {
@@ -126,6 +141,121 @@ void MarketBook::NoteListing(uint32 house, uint32 item, uint32 units, uint32 min
     d.listedUnits = units;
     d.minPerUnit = minPerUnit;
     Note(house, item, d);
+}
+
+void MarketBook::NoteListings(uint32 house, std::vector<Listing> const& listings)
+{
+    uint32 const today = Today();
+    {
+        std::lock_guard<std::mutex> guard(_lock);
+        if (!_loaded)
+            return;  // crafting off: nothing noted or saved
+        uint32 const keepFrom = KeepFrom(today);
+        for (Listing const& l : listings)
+        {
+            Craft::DayStats d;
+            d.day = today;
+            d.listedUnits = l.units;
+            d.minPerUnit = l.minPerUnit;
+            Craft::AddTo(_days[Key(house, l.item)], d, keepFrom);
+            AddHouseLocked(house, l.item);
+        }
+    }
+    // The same rows as NoteListing would write, SNAPSHOT_BATCH per statement: the snapshot columns are replaced, the
+    // day's sales, returns and wants are kept.
+    for (size_t from = 0; from < listings.size(); from += SNAPSHOT_BATCH)
+    {
+        size_t const to = std::min(listings.size(), from + SNAPSHOT_BATCH);
+        std::string sql = "INSERT INTO playerbots_market_days (day, house, item, listed_units, min_per_unit) VALUES ";
+        for (size_t i = from; i < to; ++i)
+        {
+            Listing const& l = listings[i];
+            if (i != from)
+                sql += ", ";
+            sql += "(" + std::to_string(today) + ", " + std::to_string(house) + ", " + std::to_string(l.item) + ", " +
+                   std::to_string(l.units) + ", " + std::to_string(l.minPerUnit) + ")";
+        }
+        sql += " ON DUPLICATE KEY UPDATE listed_units = VALUES(listed_units), min_per_unit = VALUES(min_per_unit)";
+        PlayerbotsDatabase.Execute(sql.c_str());
+    }
+}
+
+void MarketBook::Update(uint32 diff)
+{
+    if (!CraftMgr::MarketOn())
+        return;  // crafting or FixedPopulation off: nothing snapshotted
+    _snapshotMs += diff;
+    if (_snapshotMs < sPlayerbotAIConfig.crafting.marketSnapshotMinutes * MINUTE * IN_MILLISECONDS)
+        return;
+    _snapshotMs = 0;
+    SnapshotListings();
+    SnapshotGold();
+}
+
+void MarketBook::SnapshotListings()
+{
+    // The same ids a visit keys the book by (AuctionHouseEntry::houseId). With two-side interaction every id gets the
+    // neutral house's map: snapshot it once, as the neutral house.
+    std::vector<AuctionHouseId> houses = {AuctionHouseId::Alliance, AuctionHouseId::Horde, AuctionHouseId::Neutral};
+    if (sWorld->getBoolConfig(CONFIG_ALLOW_TWO_SIDE_INTERACTION_AUCTION))
+        houses = {AuctionHouseId::Neutral};
+    for (AuctionHouseId const id : houses)
+    {
+        AuctionHouseObject* auctions = sAuctionMgr->GetAuctionsMapByHouseId(id);
+        if (!auctions)
+            continue;
+        std::unordered_map<uint32, Listing> byItem;  // item -> units listed and the cheapest buyout per unit
+        for (auto const& [auctionId, auction] : auctions->GetAuctions())
+        {
+            if (!auction->itemCount)
+                continue;
+            Listing& l = byItem[auction->item_template];
+            l.item = auction->item_template;
+            l.units += auction->itemCount;
+            if (!auction->buyout)
+                continue;  // bid only: counted, no buyout price
+            uint32 const perUnit =
+                static_cast<uint32>(std::min<uint64>(uint64(auction->buyout) / auction->itemCount, UINT32_MAX));
+            if (!l.minPerUnit || perUnit < l.minPerUnit)
+                l.minPerUnit = perUnit;
+        }
+        std::vector<Listing> listings;
+        listings.reserve(byItem.size());
+        for (auto const& [item, l] : byItem)
+            listings.push_back(l);
+        NoteListings(static_cast<uint32>(id), listings);
+    }
+}
+
+void MarketBook::SnapshotGold()
+{
+    // The bots econ census counts: random (population) bots in the world.
+    std::map<uint32, std::vector<uint64>> bands;  // LevelBand -> each bot's copper
+    for (auto const& [guid, bot] : sRandomPlayerbotMgr.GetAllBots())
+    {
+        PlayerbotAI* botAI = bot ? GET_PLAYERBOT_AI(bot) : nullptr;
+        if (!botAI || !bot->IsInWorld() || !sRandomPlayerbotMgr.IsRandomBot(bot))
+            continue;
+        bands[Craft::LevelBand(bot->GetLevel())].push_back(bot->GetMoney());
+    }
+    if (bands.empty())
+        return;
+    uint32 const now = static_cast<uint32>(GameTime::GetGameTime().count());
+    std::string sql = "INSERT INTO playerbots_market_gold (taken_at, band, bots, gold_sum, gold_median) VALUES ";
+    bool first = true;
+    for (auto const& [band, money] : bands)
+    {
+        uint64 sum = 0;
+        for (uint64 copper : money)
+            sum += copper;
+        if (!first)
+            sql += ", ";
+        first = false;
+        sql += "(" + std::to_string(now) + ", " + std::to_string(band) + ", " +
+               std::to_string(std::min<size_t>(money.size(), 65535)) + ", " + std::to_string(sum) + ", " +
+               std::to_string(Craft::Median(money)) + ")";
+    }
+    PlayerbotsDatabase.Execute(sql.c_str());
 }
 
 void MarketBook::NoteSeen(uint32 house, uint32 item, uint32 minPerUnit)

@@ -27,6 +27,7 @@
 #include "GuildBankOps.h"
 #include "GuildScript.h"
 #include "GuildTaskMgr.h"
+#include "MarketBook.h"
 #include "Survival.h"
 #include "PlayerScript.h"
 #include "PlayerbotAIConfig.h"
@@ -622,6 +623,7 @@ public:
         sRandomPlayerbotMgr.UpdateAI(diff);  // World thread only
         sRaisingMgr.Update(diff);            // World thread only (honest world raisings)
         GuildBankMgr::instance().Update(diff);  // World thread only (guild bank snapshots; off: returns at once)
+        MarketBook::instance().Update(diff);  // World thread only (market snapshots; crafting off: returns at once)
     }
 
     // Runs before the sessions are kicked on server shutdown

@@ -34,6 +34,17 @@ public:
     void NoteWant(uint32 house, uint32 item);
     // The house's listing of the item now (a snapshot: replaces the day's last one).
     void NoteListing(uint32 house, uint32 item, uint32 units, uint32 minPerUnit);
+    // One house's whole listing now (the snapshot, Task 4): NoteListing for each, saved in batched upserts.
+    struct Listing
+    {
+        uint32 item = 0;
+        uint32 units = 0;
+        uint32 minPerUnit = 0;  // cheapest buyout per unit (0 = none with a buyout)
+    };
+    void NoteListings(uint32 house, std::vector<Listing> const& listings);
+    // World thread only: every MarketSnapshotMinutes, what each auction house lists and the random bots' gold by
+    // level band (playerbots_market_gold). Market off (CraftMgr::MarketOn): returns at once.
+    void Update(uint32 diff);
     // Memory only: the cheapest buyout per unit an auction visit last saw (0 = none listed).
     void NoteSeen(uint32 house, uint32 item, uint32 minPerUnit);
 
@@ -53,9 +64,12 @@ private:
     void Note(uint32 house, uint32 item, Craft::DayStats delta);
     void AddHouseLocked(uint32 house, uint32 item);
     uint32 RowsLocked() const;
+    void SnapshotListings();
+    void SnapshotGold();
 
     mutable std::mutex _lock;
     bool _loaded = false;
+    uint32 _snapshotMs = 0;  // world thread only (Update)
     std::unordered_map<uint64, std::vector<Craft::DayStats>> _days;  // Key(house, item) -> days, sorted
     std::unordered_map<uint64, uint32> _seen;                        // Key(house, item) -> cheapest per unit seen
     std::unordered_map<uint32, std::vector<uint32>> _houses;         // item -> houses with days or a seen price

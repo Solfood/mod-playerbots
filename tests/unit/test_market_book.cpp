@@ -82,6 +82,15 @@ int main()
     CHECK_EQ(300u, MarketValue(MarketView{}, 300, 10));
     CHECK_EQ(500u, MarketValue(MarketView{50, 1, 0}, 300, 10));
 
+    // rank_by_market_value (Task 4): herbs that sold for 20x their vendor value outrank a grey-ish gear drop
+    {
+        uint64_t const herbs = HoldRankValue(MarketView{60, 5, 0}, 3, 20, false, 0, s.materialPricePct);
+        uint64_t const drop = HoldRankValue(MarketView{}, 100, 1, true, 15, s.materialPricePct);
+        CHECK_EQ(1200u, herbs);
+        CHECK_EQ(400u, drop);
+        CHECK_TRUE(herbs > drop);
+    }
+
     // bands_and_median
     CHECK_EQ(0u, LevelBand(9));
     CHECK_EQ(4u, LevelBand(40));
