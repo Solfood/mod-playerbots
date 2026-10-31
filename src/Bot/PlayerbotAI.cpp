@@ -926,7 +926,8 @@ void PlayerbotAI::Reset(bool full)
         aiObjectContext->GetValue<TravelTarget*>("travel target")->Get()->setExpireIn(1000);
         // Keep across a reset (teleport, "reset"): the honest-world errand cooldown (no errand loop), and the
         // guildmaster bridge's focus and stuck-teleport record (a stuck teleport resets the AI right after it counts).
-        NewRpgInfo fresh;
+        rpgInfo.StartStatus();  // the wiped status still counts toward `econ statustime`
+    NewRpgInfo fresh;
         fresh.lastErrandMs = rpgInfo.lastErrandMs;
         fresh.focus = rpgInfo.focus;
         fresh.stuckTeleports = rpgInfo.stuckTeleports;

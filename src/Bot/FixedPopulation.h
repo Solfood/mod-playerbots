@@ -116,8 +116,8 @@ enum class EconomyCounter : uint8
     TripsBank,
     TripsMailOnly,        // errand trips for mail and nothing else
     TripsServedHere,      // errand trips needing no walk: something serving them was already in reach
-    MailsItemsRefused,    // mails left at a mailbox with items still in them (the core refused: bags full)
-    WandersEndedWithMail,  // town wanders that ran out of time with collectable mail still waiting
+    MailsItemsRefused,    // times a mailbox visit left items in a mail (the core refused; usually full bags)
+    WandersEndedWithMail,  // WANDER_NPC timeouts with collectable mail waiting (a mailbox may not be near)
     Count
 };
 

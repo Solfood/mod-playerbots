@@ -219,7 +219,8 @@ bool EconomyCommand::Handle(ChatHandler* handler, char const* args)
     if (words.empty())
     {
         handler->PSendSysMessage(
-            "ECONERR usage: econ statustime | econ show|kill|wear|money|due|deaths|idle|wander|camp|forget|errands|mail|fillbags|raise "
+            "ECONERR usage: econ statustime | "
+            "econ show|kill|wear|money|due|deaths|idle|wander|camp|forget|errands|mail|fillbags|raise "
             "<name> [value] | econ raise <name> [failcreate|failsave] | econ active | econ stats | econ census | "
             "econ picktable <classId> <rolls> | econ raisings | econ dkchain <name> [check] | "
             "econ dklogin|dklogout <name> | econ ghostat <name> <map> <x> <y> <z> | econ hold|holdout|release <name> | "
