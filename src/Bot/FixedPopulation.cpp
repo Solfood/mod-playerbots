@@ -33,9 +33,20 @@ constexpr std::array<char const*, static_cast<std::size_t>(EconomyCounter::Count
     "hearth_rescues", "lost_walks", "sickness_waits", "landing_refusals",
     "profession_training", "fishing_trips", "fish_caught", "fishing_abandoned",
     "fishing_no_spot", "fishing_skill_raised", "couriers", "bank_tabs_given", "bank_deposits", "bank_items_in",
-    "bank_withdrawals", "bank_items_out", "bank_empty", "market_sales", "market_returns", "market_wants"};
+    "bank_withdrawals", "bank_items_out", "bank_empty", "market_sales", "market_returns", "market_wants",
+    "trips_repair", "trips_sell", "trips_ammo", "trips_mail", "trips_auction", "trips_bank", "trips_mail_only",
+    "trips_served_here", "mails_items_refused", "wanders_ended_with_mail"};
 // A std::array fills missing names with nullptr (no compile error), so check the last one is there.
 static_assert(COUNTER_NAMES.back() != nullptr, "COUNTER_NAMES needs a name for every EconomyCounter");
+
+constexpr std::array<char const*, RPG_STATUS_END> STATUS_LABELS = {
+    "IDLE", "GO_GRIND", "GO_CAMP", "WANDER_RANDOM", "WANDER_NPC", "DO_QUEST", "TRAVEL_FLIGHT",
+    "REST", "OUTDOOR_PVP", "DO_GATHER", "FOLLOW_ROUTE", "FOLLOW_GUIDE", "CRAFT", "FISH"};
+static_assert(STATUS_LABELS.back() != nullptr, "STATUS_LABELS needs a name for every NewRpgStatus");
+
+std::array<std::atomic<uint64>, RPG_STATUS_END> statusEnded{};
+std::array<std::atomic<uint64>, RPG_STATUS_END> statusMs{};
+std::array<std::atomic<uint64>, RPG_STATUS_END> statusShort{};
 }  // namespace
 
 bool FixedPopulation::Blocks(FixedPopulationGuard guard)
@@ -51,6 +62,24 @@ void FixedPopulation::Count(EconomyCounter counter, uint64 amount)
 {
     _economy[static_cast<std::size_t>(counter)].fetch_add(amount, std::memory_order_relaxed);
 }
+
+void FixedPopulation::NoteStatusEnded(uint8 status, uint32 ms)
+{
+    if (status >= RPG_STATUS_END)
+        return;
+    statusEnded[status].fetch_add(1, std::memory_order_relaxed);
+    statusMs[status].fetch_add(ms, std::memory_order_relaxed);
+    if (ms < STATUS_SHORT_MS)
+        statusShort[status].fetch_add(1, std::memory_order_relaxed);
+}
+
+uint64 FixedPopulation::StatusEnded(uint8 status) { return statusEnded[status].load(std::memory_order_relaxed); }
+
+uint64 FixedPopulation::StatusMs(uint8 status) { return statusMs[status].load(std::memory_order_relaxed); }
+
+uint64 FixedPopulation::StatusShort(uint8 status) { return statusShort[status].load(std::memory_order_relaxed); }
+
+char const* FixedPopulation::StatusLabel(uint8 status) { return STATUS_LABELS[status]; }
 
 uint64 FixedPopulation::Get(FixedPopulationGuard guard)
 {

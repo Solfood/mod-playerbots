@@ -1341,6 +1341,22 @@ bool NewRpgBaseAction::GoRunErrands(bool repairOnly)
     info.lastErrandMs = getMSTime();
     info.abandonedTrip = WorldPosition();
     FixedPopulation::Count(EconomyCounter::ErrandsStarted);
+    if (errands & TOWN_ERRAND_REPAIR)
+        FixedPopulation::Count(EconomyCounter::TripsRepair);
+    if (errands & TOWN_ERRAND_SELL)
+        FixedPopulation::Count(EconomyCounter::TripsSell);
+    if (errands & TOWN_ERRAND_AMMO)
+        FixedPopulation::Count(EconomyCounter::TripsAmmo);
+    if (errands & TOWN_ERRAND_MAIL)
+        FixedPopulation::Count(EconomyCounter::TripsMail);
+    if (errands & TOWN_ERRAND_AUCTION)
+        FixedPopulation::Count(EconomyCounter::TripsAuction);
+    if (errands & TOWN_ERRAND_BANK)
+        FixedPopulation::Count(EconomyCounter::TripsBank);
+    if (errands == TOWN_ERRAND_MAIL)
+        FixedPopulation::Count(EconomyCounter::TripsMailOnly);
+    if (servedHere)
+        FixedPopulation::Count(EconomyCounter::TripsServedHere);
     if (rescue)
         FixedPopulation::Count(EconomyCounter::RepairRescues);
     if (errands & TOWN_ERRAND_SUPPLIES)

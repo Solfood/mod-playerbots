@@ -651,6 +651,8 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
                     info.abandonedTrip = WorldPosition(bot);
                     FixedPopulation::Count(EconomyCounter::TownTripsAbandoned);
                 }
+                if (sPlayerbotAIConfig.fixedPopulation && TownErrands::CollectableMailCount(bot))
+                    FixedPopulation::Count(EconomyCounter::WandersEndedWithMail);
                 info.ChangeToIdle();
                 return true;
             }

@@ -364,6 +364,8 @@ struct NewRpgInfo
     RpgData data;
 
     NewRpgStatus GetStatus();
+    // Counts the status that is ending (`econ statustime`), then starts the clock for the next one.
+    void StartStatus();
     static NewRpgStatus StatusFromString(std::string const& name);
     bool HasStatusPersisted(uint32 maxDuration) { return GetMSTimeDiffToNow(startT) > maxDuration; }
     void ChangeToGoGrind(WorldPosition pos);

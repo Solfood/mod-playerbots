@@ -6,36 +6,45 @@
 
 #include "NewRpgInfo.h"
 #include "FishRules.h"
+#include "FixedPopulation.h"
 #include "Timer.h"
 #include <cmath>
 
+void NewRpgInfo::StartStatus()
+{
+    // `data` still holds the status that is ending: every ChangeTo calls this before it sets the new one.
+    if (startT)
+        FixedPopulation::NoteStatusEnded(static_cast<uint8>(GetStatus()), GetMSTimeDiffToNow(startT));
+    startT = getMSTime();
+}
+
 void NewRpgInfo::ChangeToGoGrind(WorldPosition pos)
 {
-    startT = getMSTime();
+    StartStatus();
     data = GoGrind{pos};
 }
 
 void NewRpgInfo::ChangeToGoCamp(WorldPosition pos)
 {
-    startT = getMSTime();
+    StartStatus();
     data = GoCamp{pos};
 }
 
 void NewRpgInfo::ChangeToWanderNpc()
 {
-    startT = getMSTime();
+    StartStatus();
     data = WanderNpc{};
 }
 
 void NewRpgInfo::ChangeToWanderRandom()
 {
-    startT = getMSTime();
+    StartStatus();
     data = WanderRandom{};
 }
 
 void NewRpgInfo::ChangeToDoQuest(uint32 questId, Quest const* quest)
 {
-    startT = getMSTime();
+    StartStatus();
     DoQuest do_quest;
     do_quest.questId = questId;
     do_quest.quest = quest;
@@ -44,7 +53,7 @@ void NewRpgInfo::ChangeToDoQuest(uint32 questId, Quest const* quest)
 
 void NewRpgInfo::ChangeToTravelFlight(uint32 flightMasterEntry, WorldPosition flightMasterPos, std::vector<uint32> path)
 {
-    startT = getMSTime();
+    StartStatus();
     TravelFlight flight;
     flight.flightMasterEntry = flightMasterEntry;
     flight.flightMasterPos = flightMasterPos;
@@ -55,7 +64,7 @@ void NewRpgInfo::ChangeToTravelFlight(uint32 flightMasterEntry, WorldPosition fl
 
 void NewRpgInfo::ChangeToOutdoorPvp(ObjectGuid::LowType capturePointSpawnId)
 {
-    startT = getMSTime();
+    StartStatus();
     OutdoorPvP pvp;
     pvp.capturePointSpawnId = capturePointSpawnId;
     data = pvp;
@@ -63,7 +72,7 @@ void NewRpgInfo::ChangeToOutdoorPvp(ObjectGuid::LowType capturePointSpawnId)
 
 void NewRpgInfo::ChangeToDoGather(uint16 aim)
 {
-    startT = getMSTime();
+    StartStatus();
     DoGather gather;
     gather.aim = aim;
     data = gather;
@@ -71,19 +80,19 @@ void NewRpgInfo::ChangeToDoGather(uint16 aim)
 
 void NewRpgInfo::ChangeToRest()
 {
-    startT = getMSTime();
+    StartStatus();
     data = Rest{};
 }
 
 void NewRpgInfo::ChangeToIdle()
 {
-    startT = getMSTime();
+    StartStatus();
     data = Idle{};
 }
 
 void NewRpgInfo::ChangeToFollowRoute(uint32 hubId, uint32 fromArea, bool arrived)
 {
-    startT = getMSTime();
+    StartStatus();
     FollowRoute follow;
     follow.hubId = hubId;
     follow.fromArea = fromArea;
@@ -94,7 +103,7 @@ void NewRpgInfo::ChangeToFollowRoute(uint32 hubId, uint32 fromArea, bool arrived
 
 void NewRpgInfo::ChangeToClassQuest(uint32 questId, WorldPosition giver)
 {
-    startT = getMSTime();
+    StartStatus();
     FollowRoute follow;
     follow.classQuest = questId;
     follow.classGiver = giver;
@@ -103,13 +112,13 @@ void NewRpgInfo::ChangeToClassQuest(uint32 questId, WorldPosition giver)
 
 void NewRpgInfo::ChangeToFollowGuide()
 {
-    startT = getMSTime();
+    StartStatus();
     data = FollowGuide{};
 }
 
 void NewRpgInfo::ChangeToCraft(::Craft::Plan plan, bool guided)
 {
-    startT = getMSTime();
+    StartStatus();
     CraftTrip trip;
     trip.batch = std::move(plan.batch);
     trip.buy = std::move(plan.buy);
@@ -119,7 +128,7 @@ void NewRpgInfo::ChangeToCraft(::Craft::Plan plan, bool guided)
 
 void NewRpgInfo::ChangeToFish(WorldPosition spot, bool hasPole)
 {
-    startT = getMSTime();
+    StartStatus();
     FishTrip trip;
     trip.spot = spot;
     trip.phase = static_cast<uint8>(hasPole ? Fish::Phase::Walk : Fish::Phase::Pole);

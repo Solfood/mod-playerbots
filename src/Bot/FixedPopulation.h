@@ -108,6 +108,16 @@ enum class EconomyCounter : uint8
     MarketSalesNoted,     // auction buyouts noted in the market book (Plan 7a)
     MarketReturnsNoted,   // unsold auctions back by mail noted in the market book
     MarketWantsNoted,     // missing materials an auction visit found no auction it could buy for (once a visit)
+    TripsRepair,          // errand trips (ErrandsStarted) that included each errand; a trip can count under several
+    TripsSell,
+    TripsAmmo,
+    TripsMail,
+    TripsAuction,
+    TripsBank,
+    TripsMailOnly,        // errand trips for mail and nothing else
+    TripsServedHere,      // errand trips needing no walk: something serving them was already in reach
+    MailsItemsRefused,    // mails left at a mailbox with items still in them (the core refused: bags full)
+    WandersEndedWithMail,  // town wanders that ran out of time with collectable mail still waiting
     Count
 };
 
@@ -121,6 +131,14 @@ public:
     static uint64 Get(EconomyCounter counter);
     static char const* Name(FixedPopulationGuard guard);
     static char const* Name(EconomyCounter counter);
+
+    // Time in each NewRpgStatus, counted as a status ends (`econ statustime`). Short = under STATUS_SHORT_MS.
+    static constexpr uint32 STATUS_SHORT_MS = 10000;
+    static void NoteStatusEnded(uint8 status, uint32 ms);
+    static uint64 StatusEnded(uint8 status);
+    static uint64 StatusMs(uint8 status);
+    static uint64 StatusShort(uint8 status);
+    static char const* StatusLabel(uint8 status);
 
 private:
     static std::array<std::atomic<uint64>, static_cast<std::size_t>(FixedPopulationGuard::Count)> _blocked;

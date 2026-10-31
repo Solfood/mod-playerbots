@@ -221,6 +221,8 @@ uint32 TownErrands::CollectMail(Player* bot, ObjectGuid mailbox)
         }
 
         mail = bot->GetMail(mailId);
+        if (mail && !mail->items.empty())
+            FixedPopulation::Count(EconomyCounter::MailsItemsRefused);
         if (mail && !mail->money && mail->items.empty())
         {
             WorldPacket packet;
